@@ -65,6 +65,10 @@ type Options = {
   patchLine: (id: string, patch: Partial<Line>) => void;
   patchLabeling: (id: string, patch: Partial<LineLabeling>) => void;
   initialModel: () => FlowModel;
+  /** 保存済みの会議を再開するときの、過去の図 */
+  initialArchives?: ArchivedDiagram[];
+  /** 保存済みの会議を再開するときの、最初の図（リセットで戻る先は initialModel のまま） */
+  resumeModel?: FlowModel;
 };
 
 /**
@@ -76,12 +80,19 @@ type Options = {
  * - 後続処理の結果は、**適用する瞬間の最新モデル**から採番して適用する
  * - リセットのたびに世代（epoch）を進め、リセット前に飛んだ処理の結果を捨てる
  */
-export function usePipeline({ onInterpretation, patchLine, patchLabeling, initialModel }: Options) {
-  const [model, setModel] = useState<FlowModel>(initialModel);
+export function usePipeline({
+  onInterpretation,
+  patchLine,
+  patchLabeling,
+  initialModel,
+  initialArchives,
+  resumeModel,
+}: Options) {
+  const [model, setModel] = useState<FlowModel>(() => resumeModel ?? initialModel());
   const [entries, setEntries] = useState<ConsoleEntry[]>([]);
   const [source, setSource] = useState<UpdateSource>("none");
   /** 「図を分ける」で退避した過去の図（読み取り専用） */
-  const [archives, setArchives] = useState<ArchivedDiagram[]>([]);
+  const [archives, setArchives] = useState<ArchivedDiagram[]>(() => initialArchives ?? []);
 
   const modelRef = useRef(model);
   const epochRef = useRef(0);

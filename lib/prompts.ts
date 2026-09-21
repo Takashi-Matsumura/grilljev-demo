@@ -10,7 +10,8 @@ export type PromptName =
   | "extract-actors"
   | "facilitator"
   | "suggest-answer"
-  | "scope-shift";
+  | "scope-shift"
+  | "summary";
 
 const cache = new Map<PromptName, string>();
 

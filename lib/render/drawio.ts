@@ -1,4 +1,5 @@
 import type { FlowModel, MessageKind, Step } from "@/lib/model/types";
+import { flagSuffix } from "./mermaid";
 import {
   HEAD_H,
   HEAD_Y,
@@ -116,7 +117,8 @@ export function toDrawio(model: FlowModel, at: string = new Date().toISOString()
 
   // ── メッセージ ──
   for (const r of lay.rows) {
-    const label = r.step.label + (r.step.status === "provisional" ? "（仮）" : "");
+    const label =
+      r.step.label + flagSuffix(r.step) + (r.step.status === "provisional" ? "（仮）" : "");
     const style = messageStyle(r.step, r.self);
     if (r.self) {
       const y2 = r.msgY + 24;

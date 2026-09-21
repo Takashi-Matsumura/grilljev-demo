@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import type { FlowModel } from "@/lib/model/types";
-import { hasDiagram, toMermaid } from "@/lib/render/mermaid";
+import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
 import { ExportButtons } from "./export-buttons";
 import { MermaidDiagram } from "./mermaid-diagram";
+import { SummaryButton } from "./summary-dialog";
 
 const ISSUE_KIND_LABEL: Record<string, string> = {
   purpose: "目的",
@@ -44,9 +45,20 @@ const SOURCE_BADGE: Record<UpdateSource, { text: string; cls: string }> = {
   },
 };
 
-export function DiagramPane({ model, source }: { model: FlowModel; source: UpdateSource }) {
+export function DiagramPane({
+  model,
+  source,
+  onDecideStep,
+}: {
+  model: FlowModel;
+  source: UpdateSource;
+  /** 仮のステップの承認・却下（過去の図では渡さない） */
+  onDecideStep?: (id: string, decision: "approve" | "reject") => void;
+}) {
   const code = useMemo(() => toMermaid(model), [model]);
   const drawable = hasDiagram(model);
+  const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
+  const provisional = visibleSteps(model).filter((s) => s.status === "provisional");
   const openIssues = model.issues.filter((i) => i.status !== "answered");
   const badge = SOURCE_BADGE[source];
   // .svg の書き出し用。「どのコードの SVG か」を持ち、いまの図と一致するときだけ使う
@@ -82,6 +94,38 @@ export function DiagramPane({ model, source }: { model: FlowModel; source: Updat
         )}
       </div>
 
+      {provisional.length > 0 && (
+        <div className="max-h-32 overflow-y-auto rounded-md border border-amber-400/50 p-3">
+          <h3 className="mb-1 text-sm font-medium">確認待ちのステップ（{provisional.length}）</h3>
+          <ul className="flex flex-col gap-1 text-sm">
+            {provisional.map((s) => (
+              <li key={s.id} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 break-words">
+                  {nameOf(s.from)} → {nameOf(s.to)}「{s.label}」
+                  <span className="ml-1 text-xs text-zinc-400">確度 {s.confidence.toFixed(2)}</span>
+                </span>
+                {onDecideStep && (
+                  <span className="flex shrink-0 gap-1">
+                    <button
+                      className="rounded border border-black/15 px-2 py-0.5 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      onClick={() => onDecideStep(s.id, "approve")}
+                    >
+                      承認
+                    </button>
+                    <button
+                      className="rounded border border-black/15 px-2 py-0.5 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      onClick={() => onDecideStep(s.id, "reject")}
+                    >
+                      却下
+                    </button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {openIssues.length > 0 && (
         <div className="max-h-28 overflow-y-auto rounded-md border border-black/10 p-3 dark:border-white/15">
           <h3 className="mb-1 text-sm font-medium">未解決の論点（{openIssues.length}）</h3>
@@ -101,7 +145,10 @@ export function DiagramPane({ model, source }: { model: FlowModel; source: Updat
         </div>
       )}
 
-      <ExportButtons model={model} mermaidCode={code} svg={svgForExport} empty={!drawable} />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <ExportButtons model={model} mermaidCode={code} svg={svgForExport} empty={!drawable} />
+        <SummaryButton model={model} empty={!drawable} />
+      </div>
 
       <details className="text-sm">
         <summary className="cursor-pointer text-zinc-500">Mermaid コードを表示</summary>

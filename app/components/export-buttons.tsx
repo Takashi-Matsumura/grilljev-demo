@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { download } from "./download";
 import type { FlowModel } from "@/lib/model/types";
 import { toDrawio } from "@/lib/render/drawio";
 import {
@@ -9,19 +10,6 @@ import {
   finalizeSvg,
   type ExportFormat,
 } from "@/lib/render/export";
-
-/** ブラウザにファイルとして保存させる（サーバは通さない。図の内容は外に出ない）。 */
-function download(name: string, mime: string, content: string): void {
-  const url = URL.createObjectURL(new Blob([content], { type: mime }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // すぐ解放するとダウンロードが始まる前に無効になる環境があるので、少し待つ
-  setTimeout(() => URL.revokeObjectURL(url), 1_000);
-}
 
 type Props = {
   /** 書き出す図（いま画面に出している図。過去のタブなら過去の図） */
