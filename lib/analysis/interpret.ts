@@ -14,6 +14,7 @@ import type {
 } from "@/lib/model/types";
 import {
   ACTOR_APPLY,
+  BRANCH_HINT_MIN,
   ACTOR_DUP_MIN,
   CHATTER_DROP,
   DUP_CONFIDENT,
@@ -308,7 +309,11 @@ function interpretUtterance(
     c !== null && c.confidence >= ACTOR_APPLY && c.choice !== UNKNOWN_ACTOR && c.choice !== NEW_ACTOR;
   const differentDirection =
     !!dupStep && ((sure(fromAns) && fromAns?.choice !== dupStep.from) || (sure(toAns) && toAns?.choice !== dupStep.to));
-  const dupId = dupStep && !differentDirection ? dupStep.id : null;
+  // 「〜のときは、〜する」と場合分けを述べる発言は、既存ステップへの補足ではなく、
+  // 分岐の中の新しい動作であることが多い（実測: 補足と誤認された確信度は 0.73〜0.89 で、閾値では分けられない）。
+  const introducesBranch =
+    intent === "describe_condition" && (noul(answers, "branch_marker") ?? 0) >= BRANCH_HINT_MIN;
+  const dupId = dupStep && !differentDirection && !introducesBranch ? dupStep.id : null;
 
   const flags: StepFlags = {};
   for (const f of FLAG_ISSUES) {
