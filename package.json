@@ -1,14 +1,19 @@
 {
   "name": "grilljev-demo",
   "version": "0.1.0",
+  "description": "会議の音声から、業務フロー（シーケンス図）をリアルタイムに立ち上げるデモ（Jev + ローカル LLM）",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "whisper": "whisper-server -m \"$HOME/.local/share/whisper-models/ggml-large-v3-turbo-q5_0.bin\" -l ja --host 127.0.0.1 --port 8178 -t 8 -nt -sns -nf"
   },
   "dependencies": {
+    "mermaid": "^12.0.0",
     "next": "16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8"

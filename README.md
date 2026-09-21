@@ -1,36 +1,217 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# grilljev-demo
 
-## Getting Started
+会議の**音声から、業務フロー（UML シーケンス図）をリアルタイムに立ち上げる**デモアプリ。
 
-First, run the development server:
+話しながら図が育ち、雑談は図に入らず、ファシリテーターが「いま聞くべき 1 問」を投げかけます。
+[TypeSafe AI の Jev](https://docs.typesafe.ai/)（クラウドの判定モデル）と、ローカルで動く LLM・音声認識を組み合わせた
+**ハイブリッド構成**です。
+
+> これは技術デモです。閾値やプロンプトは少数のサンプルで調整したもので、実際の会議での精度は保証しません。
+
+## 何をするか
+
+1. **音声を文字起こし**する（ローカルの whisper.cpp。音声は外に出ない）
+2. 発話ごとに、**業務の話か雑談か**、誰が誰に何をするのかを Jev が判定し、**図に足す**
+3. ステップ名・新しい登場人物の名前・分岐の条件文は、**ローカル LLM（gemma）が書き**、次の発話で Jev が**検証**する
+4. ファシリテーターが、gemma で問いの候補を書き、Jev が「いま出すべき 1 問」を選ぶ（読み上げも可）
+5. 会話が別の業務に移ったら検知し、**対象業務（共通認識）の貼り替え**を確認する
+6. できた図を **`.drawio` / `.mmd` / `.svg`** で書き出す（draw.io で開いて手で編集できる）
+
+## 3 つのモデルの役割分担
+
+| | 担当 | 得意なこと |
+|---|---|---|
+| **whisper.cpp**（ローカル） | 文字起こし | 音声 → 日本語テキスト |
+| **Jev**（TypeSafe AI・クラウド） | **判定** | 選択肢から 1 つ選ぶ／確率を返す。**テキストを生成しない** |
+| **gemma**（llama.cpp・ローカル） | **生成** | 短い文言（ステップ名、問いかけ、業務名）を書く |
+
+Jev は「既存のアクター一覧・ステップ一覧・未解決の論点」をそのまま選択肢にした**閉じた選択**を、1 リクエストに十数問まとめて
+約 0.3 秒で返します（質問は並列評価されるので、増やしても遅くなりません）。gemma に同じことをさせると選択肢の外を返しますが、
+逆に文言を書くのは Jev にはできません。**gemma が書いたものは、次の発話の Jev リクエストに相乗りさせて必ず検証**します
+（発話に無い情報が足されていないか、既存アクターの言い換えではないか）。
+
+## 外部に送られるデータ
+
+- **音声は外に出ません。**（ブラウザ → 自分のマシンの whisper-server のみ）
+- **Jev（`api.typesafe.ai`）には、文字起こしテキストと、図の要素（業務名・アクター名・ステップ名・問いの文）が送られます。**
+  従量課金です。1 発話につき 1 リクエスト（入力約 3,000 トークン）が目安です。
+- API キーはサーバ側（Route Handler）でしか読みません。ブラウザには出ません。
+
+## 必要なもの
+
+- Node.js 20.9 以上（Next.js 16）
+- **whisper.cpp**: `whisper-server` と、日本語向けのモデル（動作確認は `ggml-large-v3-turbo-q5_0.bin`）
+- **llama.cpp**: `llama-server` と、gemma 系の instruct モデル（動作確認は `gemma-4-12b-it` Q4_K_M）
+- **TypeSafe AI の API キー**（[コンソール](https://console.typesafe.ai/)で発行）
+- Web Audio が使えるブラウザ（Chrome で確認）とマイク
+
+動作確認は Apple Silicon の macOS で行っています。他の環境は未確認です。
+
+## セットアップ
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/Takashi-Matsumura/grilljev-demo.git
+cd grilljev-demo
+npm install
+cp .env.example .env.local   # TYPESAFE_API_KEY を書く
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3 つのバックエンドを起動します（それぞれ別のターミナル）。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# 1. ローカル LLM（gemma）。ポート 8080
+llama-server -m /path/to/gemma-instruct.gguf --port 8080
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# 2. 文字起こし（whisper）。ポート 8178
+#    モデルは ~/.local/share/whisper-models/ggml-large-v3-turbo-q5_0.bin に置く
+npm run whisper
 
-## Learn More
+# 3. アプリ。ポート 3000
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+http://localhost:3000 を開きます。画面右上の心拍アイコンで、3 つのバックエンドの状態を確認できます
+（Jev はキーの有無だけを見ます。課金される外部 API なので、疎通確認では呼びません）。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 環境変数（`.env.local`）
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| 変数 | 既定 | 説明 |
+|---|---|---|
+| `TYPESAFE_API_KEY` | （必須） | Jev の API キー。`NEXT_PUBLIC_` を付けないこと |
+| `LLAMA_BASE_URL` | `http://localhost:8080` | llama-server |
+| `LLAMA_MODEL` | `gemma` | llama-server に渡すモデル名 |
+| `LLAMA_IDLE_TIMEOUT_MS` | `120000` | トークンが届かない無音がこの時間続いたらアボート |
+| `WHISPER_BASE_URL` | `http://127.0.0.1:8178` | whisper-server |
 
-## Deploy on Vercel
+## 使い方
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+画面は 3 列です。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **左: 文字起こし** — 「録音開始」で話すと、区切りごとに行が増えます。
+  「マイクの行を Jev で判定」を ON にすると、確定した行を 1 行ずつ Jev で判定して図に反映します。
+  下の**開発用サンプル**で、マイクなしで台本を再生できます（後述）。
+- **中: ファシリテーターと図** — 「いま聞くべき 1 問」と、Mermaid の業務フロー図。未確定のステップは点線で「（仮）」と出ます。
+- **右: Jev コンソール**（折りたためる） — Jev に送った質問と、返ってきた確率を、1 回ごとに確認できます
+  （質問と回答／送信 JSON／受信 JSON）。
+
+### 開発用サンプル
+
+マイクがなくても、動作を再現できます。
+
+- **判定方法「台本（固定）」**: 台本に固定で書いた変更を図に反映します。Jev も gemma も呼びません（課金なし）。
+- **判定方法「Jev」**: 1 行ごとに Jev を呼びます（課金あり）。台本の想定と一致したかを各行に表示します。
+- 「最後に話題が請求書発行の話へ移る場面を足す」: 対象業務の変化の検知を試す用です（Jev モードでだけ検知します）。
+
+### ファシリテーター
+
+gemma が問いの候補を 3 つ書き、Jev が「根拠が薄い問い」「すでに答えが出ている問い」を捨てて 1 問を選びます。
+決め手に欠けるときは**何も出さず黙ります**（手動で「問いかけを出す」を押したときは、最有力を出します）。
+
+- 1 度に出すのは 1 問。答え・保留になるまで次は出しません。
+- 答えないまま業務の話が 2 回続くと、保留にして先へ進みます。
+- 業務の目的が未確定なら、目的（存在意義）を最優先で問います。
+- 「読み上げ」を ON にすると、ブラウザ内蔵の音声で読み上げます。読み上げ中はマイクの入力を無視します（エコー対策）。
+
+### 対象業務の変化
+
+会話が別の業務へ移ったと Jev が判断すると（直近 3 発話の平均）、確認バナーを出します。**自動では何も変えません。**
+
+- **図を分ける**: いまの図を「過去」のタブ（読み取り専用）に残し、新しい対象業務で図を始める（登場人物は引き継ぐ）
+- **対象を差し替える／広げる**: 図はそのまま、対象業務の名前だけを変える
+- **同じ業務として続ける**: 何も変えない（以後 5 分は出さない）
+
+### 図の書き出し
+
+図ペインの下の「書き出し」から、いま見ている図（過去のタブなら過去の図）を保存できます。
+ファイル名は「対象業務名-YYYYMMDD-HHmm.拡張子」です。すべてブラウザ内で作るので、図の内容は外に出ません。
+
+| 形式 | 用途 |
+|---|---|
+| `.drawio` | [draw.io（diagrams.net）](https://app.diagrams.net/)で開いて手編集できる。非圧縮の mxGraph XML |
+| `.mmd` | Mermaid のコード。GitHub や Obsidian でそのまま描画できる |
+| `.svg` | 画面に描画された図そのもの（画像として使える） |
+
+`.drawio` では、人・部署は人型、システム・社外は箱型のライフラインになり、`alt` / `opt` / `loop` は枠と条件付きで描かれます。
+返答は点線、確信の低い仮ステップは灰色の点線と「（仮）」、書類・システム名は付箋（図の右端）になります。
+
+## ディレクトリ構成
+
+```
+app/
+  page.tsx                 ヘッダーと Studio
+  components/              画面（studio / mic-transcriber / diagram-pane / jev-console ほか）
+    use-pipeline.ts        判定 → 図の更新 → gemma の後続処理 → 検証 の流れ
+    use-facilitator.ts     ファシリテーター
+    use-scope-shift.ts     対象業務の変化の検知
+  api/
+    transcribe/            音声 → whisper-server
+    analyze/               1 発話 → Jev（十数問を 1 リクエスト）
+    label/                 gemma: ステップ名・登場人物・分岐の条件文
+    facilitate/            gemma: 問いの候補 → Jev: 選別
+    scope-shift/           gemma: 新しい業務名の候補 → Jev: 選別
+    health/                バックエンドの疎通確認
+lib/
+  model/                   業務フローの正規化モデルと、変更の唯一の入口（applyOps）
+  analysis/                Jev への質問の組み立てと、回答 → 図の変更（閾値は thresholds.ts）
+  facilitator/  scope/     問いかけ・対象業務の変化
+  audio/                   マイク → 16kHz WAV（AudioWorklet + RMS ベースの発話区間検出）
+  render/                  モデル → Mermaid（mermaid.ts）/ draw.io の XML（layout.ts で座標計算 → drawio.ts）/ 書き出しの補助（export.ts）
+  jev.ts  llm.ts           Jev / llama-server のクライアント
+prompts/                   gemma に渡すプロンプト（Markdown。dev では毎回読み直す）
+```
+
+## 設計上のポイント
+
+- **モデルが唯一の真実**: 図も保存も `FlowModel` から作ります。変更は `ModelOp`（差分）で表し、不正な op は例外にせず無視します。
+- **確信のないものを確信ありげに描かない**: Jev の確信度が低いステップは点線で描き、「（仮）」を付けます。
+- **判定と生成を分ける**: Jev は選ぶだけ、gemma は書くだけ。生成物は必ず Jev が検証します。
+- **gemma の思考は止める**: gemma は既定だと短い JSON を返すのにも思考を挟み、実測で 14 秒かかりました。
+  `enable_thinking: false` で 1.3 秒になります（`lib/llm.ts`）。
+- **非同期の書き込みでも id が衝突しない**: gemma の後続処理は Jev の待ち行列を待たせず、別に走ります。
+  そのため、Jev の解釈は**適用する瞬間の最新モデル**で id を採番し直します（`lib/analysis/rebase.ts`）。
+- **閾値は 1 箇所に集約**: `lib/analysis/thresholds.ts`、`lib/facilitator/trigger.ts`、`lib/facilitator/pick.ts`、`lib/scope/drift.ts`。
+  実測で調整した値には、根拠をコメントに残しています。
+
+## 既知の制限
+
+- **話者分離はしません。** 「私がやります」のような一人称の主語は、原理的に特定できません（確信が低くなり、点線の仮ステップになります）。
+- 新しい登場人物を含むステップは、点線（仮）のまま残ります（仮を外す操作は未実装）。
+- `.drawio` にはアクティベーション（実行の帯）と、論点・暗黙知などのバッジは含みません。付箋は図の右端にまとめて置きます。
+  draw.io で開いて崩れないことは実際に確認しています。ブラウザのダウンロード操作（保存フォルダへの保存）そのものは、動作確認の対象に含めていません。
+- 入れ子のシーケンス図（サブフロー）は未対応です。「1 ステップの細分化」は、別の図として詳細化します。
+- Jev の料金・レート制限は公開情報では確認できていません。連続 3 回失敗すると 5 分休止します。
+- 自動の問いかけは、Jev が「いまは黙る」と判断し続けると、約 30 秒ごとに Jev と gemma を呼び続けます（上限なし）。
+- 音声の読み上げが実際に鳴るか、マイクからの入力経路は、実機の耳と手での確認が必要です。
+
+## ロードマップ
+
+- [x] 音声の文字起こし（whisper.cpp）
+- [x] 業務フローのモデルと、Mermaid での表示
+- [x] Jev による判定（雑談の除外・アクター・重複・論点）
+- [x] gemma による文言の生成と、Jev による検証
+- [x] ファシリテーター（問いの生成・選別・読み上げ）
+- [x] 対象業務の変化の検知と、図の分割
+- [x] 図の書き出し（`.drawio` / `.mmd` / `.svg`）
+- [ ] セッションの保存と再開
+
+## スクリプト
+
+| コマンド | 内容 |
+|---|---|
+| `npm run dev` | 開発サーバ（3000） |
+| `npm run whisper` | whisper-server を 8178 で起動 |
+| `npm run build` / `npm start` | 本番ビルド / 起動 |
+| `npm run typecheck` | 型チェック |
+| `npm run lint` | ESLint |
+
+## 技術スタック
+
+Next.js 16（App Router / Turbopack）・React 19・Tailwind CSS v4・[Mermaid](https://mermaid.js.org/)。
+Jev・llama-server・whisper-server は、SDK を使わず素の `fetch` で呼んでいます。
+
+> このリポジトリの Next.js は、これまでのバージョンから破壊的変更があります。実装前に
+> `node_modules/next/dist/docs/` の該当ガイドを読んでください（`AGENTS.md` 参照）。
+
+## ライセンス
+
+[MIT License](./LICENSE) © 2026 Takashi Matsumura
