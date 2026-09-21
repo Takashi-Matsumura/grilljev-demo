@@ -250,10 +250,13 @@ export function buildUtteranceQuestions(
     questions.dup_step = {
       type: "choice",
       instructions:
-        "この発話が述べている手順・内容は、すでに図に描かれている次のステップのどれかと同じことか。言い回しが違っても、同じ動作を指しているなら同じとみなす。すでに描かれたステップについての補足・コメントである場合も、そのステップを選ぶ",
+        "この発話が述べている手順・内容は、すでに図に描かれている次のステップのどれかと同じことか。言い回しが違っても、同じ動作を指しているなら同じとみなす。ただし、誰から誰への動作か（向き）と、依頼か返答かが違うなら、別のステップである。すでに描かれたステップについての補足・コメントである場合は、そのステップを選ぶ",
       criteria: {
         ...Object.fromEntries(
-          steps.map((s) => [s.id, `${nameOf(s.from)} → ${nameOf(s.to)}: ${s.label}`]),
+          steps.map((s) => [
+            s.id,
+            `${nameOf(s.from)} → ${nameOf(s.to)}（${s.kind === "reply" ? "返答" : "依頼・連絡"}）: ${s.label}`,
+          ]),
         ),
         [NO_STEP]: "どのステップとも違う、新しい内容",
       },
@@ -277,11 +280,11 @@ export function buildUtteranceQuestions(
     if (c.kind === "label") {
       questions[qFaithful(c.stepId)] = {
         type: "noul",
-        instructions: `発話「${c.source}」に対して、図の矢印に付けようとしている名前「${c.label}」は忠実か`,
+        instructions: `発話「${c.source}」から、図の矢印の名前「${c.label}」を作った。この名前は、発話の内容だけでできているか（発話に無い情報が足されていないか）。発話の一部を取り出しただけで、主語や条件が省かれていても、足されていなければ「発話の内容だけ」とみなす`,
         criteria: {
-          true: "発話に含まれる内容だけで構成されている。発話の言葉を短く言い換えただけである",
+          true: "名前の言葉と意味が、すべて発話の中にある。発話の一部を取り出した、短くまとめただけ、主語や条件を省いただけの場合を含む",
           false:
-            "発話になかった担当者・条件・手段・数値が付け加えられている、または内容がずれている",
+            "名前に、発話に無い担当者・手段・数値・条件が入っている。または発話と意味が違う",
         },
       };
       questions[qReadable(c.stepId)] = {

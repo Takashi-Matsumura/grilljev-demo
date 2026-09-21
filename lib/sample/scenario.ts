@@ -202,3 +202,29 @@ export const SAMPLE_SHIFT_SCENARIO: SampleEntry[] = [
     ops: [],
   },
 ];
+
+/**
+ * 「このアプリの仕組み」を業務に見立てた台本（セルフ検証用）。
+ * 台本モード用の固定 ops は持たない — **jev モード専用**。期待値（kind）は人が付けた目安で、
+ * jev の判定との一致・不一致を見るためのもの。
+ */
+export const APP_SCOPE = {
+  title: "会議音声から業務フロー図を作る仕組み",
+  departments: ["ブラウザ", "whisper", "Jev", "gemma"],
+} as const;
+
+const line = (id: string, kind: SampleEntry["kind"], text: string): SampleEntry => ({ id, text, kind, ops: [] });
+
+export const APP_SCENARIO: SampleEntry[] = [
+  line("a01", "chatter", "はい、では録画も回っているので始めましょう。"),
+  line("a02", "business", "この仕組みの目的は、会議中の発言から、その場で業務フロー図を作ることです。"),
+  line("a03", "business", "まず、ブラウザがマイクの音声を区切って、whisper に送ります。"),
+  line("a04", "business", "whisper は、音声を日本語の文字に起こして、ブラウザに返します。"),
+  line("a05", "chatter", "あ、コーヒーのおかわり取ってきてもいいですか？"),
+  line("a06", "business", "ブラウザは、その文字を Jev に送って、業務の話かどうかを判定してもらいます。"),
+  line("a07", "business", "Jev は、雑談か業務か、誰から誰への動作かを、確率つきでブラウザに返します。"),
+  line("a08", "business", "業務の話だと判定されたら、ブラウザが gemma にステップの名前を作らせます。"),
+  line("a09", "business", "Jev が雑談だと判断したときは、図には何も足さずに捨てます。"),
+  line("a10", "business", "gemma が書いた名前は、次の発言のときに、Jev がもう一度チェックします。"),
+  line("a11", "business", "確信が低いときは、点線の仮ステップにして、人が承認するまで待ちます。"),
+];

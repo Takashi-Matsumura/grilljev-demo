@@ -296,13 +296,19 @@ function interpretUtterance(
   let targetStepId: string | null = null;
 
   const dup = choice(answers, "dup_step");
-  const dupId =
-    dup &&
-    dup.choice !== NO_STEP &&
-    dup.confidence >= DUP_CONFIDENT &&
-    model.steps.some((s) => s.id === dup.choice && s.status !== "retracted")
-      ? dup.choice
-      : null;
+  const dupStep =
+    dup && dup.choice !== NO_STEP && dup.confidence >= DUP_CONFIDENT
+      ? model.steps.find((s) => s.id === dup.choice && s.status !== "retracted")
+      : undefined;
+  // 「依頼」と「その返答」は、同じ 2 者の間で向きが逆になるだけで、言い回しが似る。
+  // 送り手・受け手が**確信をもって**既存ステップと違うと答えているなら、重複とは見ない。
+  const fromAns = choice(answers, "actor_from");
+  const toAns = choice(answers, "actor_to");
+  const sure = (c: JevChoiceAnswer | null) =>
+    c !== null && c.confidence >= ACTOR_APPLY && c.choice !== UNKNOWN_ACTOR && c.choice !== NEW_ACTOR;
+  const differentDirection =
+    !!dupStep && ((sure(fromAns) && fromAns?.choice !== dupStep.from) || (sure(toAns) && toAns?.choice !== dupStep.to));
+  const dupId = dupStep && !differentDirection ? dupStep.id : null;
 
   const flags: StepFlags = {};
   for (const f of FLAG_ISSUES) {
