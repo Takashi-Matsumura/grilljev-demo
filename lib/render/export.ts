@@ -2,12 +2,13 @@
  * 書き出し用の小さな純関数（ファイル名と SVG の整形）。ダウンロード自体はブラウザ側（component）で行う。
  */
 
-export type ExportFormat = "drawio" | "mmd" | "svg";
+export type ExportFormat = "drawio" | "mmd" | "svg" | "md";
 
 export const EXPORT_MIME: Record<ExportFormat, string> = {
   drawio: "application/vnd.jgraph.mxfile",
   mmd: "text/plain;charset=utf-8",
   svg: "image/svg+xml;charset=utf-8",
+  md: "text/markdown;charset=utf-8",
 };
 
 const FORBIDDEN_IN_FILENAME = /[\\/:*?"<>|\u0000-\u001F\s]+/g;

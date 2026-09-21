@@ -30,6 +30,18 @@ function safeId(id: string): string {
   return id.replace(/[^A-Za-z0-9_]/g, "_");
 }
 
+/**
+ * ops-grill の掘り下げ軸（例外・暗黙知・属人化）を、ステップ名の末尾に付ける記号。
+ * 図の上で「ここは聞き足りない」が見えるようにする。Mermaid と drawio で共通。
+ */
+export function flagSuffix(step: Step): string {
+  const marks: string[] = [];
+  if (step.flags.exception) marks.push("［例外］");
+  if (step.flags.tacit) marks.push("［暗黙知］");
+  if (step.flags.personDependent) marks.push("［属人］");
+  return marks.join("");
+}
+
 function arrowFor(step: Step): string {
   // 未確認は点線で描き、確信がないものを確信ありげに見せない
   if (step.status === "provisional") return "-->>";
@@ -89,7 +101,8 @@ export function toMermaid(model: FlowModel): string {
     const indent = openGroup !== null ? "    " : "  ";
     const from = safeId(step.from);
     const to = safeId(step.to);
-    const label = esc(step.label) + (step.status === "provisional" ? "（仮）" : "");
+    const label =
+      esc(step.label) + flagSuffix(step) + (step.status === "provisional" ? "（仮）" : "");
     lines.push(`${indent}${from}${arrowFor(step)}${to}: ${label}`);
 
     if (step.artifact) {

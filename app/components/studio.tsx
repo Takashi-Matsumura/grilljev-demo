@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Interpretation } from "@/lib/analysis/interpret";
 import { modelFromScope } from "@/lib/model/reducer";
 import type { FlowModel } from "@/lib/model/types";
-import { SAMPLE_SCENARIO, SAMPLE_SCOPE, SAMPLE_SHIFT_SCENARIO } from "@/lib/sample/scenario";
+import type { ArchivedDiagram } from "@/lib/scope/apply";
+import type { SessionSeed } from "@/lib/store/session-types";
+import { SAMPLE_SCENARIO, SAMPLE_SHIFT_SCENARIO } from "@/lib/sample/scenario";
 import { clock, type Line, type LineLabeling } from "@/lib/transcript/line";
 import { DiagramPane } from "./diagram-pane";
 import { DiagramTabs } from "./diagram-tabs";
@@ -13,6 +15,7 @@ import { JevConsole } from "./jev-console";
 import { MicTranscriber } from "./mic-transcriber";
 import { SamplePanel, type SampleMode } from "./sample-panel";
 import { ScopeBanner } from "./scope-banner";
+import { useAutosave, type SaveStatus } from "./use-autosave";
 import { useFacilitator } from "./use-facilitator";
 import { usePipeline, type AnalysisJob } from "./use-pipeline";
 import { useScopeShift } from "./use-scope-shift";
@@ -22,17 +25,28 @@ const SAMPLE_INTERVAL_MS = 1_800;
 /** 手動で「答えた」にしたときの記録（発言そのものは無い） */
 const MANUAL_ANSWER = "（会議で回答済み）";
 
-function initialModel(): FlowModel {
-  return modelFromScope(
-    SAMPLE_SCOPE.title,
-    [...SAMPLE_SCOPE.departments],
-    new Date().toISOString(),
-  );
-}
+export type StudioSession = {
+  slug: string;
+  seed: SessionSeed;
+  model: FlowModel;
+  archives: ArchivedDiagram[];
+  lines: Line[];
+};
+
+const SAVE_LABEL: Record<SaveStatus, { text: string; cls: string }> = {
+  saved: { text: "保存済み", cls: "text-zinc-500" },
+  saving: { text: "保存中…", cls: "text-zinc-500" },
+  error: { text: "保存できていません（再試行します）", cls: "text-amber-600 dark:text-amber-400" },
+};
 
 /** 3 列（文字起こし / 図とファシリテーター / jev コンソール）で状態を共有するための親。 */
-export function Studio() {
-  const [lines, setLines] = useState<Line[]>([]);
+export function Studio({ session }: { session: StudioSession }) {
+  const [lines, setLines] = useState<Line[]>(session.lines);
+  // やり直し（リセット）で戻る先は、会議を始めたときの初期設定
+  const initialModel = useCallback(
+    () => modelFromScope(session.seed.title, [...session.seed.departments], new Date().toISOString()),
+    [session.seed],
+  );
   const [cursor, setCursor] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [mode, setMode] = useState<SampleMode>("script");
@@ -71,7 +85,14 @@ export function Studio() {
     [],
   );
 
-  const pipeline = usePipeline({ onInterpretation, patchLine, patchLabeling, initialModel });
+  const pipeline = usePipeline({
+    onInterpretation,
+    patchLine,
+    patchLabeling,
+    initialModel,
+    resumeModel: session.model,
+    initialArchives: session.archives,
+  });
   const { analyze, applyScript, commit, getModel, getSignals, pushEntry, splitDiagram } = pipeline;
   const { reset: resetPipeline } = pipeline;
 
@@ -199,11 +220,29 @@ export function Studio() {
     [onPark, generateQuestion],
   );
 
+  const saveStatus = useAutosave(session.slug, pipeline.model, pipeline.archives, lines);
+
+  /** 仮のステップの承認・却下。承認は確定（実線）に、却下は取り消し（履歴には残る） */
+  const onDecideStep = useCallback(
+    (id: string, decision: "approve" | "reject") => {
+      commit(
+        decision === "approve"
+          ? [{ op: "step.update", id, patch: { status: "confirmed", confidence: 1 } }]
+          : [{ op: "step.retract", id }],
+        "manual",
+      );
+    },
+    [commit],
+  );
+
   const archived = pipeline.archives.find((a) => a.id === viewId) ?? null;
   const viewing = archived ? archived.model : pipeline.model;
 
   return (
     <>
+      <p className={`px-4 py-0.5 text-right text-xs ${SAVE_LABEL[saveStatus].cls}`} aria-live="polite">
+        {SAVE_LABEL[saveStatus].text}
+      </p>
       <ScopeBanner
         proposal={shift.proposal}
         status={shift.status}
@@ -266,7 +305,11 @@ export function Studio() {
               過去の図（読み取り専用）です。「図を分ける」までの内容が残っています。
             </p>
           )}
-          <DiagramPane model={viewing} source={archived ? "none" : pipeline.source} />
+          <DiagramPane
+            model={viewing}
+            source={archived ? "none" : pipeline.source}
+            onDecideStep={archived ? undefined : onDecideStep}
+          />
         </div>
         <JevConsole entries={pipeline.entries} />
       </main>
