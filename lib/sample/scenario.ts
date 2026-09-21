@@ -210,7 +210,7 @@ export const SAMPLE_SHIFT_SCENARIO: SampleEntry[] = [
  */
 export const APP_SCOPE = {
   title: "会議音声から業務フロー図を作る仕組み",
-  departments: ["ブラウザ", "whisper", "Jev", "gemma"],
+  departments: ["ブラウザ", "サーバー", "whisper", "Jev", "gemma", "Mermaid"],
 } as const;
 
 const line = (id: string, kind: SampleEntry["kind"], text: string): SampleEntry => ({ id, text, kind, ops: [] });
@@ -227,4 +227,10 @@ export const APP_SCENARIO: SampleEntry[] = [
   line("a09", "business", "Jev が雑談だと判断したときは、図には何も足さずに捨てます。"),
   line("a10", "business", "gemma が書いた名前は、次の発言のときに、Jev がもう一度チェックします。"),
   line("a11", "business", "確信が低いときは、点線の仮ステップにして、人が承認するまで待ちます。"),
+  // 発話が図になるまでの後半（解釈 → 適用 → Mermaid のコード → 描画）
+  line("a12", "business", "サーバーは、Jev が返した確率を、閾値と比べて、図への変更の一覧に直します。"),
+  line("a13", "business", "ブラウザは、その変更の一覧を、図のデータに反映します。"),
+  line("a14", "business", "ブラウザは、図のデータから Mermaid のコードを書いて、Mermaid に渡します。"),
+  line("a15", "business", "Mermaid は、そのコードからシーケンス図の絵を描いて、画面に返します。"),
+  line("a16", "business", "図のデータを間に挟むのは、あとから取り消しや割り込みをできるようにするためです。"),
 ];
