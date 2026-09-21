@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { FlowModel } from "@/lib/model/types";
 import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
+import { FullscreenButton } from "./diagram-fullscreen";
 import { ExportButtons } from "./export-buttons";
 import { MermaidDiagram } from "./mermaid-diagram";
 import { SummaryButton } from "./summary-dialog";
@@ -148,6 +149,7 @@ export function DiagramPane({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <ExportButtons model={model} mermaidCode={code} svg={svgForExport} empty={!drawable} />
         <SummaryButton model={model} empty={!drawable} />
+        <FullscreenButton title={model.scope.title} code={code} disabled={!drawable} />
       </div>
 
       <details className="text-sm">
