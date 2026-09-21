@@ -160,9 +160,15 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
           aria-expanded={false}
           aria-controls="jev-console-body"
           title="jev コンソールを開く"
+          aria-label="jev コンソールを開く"
           className="flex w-full items-center gap-2 px-4 py-3 text-sm hover:bg-black/5 lg:h-full lg:w-12 lg:flex-col lg:px-0 dark:hover:bg-white/10"
         >
-          <span aria-hidden>◀</span>
+          {/* 畳むアイコンと対になる、右側のパネルを開くアイコン（山形が左向き） */}
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M15 4v16" />
+            <path d="M11 9.5 8.5 12l2.5 2.5" />
+          </svg>
           <span className="font-medium lg:[writing-mode:vertical-rl]">jev コンソール</span>
           <span className="text-xs tabular-nums text-zinc-500 lg:[writing-mode:vertical-rl]">
             {calls} 回{failed > 0 ? ` · 失敗 ${failed}` : ""}
