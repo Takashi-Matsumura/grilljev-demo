@@ -191,9 +191,15 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
           aria-expanded
           aria-controls="jev-console-body"
           title="jev コンソールを畳む"
-          className="shrink-0 rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-black/5 dark:hover:bg-white/10"
+          aria-label="jev コンソールを畳む"
+          className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-black/5 dark:hover:bg-white/10"
         >
-          畳む ▶
+          {/* 右側のパネルを閉じるアイコン（枠の右に仕切りと、右向きの山形） */}
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M15 4v16" />
+            <path d="M8.5 9.5 11 12l-2.5 2.5" />
+          </svg>
         </button>
       </div>
 

@@ -33,8 +33,14 @@ type Rendered = { for: string; svg: string };
 export function MermaidDiagram({
   code,
   onSvg,
+  zoom,
+  fill = false,
 }: {
   code: string;
+  /** 指定すると、図の幅を表示領域の zoom 倍にする（全画面表示用。1 = 幅に合わせる） */
+  zoom?: number;
+  /** true なら、枠の罫線と余白を付けず、親の高さいっぱいに広げる */
+  fill?: boolean;
   /** 描画に成功するたびに、SVG と、それがどのコードのものかを渡す（.svg の書き出し用） */
   onSvg?: (svg: string, forCode: string) => void;
 }) {
@@ -79,12 +85,15 @@ export function MermaidDiagram({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="min-h-0 flex-1 overflow-auto rounded-md border border-black/10 p-4 dark:border-white/15">
+      <div
+        className={`min-h-0 flex-1 overflow-auto ${fill ? "" : "rounded-md border border-black/10 p-4 dark:border-white/15"}`}
+      >
         {rendered ? (
           <div
-            className={`[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full transition-opacity ${
-              updating ? "opacity-60" : "opacity-100"
-            }`}
+            className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${
+              zoom === undefined ? "[&_svg]:max-w-full" : "[&_svg]:!w-full [&_svg]:!max-w-none"
+            } ${updating ? "opacity-60" : "opacity-100"}`}
+            style={zoom === undefined ? undefined : { width: `${zoom * 100}%`, margin: "0 auto" }}
             // securityLevel: "strict" の Mermaid が生成した SVG のみを入れる
             dangerouslySetInnerHTML={{ __html: rendered.svg }}
           />
