@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type MermaidApi = typeof import("mermaid").default;
 
@@ -30,8 +30,19 @@ type Rendered = { for: string; svg: string };
  * - パースに失敗しても、直前に成功した図は消さない（リアルタイムで育てる用途では、
  *   途中の不完全なコードで図が消えるのが最悪の体験）
  */
-export function MermaidDiagram({ code }: { code: string }) {
+export function MermaidDiagram({
+  code,
+  onSvg,
+}: {
+  code: string;
+  /** 描画に成功するたびに、SVG と、それがどのコードのものかを渡す（.svg の書き出し用） */
+  onSvg?: (svg: string, forCode: string) => void;
+}) {
   const [rendered, setRendered] = useState<Rendered | null>(null);
+  const onSvgRef = useRef(onSvg);
+  useEffect(() => {
+    onSvgRef.current = onSvg;
+  });
   const [failed, setFailed] = useState<{ for: string; message: string } | null>(null);
 
   useEffect(() => {
@@ -51,6 +62,7 @@ export function MermaidDiagram({ code }: { code: string }) {
         if (cancelled) return;
         setRendered({ for: code, svg });
         setFailed(null);
+        onSvgRef.current?.(svg, code);
       } catch (e) {
         if (cancelled) return;
         setFailed({ for: code, message: e instanceof Error ? e.message : "描画に失敗しました" });

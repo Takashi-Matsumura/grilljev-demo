@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { FlowModel } from "@/lib/model/types";
 import { hasDiagram, toMermaid } from "@/lib/render/mermaid";
+import { ExportButtons } from "./export-buttons";
 import { MermaidDiagram } from "./mermaid-diagram";
 
 const ISSUE_KIND_LABEL: Record<string, string> = {
@@ -48,6 +49,9 @@ export function DiagramPane({ model, source }: { model: FlowModel; source: Updat
   const drawable = hasDiagram(model);
   const openIssues = model.issues.filter((i) => i.status !== "answered");
   const badge = SOURCE_BADGE[source];
+  // .svg の書き出し用。「どのコードの SVG か」を持ち、いまの図と一致するときだけ使う
+  const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
+  const svgForExport = rendered && rendered.code === code ? rendered.svg : null;
 
   return (
     <section className="flex min-h-[32rem] flex-1 flex-col gap-3 p-4">
@@ -70,7 +74,7 @@ export function DiagramPane({ model, source }: { model: FlowModel; source: Updat
 
       <div className="min-h-0 flex-1">
         {drawable ? (
-          <MermaidDiagram code={code} />
+          <MermaidDiagram code={code} onSvg={(svg, forCode) => setRendered({ svg, code: forCode })} />
         ) : (
           <p className="rounded-md border border-dashed border-black/15 p-4 text-sm text-zinc-500 dark:border-white/20">
             まだ図がありません。関係部署を設定して会話が始まると、ここに描かれます。
@@ -96,6 +100,8 @@ export function DiagramPane({ model, source }: { model: FlowModel; source: Updat
           </ul>
         </div>
       )}
+
+      <ExportButtons model={model} mermaidCode={code} svg={svgForExport} empty={!drawable} />
 
       <details className="text-sm">
         <summary className="cursor-pointer text-zinc-500">Mermaid コードを表示</summary>
