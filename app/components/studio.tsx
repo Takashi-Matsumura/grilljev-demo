@@ -6,7 +6,7 @@ import { modelFromScope } from "@/lib/model/reducer";
 import type { FlowModel } from "@/lib/model/types";
 import type { ArchivedDiagram } from "@/lib/scope/apply";
 import type { SessionSeed } from "@/lib/store/session-types";
-import { SAMPLE_SCENARIO, SAMPLE_SHIFT_SCENARIO } from "@/lib/sample/scenario";
+import { APP_SCENARIO, SAMPLE_SCENARIO, SAMPLE_SHIFT_SCENARIO } from "@/lib/sample/scenario";
 import { clock, type Line, type LineLabeling } from "@/lib/transcript/line";
 import { DiagramPane } from "./diagram-pane";
 import { DiagramTabs } from "./diagram-tabs";
@@ -51,6 +51,8 @@ export function Studio({ session }: { session: StudioSession }) {
   const [playing, setPlaying] = useState(false);
   const [mode, setMode] = useState<SampleMode>("script");
   const [withShift, setWithShift] = useState(false);
+  /** 台本の題材。"app" はこのアプリの仕組み（jev モード専用） */
+  const [topic, setTopic] = useState<"loan" | "app">("loan");
   const [jevEnabled, setJevEnabled] = useState(true);
   const [speakEnabled, setSpeakEnabled] = useState(false);
   /** いま見ている図。"current" か、過去の図の id */
@@ -141,8 +143,13 @@ export function Studio({ session }: { session: StudioSession }) {
   );
 
   const scenario = useMemo(
-    () => (withShift ? [...SAMPLE_SCENARIO, ...SAMPLE_SHIFT_SCENARIO] : SAMPLE_SCENARIO),
-    [withShift],
+    () =>
+      topic === "app"
+        ? APP_SCENARIO
+        : withShift
+          ? [...SAMPLE_SCENARIO, ...SAMPLE_SHIFT_SCENARIO]
+          : SAMPLE_SCENARIO,
+    [topic, withShift],
   );
   const finished = cursor >= scenario.length;
 
@@ -268,6 +275,13 @@ export function Studio({ session }: { session: StudioSession }) {
             playing={playing}
             mode={mode}
             onModeChange={setMode}
+            topic={topic}
+            onTopicChange={(t) => {
+              setTopic(t);
+              setCursor(0);
+              setPlaying(false);
+              if (t === "app") setMode("jev");
+            }}
             withShift={withShift}
             onWithShiftChange={setWithShift}
             onTogglePlay={() => setPlaying((p) => !p)}

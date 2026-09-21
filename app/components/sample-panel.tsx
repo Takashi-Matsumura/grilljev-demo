@@ -8,6 +8,8 @@ type Props = {
   playing: boolean;
   mode: SampleMode;
   onModeChange: (mode: SampleMode) => void;
+  topic: "loan" | "app";
+  onTopicChange: (topic: "loan" | "app") => void;
   /** 台本の最後に「話題が別の業務へ移る場面」を足すか */
   withShift: boolean;
   onWithShiftChange: (on: boolean) => void;
@@ -23,6 +25,8 @@ export function SamplePanel({
   playing,
   mode,
   onModeChange,
+  topic,
+  onTopicChange,
   withShift,
   onWithShiftChange,
   onTogglePlay,
@@ -49,10 +53,21 @@ export function SamplePanel({
     <details open className="border-t border-black/10 px-4 py-3 dark:border-white/15">
       <summary className="cursor-pointer text-sm font-medium">開発用サンプル</summary>
       <div className="mt-3 flex flex-col gap-2">
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          題材
+          <select
+            value={topic}
+            onChange={(e) => onTopicChange(e.target.value as "loan" | "app")}
+            className="rounded-md border border-black/15 bg-transparent px-2 py-1 dark:border-white/20"
+          >
+            <option value="loan">与信照会つき見積作成</option>
+            <option value="app">このアプリの仕組み（jev 専用）</option>
+          </select>
+        </label>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-zinc-600 dark:text-zinc-400">判定方法</span>
           <div className="flex overflow-hidden rounded-md border border-black/15 dark:border-white/20">
-            {seg("script", "台本（固定）")}
+            {topic === "loan" && seg("script", "台本（固定）")}
             {seg("jev", "jev")}
           </div>
         </div>
