@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { FacilitateResponse } from "@/app/api/facilitate/route";
 import { buildAskOps } from "@/lib/facilitator/ops";
 import { purposeMissing } from "@/lib/facilitator/purpose";
@@ -13,13 +13,9 @@ import type { Signals } from "./use-pipeline";
 
 const CHECK_INTERVAL_MS = 2_000;
 
-export type FacilitatorStatus = {
-  kind: "idle" | "generating" | "held" | "error";
-  /** 画面に出す 1 行 */
-  message: string;
-};
-
 type Options = {
+  /** 自動問いかけ ON/OFF。バックエンドの状態ダイアログのトグルが由来（use-facilitator-auto.ts） */
+  auto: boolean;
   getModel: () => FlowModel;
   getSignals: () => Signals;
   /** 直近の業務の発言（古い順）。問いの生成と選別の文脈に使う */
@@ -30,13 +26,12 @@ type Options = {
 
 /**
  * ファシリテーター。gemma が問いの候補を書き、Jev が「いま出すべき 1 問」を選ぶ（/api/facilitate）。
- * 自動では、前回から一定時間あいていて、間が空いた・論点が溜まったなどのときに動く（lib/facilitator/trigger.ts）。
- * 出せるのは 1 度に 1 問。出したあと答え・保留になるまでは、次を生成しない。
+ * 自動（`auto`）では、前回から一定時間あいていて、間が空いた・論点が溜まったなどのときに動く
+ * （lib/facilitator/trigger.ts）。出せるのは 1 度に 1 問。出したあと答え・保留になるまでは、次を生成しない。
+ * 生成された問いそのものは model.issues に入り、画面には図の上のフローティングカード
+ * （facilitator-overlay.tsx）が出す。
  */
-export function useFacilitator({ getModel, getSignals, getRecent, commit, pushEntry }: Options) {
-  const [auto, setAuto] = useState(true);
-  const [status, setStatus] = useState<FacilitatorStatus>({ kind: "idle", message: "待機中" });
-
+export function useFacilitator({ auto, getModel, getSignals, getRecent, commit, pushEntry }: Options) {
   const busyRef = useRef(false);
   const epochRef = useRef(0);
   const lastAskedAtRef = useRef(0);
@@ -52,7 +47,6 @@ export function useFacilitator({ getModel, getSignals, getRecent, commit, pushEn
 
       busyRef.current = true;
       const epoch = epochRef.current;
-      setStatus({ kind: "generating", message: "問いを考えています…（gemma が候補を作り、Jev が選びます）" });
       try {
         const res = await fetch("/api/facilitate", {
           method: "POST",
@@ -70,7 +64,6 @@ export function useFacilitator({ getModel, getSignals, getRecent, commit, pushEn
 
         if (!res.ok || json.error) {
           nextEligibleAtRef.current = Date.now() + RETRY_ERROR_MS;
-          setStatus({ kind: "error", message: json.error ?? `HTTP ${res.status}` });
           return;
         }
 
@@ -90,15 +83,12 @@ export function useFacilitator({ getModel, getSignals, getRecent, commit, pushEn
           commit(buildAskOps(getModel(), json.chosen), "jev");
           lastAskedAtRef.current = Date.now();
           nextEligibleAtRef.current = 0;
-          setStatus({ kind: "idle", message: json.summary });
         } else {
           nextEligibleAtRef.current = Date.now() + RETRY_HOLD_MS;
-          setStatus({ kind: "held", message: json.summary });
         }
-      } catch (e) {
+      } catch {
         if (epoch !== epochRef.current) return;
         nextEligibleAtRef.current = Date.now() + RETRY_ERROR_MS;
-        setStatus({ kind: "error", message: e instanceof Error ? e.message : "問いの生成に失敗しました" });
       } finally {
         busyRef.current = false;
       }
@@ -134,8 +124,7 @@ export function useFacilitator({ getModel, getSignals, getRecent, commit, pushEn
     lastAskedAtRef.current = 0;
     nextEligibleAtRef.current = 0;
     busyRef.current = false;
-    setStatus({ kind: "idle", message: "待機中" });
   }, []);
 
-  return { auto, setAuto, status, generate, reset };
+  return { generate, reset };
 }

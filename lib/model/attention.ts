@@ -42,9 +42,9 @@ const READINESS_DEFS: { key: ReadinessKey; label: string; hint: string }[] = [
 ];
 
 /**
- * 「いま出している問い」（status === "asked"）は FacilitatorPane のカードが表示するので、
- * ここには入れない。入れると、同じ論点がカードと要対応リストの二重に出てしまう。
- * この関数は FacilitatorPane が asked を表示している前提に依存する。
+ * 「いま出している問い」（status === "asked"）は FacilitatorOverlay（図の上のフローティングカード）が
+ * 表示するので、ここには入れない。入れると、同じ論点がカードと要対応リストの二重に出てしまう。
+ * この関数は FacilitatorOverlay が asked を表示している前提に依存する。
  */
 export function buildAttention(model: FlowModel): Attention {
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;

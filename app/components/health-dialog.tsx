@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Health } from "@/lib/health";
+import { ToggleSwitch } from "./toggle-switch";
 import { useDevMode } from "./use-dev-mode";
+import { useFacilitatorAuto } from "./use-facilitator-auto";
 
 const POLL_MS = 10_000;
 
@@ -25,6 +27,8 @@ export function HealthButton({ initial }: { initial: Health }) {
   const [stale, setStale] = useState(false);
   // Studio 側と同じキーを見る（`useDevMode` は同じブラウザ内なら自動で同期する）
   const [devMode] = useDevMode();
+  // ファシリテーターの自動問いかけ。Studio とは別の React ツリーなので、同じ作法で共有する
+  const [facilitatorAuto, setFacilitatorAuto] = useFacilitatorAuto();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -105,6 +109,15 @@ export function HealthButton({ initial }: { initial: Health }) {
           >
             ✕
           </button>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3 dark:border-white/15">
+          <span className="font-medium">ファシリテーター</span>
+          <ToggleSwitch
+            checked={facilitatorAuto}
+            onChange={setFacilitatorAuto}
+            label="自動問いかけ"
+            title="間が空いたときなどに、業務フロー図の上に問いを浮かせて出します"
+          />
         </div>
         <ul className="flex flex-col gap-2 p-4">
           {rows.map((r) => (

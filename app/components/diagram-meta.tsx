@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ReadinessItem } from "@/lib/model/attention";
 import type { FlowModel } from "@/lib/model/types";
 import type { UpdateSource } from "./diagram-pane";
+import { useFacilitatorAuto } from "./use-facilitator-auto";
 
 /** 更新の合図を出している時間。これを過ぎると自然に消える。 */
 const UPDATE_FLASH_MS = 6_000;
@@ -65,6 +66,8 @@ export function DiagramMeta({
   devMode?: boolean;
 }) {
   const badge = (devMode ? SOURCE_BADGE_DEV : SOURCE_BADGE_PLAIN)[source];
+  // バックエンドの状態ダイアログのトグルと共有（別の React ツリーなので、ここでも直接読む）
+  const [facilitatorAuto] = useFacilitatorAuto();
 
   // rev が変わるたびに「更新の合図」を一定時間だけ出す。本番モードでは
   // 常時表示せず、更新の瞬間だけ光らせて数秒で消す（レイアウトは動かさない）。
@@ -91,6 +94,14 @@ export function DiagramMeta({
           <h2 className="shrink-0 font-medium" title={`対象業務: ${model.scope.title || "（未設定）"}`}>
             業務フロー図
           </h2>
+          {facilitatorAuto && (
+            <span
+              className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-800 dark:bg-violet-500/20 dark:text-violet-300"
+              title="自動問いかけが ON です。問いが出ると、この図の上に浮かせて出します"
+            >
+              ファシリテーター
+            </span>
+          )}
           <p
             className="min-w-0 flex-1 truncate text-sm text-zinc-500 dark:text-zinc-400"
             title={model.scope.purpose || "目的はまだ確定していません"}

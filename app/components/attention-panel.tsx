@@ -13,7 +13,7 @@ const DECIDE_BTN =
 
 /**
  * 確認待ちのステップと未解決の論点を1つに統合した「要対応」リスト。
- * 「いま出している問い」（status: "asked"）は FacilitatorPane のカードが持つので、
+ * 「いま出している問い」（status: "asked"）は FacilitatorOverlay（図の上のフローティングカード）が持つので、
  * ここには来ない（lib/model/attention.ts の buildAttention を参照）。
  */
 export function AttentionPanel({
