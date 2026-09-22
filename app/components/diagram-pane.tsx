@@ -15,18 +15,14 @@ const ISSUE_STATUS_LABEL: Record<string, string> = {
   parked: "保留",
 };
 
-/** 図を最後に更新したのが何か。台本は固定の変更であり、Jev の判定ではない。 */
-export type UpdateSource = "none" | "script" | "jev" | "manual";
+/** 図を最後に更新したのが何か。 */
+export type UpdateSource = "none" | "jev" | "manual";
 
 /** 開発者モード: 何によって更新されたかの内訳。本番向けは、更新があったかどうかだけ伝える。 */
 const SOURCE_BADGE_DEV: Record<UpdateSource, { text: string; cls: string }> = {
   none: {
     text: "更新なし",
     cls: "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-300",
-  },
-  script: {
-    text: "直近の更新: 台本（固定・Jev の判定ではない）",
-    cls: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
   },
   jev: {
     text: "直近の更新: Jev の判定",
@@ -40,7 +36,6 @@ const SOURCE_BADGE_DEV: Record<UpdateSource, { text: string; cls: string }> = {
 
 const SOURCE_BADGE_PLAIN: Record<UpdateSource, { text: string; cls: string }> = {
   none: SOURCE_BADGE_DEV.none,
-  script: { text: "更新あり", cls: SOURCE_BADGE_DEV.script.cls },
   jev: { text: "更新あり", cls: SOURCE_BADGE_DEV.jev.cls },
   manual: { text: "更新あり", cls: SOURCE_BADGE_DEV.manual.cls },
 };

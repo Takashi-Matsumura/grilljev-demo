@@ -168,37 +168,6 @@ export const SAMPLE_SCENARIO: SampleEntry[] = [
 ];
 
 /**
- * 話題が別の業務（請求書の発行）へ移る場面。対象業務のズレの検知を試すための続き。
- * **Jev モードでだけ意味がある**（ズレを判定するのは Jev）。台本モードでは図は変わらない（ops なし）。
- */
-export const SAMPLE_SHIFT_SCENARIO: SampleEntry[] = [
-  {
-    id: "u12",
-    text: "ところで、話は変わりますが、月末の請求書発行の話もしていいですか？",
-    kind: "business",
-    ops: [],
-  },
-  {
-    id: "u13",
-    text: "毎月末に、経理が基幹システムから請求データを出力します。",
-    kind: "business",
-    ops: [],
-  },
-  {
-    id: "u14",
-    text: "出力したデータは、経理が営業に確認してもらいます。",
-    kind: "business",
-    ops: [],
-  },
-  {
-    id: "u15",
-    text: "確認が済んだら、経理が請求書を顧客に発送します。",
-    kind: "business",
-    ops: [],
-  },
-];
-
-/**
  * 「このアプリの仕組み」を業務に見立てた台本（セルフ検証用）。
  * 実際の処理経路（ブラウザ → サーバー → whisper / Jev / gemma → ブラウザ → Mermaid）を、
  * 1 発話 1 動作で書いてある。1 文に「誰が誰に何をする」を 1 つだけ入れるのが、Jev に

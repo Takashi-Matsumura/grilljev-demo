@@ -447,12 +447,6 @@ export function usePipeline({
     [patchLine, drain],
   );
 
-  /** 台本モード: 固定の変更をそのまま適用する（Jev も gemma も呼ばない） */
-  const applyScript = useCallback(
-    (ops: ModelOp[]) => commitOps(ops, "script"),
-    [commitOps],
-  );
-
   const reset = useCallback(() => {
     epochRef.current += 1;
     analysisQueue.current = [];
@@ -506,7 +500,6 @@ export function usePipeline({
     entries,
     source,
     analyze,
-    applyScript,
     reset,
     commit,
     archives,
