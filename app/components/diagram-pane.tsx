@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ISSUE_KIND_LABEL } from "@/lib/model/labels";
 import type { FlowModel } from "@/lib/model/types";
 import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
+import { DisclosureIcon } from "./disclosure-icon";
 import { FullscreenButton } from "./diagram-fullscreen";
 import { ExportButtons } from "./export-buttons";
 import { MermaidDiagram } from "./mermaid-diagram";
@@ -126,8 +127,9 @@ export function DiagramPane({
       )}
 
       {openIssues.length > 0 && (
-        <details className="rounded-md border border-black/10 p-3 dark:border-white/15">
-          <summary className="cursor-pointer text-sm font-medium">
+        <details className="group rounded-md border border-black/10 p-3 dark:border-white/15">
+          <summary className="flex list-none cursor-pointer items-center gap-1.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
+            <DisclosureIcon />
             未解決の論点（{openIssues.length}）
           </summary>
           <ul className="mt-2 flex max-h-28 flex-col gap-1 overflow-y-auto text-sm">
@@ -153,8 +155,11 @@ export function DiagramPane({
       </div>
 
       {devMode && (
-        <details className="text-sm">
-          <summary className="cursor-pointer text-zinc-500">Mermaid コードを表示</summary>
+        <details className="group text-sm">
+          <summary className="flex list-none cursor-pointer items-center gap-1.5 text-zinc-500 [&::-webkit-details-marker]:hidden">
+            <DisclosureIcon />
+            Mermaid コードを表示
+          </summary>
           <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-zinc-100 p-3 text-xs dark:bg-white/10">
             {code}
           </pre>

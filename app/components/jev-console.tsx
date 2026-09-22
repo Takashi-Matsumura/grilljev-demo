@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Interpretation, Verdict } from "@/lib/analysis/interpret";
 import type { JevAnswer, JevExchange } from "@/lib/jev";
+import { DisclosureIcon } from "./disclosure-icon";
 
 /** 1 回の Jev 呼び出しの記録。送った内容・返ってきた内容は組み立て直さず、そのまま持つ。 */
 export type ConsoleEntry = {
@@ -223,8 +224,9 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
                   key={e.id}
                   className="rounded-md border border-black/10 p-2 text-sm dark:border-white/15"
                 >
-                  <details open={i === 0}>
-                    <summary className="cursor-pointer">
+                  <details open={i === 0} className="group">
+                    <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden">
+                      <DisclosureIcon className="mr-1" />
                       <span className="mr-2 tabular-nums text-xs text-zinc-500">{e.at}</span>
                       {v && (
                         <span className={`mr-2 rounded px-1.5 py-0.5 text-xs ${v.cls}`}>{v.label}</span>
