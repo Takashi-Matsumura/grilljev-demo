@@ -246,72 +246,88 @@ export function MicTranscriber({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-medium">文字起こし</h2>
-        <ToggleSwitch
-          checked={jevEnabled}
-          onChange={onJevEnabledChange}
-          label="Jev"
-          title="ON の間、確定した文字起こしを 1 行ごとに Jev（外部 API・課金）へ送って判定します"
-        />
-      </div>
+      <div className="flex items-start gap-4">
+        {/* 左: 一番押す操作なので、正方形の大きなボタンにして目立たせる（トップページの
+            「会議を始める」ボタンと同じ作法）。真下に、ボタンの状態と直結するマイク音量・状態文字を置く */}
+        <div className="flex shrink-0 flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={recording ? recorder.stop : () => void recorder.start()}
+            disabled={recorder.state === "starting"}
+            className="group flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-2xl bg-foreground text-background shadow-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-lg active:translate-y-0 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
+          >
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+              {recording ? (
+                <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+              ) : (
+                <circle cx="12" cy="12" r="7" fill="currentColor" />
+              )}
+            </svg>
+            <span className="text-xs font-medium">
+              {recorder.state === "starting" ? "準備中…" : recording ? "停止" : "録音開始"}
+            </span>
+          </button>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span
-          className="text-zinc-600 dark:text-zinc-400"
-          title="対象業務名・登場人物名・書類やシステムの名前は、図が育つのに合わせて自動で whisper に渡ります。ここには、まだ図に出ていない語彙だけ足してください"
-        >
-          追加の語彙ヒント（任意。認識を寄せる）
-        </span>
-        {autoVocab && (
-          <p className="break-words text-xs text-zinc-400" title="図から自動で集めた語彙。会議が進むほど増えます">
-            自動: {autoVocab}
-          </p>
-        )}
-        <input
-          value={manualVocab}
-          onChange={(e) => setManualVocab(e.target.value)}
-          placeholder="例: まだ話していない固有名詞があれば"
-          className="rounded-md border border-black/15 bg-transparent px-3 py-2 dark:border-white/20"
-        />
-      </label>
-
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={recording ? recorder.stop : () => void recorder.start()}
-          disabled={recorder.state === "starting"}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
-        >
-          {recorder.state === "starting" ? "準備中…" : recording ? "■ 停止" : "● 録音開始"}
-        </button>
-
-        <div
-          className="h-2 w-40 overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
-          role="meter"
-          aria-label="マイクの音量"
-          aria-valuemin={0}
-          aria-valuemax={1}
-          aria-valuenow={recording ? recorder.level : 0}
-        >
           <div
-            className={`h-full transition-[width] duration-75 ${
-              recorder.speaking ? "bg-emerald-500" : "bg-zinc-400"
-            }`}
-            style={{ width: `${Math.round((recording ? recorder.level : 0) * 100)}%` }}
-          />
+            className="h-2 w-24 overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
+            role="meter"
+            aria-label="マイクの音量"
+            aria-valuemin={0}
+            aria-valuemax={1}
+            aria-valuenow={recording ? recorder.level : 0}
+          >
+            <div
+              className={`h-full transition-[width] duration-75 ${
+                recorder.speaking ? "bg-emerald-500" : "bg-zinc-400"
+              }`}
+              style={{ width: `${Math.round((recording ? recorder.level : 0) * 100)}%` }}
+            />
+          </div>
+
+          <span className="text-center text-xs text-zinc-500">
+            {recording
+              ? paused
+                ? "読み上げ中（一時停止）"
+                : recorder.speaking
+                  ? "発話を検出"
+                  : "待機中"
+              : "停止中"}
+            {devMode && recorder.sampleRate ? ` · ${recorder.sampleRate / 1000}kHz` : ""}
+          </span>
         </div>
 
-        <span className="text-sm text-zinc-500">
-          {recording
-            ? paused
-              ? "読み上げ中（入力を一時停止）"
-              : recorder.speaking
-                ? "発話を検出"
-                : "待機中"
-            : "停止中"}
-          {devMode && recorder.sampleRate ? ` · ${recorder.sampleRate / 1000}kHz` : ""}
-        </span>
+        {/* 右: 見出し・Jevトグルと、追加の語彙ヒント */}
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-medium">文字起こし</h2>
+            <ToggleSwitch
+              checked={jevEnabled}
+              onChange={onJevEnabledChange}
+              label="Jev"
+              title="ON の間、確定した文字起こしを 1 行ごとに Jev（外部 API・課金）へ送って判定します"
+            />
+          </div>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span
+              className="text-zinc-600 dark:text-zinc-400"
+              title="対象業務名・登場人物名・書類やシステムの名前は、図が育つのに合わせて自動で whisper に渡ります。ここには、まだ図に出ていない語彙だけ足してください"
+            >
+              追加の語彙ヒント
+            </span>
+            {autoVocab && (
+              <p className="truncate text-xs text-zinc-400" title={`自動: ${autoVocab}`}>
+                自動: {autoVocab}
+              </p>
+            )}
+            <input
+              value={manualVocab}
+              onChange={(e) => setManualVocab(e.target.value)}
+              placeholder="任意"
+              className="rounded-md border border-black/15 bg-transparent px-3 py-2 dark:border-white/20"
+            />
+          </label>
+        </div>
       </div>
 
       {recorder.error && (
