@@ -15,7 +15,6 @@ type Props = {
   onWithShiftChange: (on: boolean) => void;
   onTogglePlay: () => void;
   onNext: () => void;
-  onReset: () => void;
 };
 
 /** 開発用。マイクなしで、台本の文字起こしを流して図を育てる。 */
@@ -31,7 +30,6 @@ export function SamplePanel({
   onWithShiftChange,
   onTogglePlay,
   onNext,
-  onReset,
 }: Props) {
   const finished = cursor >= total;
   const btn =
@@ -97,16 +95,13 @@ export function SamplePanel({
           <button type="button" onClick={onNext} disabled={finished} className={btn}>
             次の1行
           </button>
-          <button type="button" onClick={onReset} className={btn}>
-            リセット
-          </button>
           <span className="text-sm tabular-nums text-zinc-500">
             {cursor} / {total}
             {finished ? "（終了）" : ""}
           </span>
         </div>
         <p className="text-xs text-zinc-500">
-          リセットすると、文字起こしと図を初期状態に戻します（マイクの行も消えます。Jev コンソールの履歴は残ります）。
+          会議をやり直すには、画面上部の「会議をやり直す」を使います。
         </p>
       </div>
     </details>

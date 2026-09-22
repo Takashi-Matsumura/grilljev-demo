@@ -16,6 +16,7 @@ import { MicTranscriber } from "./mic-transcriber";
 import { SamplePanel, type SampleMode } from "./sample-panel";
 import { ScopeBanner } from "./scope-banner";
 import { useAutosave, type SaveStatus } from "./use-autosave";
+import { useDevMode } from "./use-dev-mode";
 import { useFacilitator } from "./use-facilitator";
 import { usePipeline, type AnalysisJob } from "./use-pipeline";
 import { useScopeShift } from "./use-scope-shift";
@@ -39,6 +40,14 @@ const SAVE_LABEL: Record<SaveStatus, { text: string; cls: string }> = {
   error: { text: "保存できていません（再試行します）", cls: "text-amber-600 dark:text-amber-400" },
 };
 
+/** Jev コンソール（開発者モード）を含めるかどうかで、3 列 / 2 列を切り替える。
+ * Tailwind の JIT スキャンに引っかかるよう、クラス文字列は分岐せず両方をそのまま書く。 */
+const GRID_DEV = "flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:overflow-hidden";
+const GRID_PLAIN = "flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-2 lg:overflow-hidden";
+
+const TOPBAR_BTN =
+  "rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10";
+
 /** 3 列（文字起こし / 図とファシリテーター / Jev コンソール）で状態を共有するための親。 */
 export function Studio({ session }: { session: StudioSession }) {
   const [lines, setLines] = useState<Line[]>(session.lines);
@@ -57,6 +66,9 @@ export function Studio({ session }: { session: StudioSession }) {
   const [speakEnabled, setSpeakEnabled] = useState(false);
   /** いま見ている図。"current" か、過去の図の id */
   const [viewId, setViewId] = useState("current");
+  const [devMode, setDevMode] = useDevMode();
+  /** 「会議をやり直す」の確認待ち（誤操作で全部消えるのを防ぐ二段階ボタン） */
+  const [resetConfirming, setResetConfirming] = useState(false);
   const jevEnabledRef = useRef(jevEnabled);
   const linesRef = useRef(lines);
   const lastSpokenRef = useRef<string | null>(null);
@@ -192,6 +204,7 @@ export function Studio({ session }: { session: StudioSession }) {
     setCursor(0);
     setPlaying(false);
     setViewId("current");
+    setResetConfirming(false);
   }, [resetPipeline, resetFacilitator, resetShift, cancelSpeech]);
 
   /** 「図を分ける」: 前の図に向けた問いかけ・読み上げは新しい図には持ち込まない */
@@ -247,9 +260,43 @@ export function Studio({ session }: { session: StudioSession }) {
 
   return (
     <>
-      <p className={`px-4 py-0.5 text-right text-xs ${SAVE_LABEL[saveStatus].cls}`} aria-live="polite">
-        {SAVE_LABEL[saveStatus].text}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-black/10 px-4 py-1.5 dark:border-white/15">
+        <div className="flex items-center gap-2">
+          {resetConfirming ? (
+            <>
+              <span className="text-xs text-amber-600 dark:text-amber-400">
+                文字起こしと図を消して、最初からやり直しますか？
+              </span>
+              <button type="button" className={TOPBAR_BTN} onClick={reset}>
+                やり直す
+              </button>
+              <button type="button" className={TOPBAR_BTN} onClick={() => setResetConfirming(false)}>
+                やめる
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className={TOPBAR_BTN}
+              title="文字起こしと図を、会議を始めたときの状態に戻します"
+              onClick={() => setResetConfirming(true)}
+            >
+              ↺ 会議をやり直す
+            </button>
+          )}
+        </div>
+        <p className={`text-xs ${SAVE_LABEL[saveStatus].cls}`} aria-live="polite">
+          {SAVE_LABEL[saveStatus].text}
+        </p>
+        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <input
+            type="checkbox"
+            checked={devMode}
+            onChange={(e) => setDevMode(e.target.checked)}
+          />
+          開発者モード
+        </label>
+      </div>
       <ScopeBanner
         proposal={shift.proposal}
         status={shift.status}
@@ -257,9 +304,9 @@ export function Studio({ session }: { session: StudioSession }) {
         onRename={shift.rename}
         onDismiss={shift.dismiss}
       />
-      {/* 3 列: 左=文字起こし / 中=ファシリテーターと図 / 右=Jev コンソール（折りたためる）。
+      {/* 開発者モードのときだけ 3 列（右列= Jev コンソール）、それ以外は 2 列。
           1024px 未満は縦に積み、ページ全体をスクロールさせる。 */}
-      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:overflow-hidden">
+      <main className={devMode ? GRID_DEV : GRID_PLAIN}>
         <div className="flex min-h-[28rem] flex-col border-b border-black/10 lg:min-h-0 lg:border-b-0 lg:border-r dark:border-white/15">
           <MicTranscriber
             lines={lines}
@@ -268,26 +315,28 @@ export function Studio({ session }: { session: StudioSession }) {
             jevEnabled={jevEnabled}
             onJevEnabledChange={setJevEnabled}
             paused={speech.speaking}
+            devMode={devMode}
           />
-          <SamplePanel
-            cursor={cursor}
-            total={scenario.length}
-            playing={playing}
-            mode={mode}
-            onModeChange={setMode}
-            topic={topic}
-            onTopicChange={(t) => {
-              setTopic(t);
-              setCursor(0);
-              setPlaying(false);
-              if (t === "app") setMode("jev");
-            }}
-            withShift={withShift}
-            onWithShiftChange={setWithShift}
-            onTogglePlay={() => setPlaying((p) => !p)}
-            onNext={playNext}
-            onReset={reset}
-          />
+          {devMode && (
+            <SamplePanel
+              cursor={cursor}
+              total={scenario.length}
+              playing={playing}
+              mode={mode}
+              onModeChange={setMode}
+              topic={topic}
+              onTopicChange={(t) => {
+                setTopic(t);
+                setCursor(0);
+                setPlaying(false);
+                if (t === "app") setMode("jev");
+              }}
+              withShift={withShift}
+              onWithShiftChange={setWithShift}
+              onTogglePlay={() => setPlaying((p) => !p)}
+              onNext={playNext}
+            />
+          )}
         </div>
         <div className="flex min-h-[28rem] flex-col lg:min-h-0 lg:overflow-y-auto">
           <FacilitatorPane
@@ -325,7 +374,7 @@ export function Studio({ session }: { session: StudioSession }) {
             onDecideStep={archived ? undefined : onDecideStep}
           />
         </div>
-        <JevConsole entries={pipeline.entries} />
+        {devMode && <JevConsole entries={pipeline.entries} />}
       </main>
     </>
   );
