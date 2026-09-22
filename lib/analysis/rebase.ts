@@ -2,10 +2,10 @@ import type { FlowModel, ModelOp } from "@/lib/model/types";
 import { nextId, type FollowUp } from "./interpret";
 
 /**
- * jev の解釈が返した ops を、**適用する瞬間の最新モデル**に合わせて採番し直す。
+ * Jev の解釈が返した ops を、**適用する瞬間の最新モデル**に合わせて採番し直す。
  *
  * 解釈はリクエスト時点のモデルで id と order を決めるが、その間に gemma の後続処理が
- * ステップを足していることがある（gemma は非同期で、jev の待ち行列を止めない設計）。
+ * ステップを足していることがある（gemma は非同期で、Jev の待ち行列を止めない設計）。
  * そのまま適用すると id が衝突し、reducer は重複として無視する（=ステップが黙って消え、
  * 後続のステップ名生成が別のステップに名前を付けてしまう）。
  *

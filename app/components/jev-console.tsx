@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Interpretation, Verdict } from "@/lib/analysis/interpret";
 import type { JevAnswer, JevExchange } from "@/lib/jev";
 
-/** 1 回の jev 呼び出しの記録。送った内容・返ってきた内容は組み立て直さず、そのまま持つ。 */
+/** 1 回の Jev 呼び出しの記録。送った内容・返ってきた内容は組み立て直さず、そのまま持つ。 */
 export type ConsoleEntry = {
   id: string;
   at: string;
@@ -159,8 +159,8 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
           onClick={() => setOpen(true)}
           aria-expanded={false}
           aria-controls="jev-console-body"
-          title="jev コンソールを開く"
-          aria-label="jev コンソールを開く"
+          title="Jev コンソールを開く"
+          aria-label="Jev コンソールを開く"
           className="flex w-full items-center gap-2 px-4 py-3 text-sm hover:bg-black/5 lg:h-full lg:w-12 lg:flex-col lg:px-0 dark:hover:bg-white/10"
         >
           {/* 畳むアイコンと対になる、右側のパネルを開くアイコン（山形が左向き） */}
@@ -169,7 +169,7 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
             <path d="M15 4v16" />
             <path d="M11 9.5 8.5 12l2.5 2.5" />
           </svg>
-          <span className="font-medium lg:[writing-mode:vertical-rl]">jev コンソール</span>
+          <span className="font-medium lg:[writing-mode:vertical-rl]">Jev コンソール</span>
           <span className="text-xs tabular-nums text-zinc-500 lg:[writing-mode:vertical-rl]">
             {calls} 回{failed > 0 ? ` · 失敗 ${failed}` : ""}
           </span>
@@ -185,7 +185,7 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
     >
       <div className="flex items-start justify-between gap-2 border-b border-black/10 px-4 py-3 dark:border-white/15">
         <div className="min-w-0">
-          <h2 className="font-medium">jev コンソール</h2>
+          <h2 className="font-medium">Jev コンソール</h2>
           <p className="mt-0.5 text-xs tabular-nums text-zinc-500">
             {calls} 回 · 入力 {inTok.toLocaleString()} / 出力 {outTok.toLocaleString()} トークン · 平均{" "}
             {avgMs}ms{failed > 0 ? ` · 失敗 ${failed}` : ""}
@@ -196,8 +196,8 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
           onClick={() => setOpen(false)}
           aria-expanded
           aria-controls="jev-console-body"
-          title="jev コンソールを畳む"
-          aria-label="jev コンソールを畳む"
+          title="Jev コンソールを畳む"
+          aria-label="Jev コンソールを畳む"
           className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-black/5 dark:hover:bg-white/10"
         >
           {/* 右側のパネルを閉じるアイコン（枠の右に仕切りと、右向きの山形） */}
@@ -212,7 +212,7 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {entries.length === 0 ? (
           <p className="text-sm text-zinc-500">
-            jev に送った質問と、返ってきた確率がここに残ります。
+            Jev に送った質問と、返ってきた確率がここに残ります。
           </p>
         ) : (
           <ol className="flex flex-col gap-2">

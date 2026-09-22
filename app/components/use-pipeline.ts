@@ -56,7 +56,7 @@ export type Signals = {
   /** 最初に判定した時刻（会議の開始） */
   startedAt: number;
   lastActivityAt: number;
-  /** 直近の判定での jev の grill_now（0..4） */
+  /** 直近の判定での Jev の grill_now（0..4） */
   grillScore: number;
 };
 
@@ -73,11 +73,11 @@ type Options = {
 };
 
 /**
- * 「文字起こし 1 行 → jev で判定 → 図を更新 → gemma で文言を付ける → 次の発話で jev が検証」
+ * 「文字起こし 1 行 → Jev で判定 → 図を更新 → gemma で文言を付ける → 次の発話で Jev が検証」
  * の流れを受け持つ。
  *
- * - 判定（jev）は 1 件ずつ直列に処理し、そのつど最新のモデルを送る（採番の衝突を避ける）
- * - gemma の後続処理は別の直列キュー。**jev の待ち行列を止めない**（gemma は 1〜4 秒かかる）
+ * - 判定（Jev）は 1 件ずつ直列に処理し、そのつど最新のモデルを送る（採番の衝突を避ける）
+ * - gemma の後続処理は別の直列キュー。**Jev の待ち行列を止めない**（gemma は 1〜4 秒かかる）
  * - 後続処理の結果は、**適用する瞬間の最新モデル**から採番して適用する
  * - リセットのたびに世代（epoch）を進め、リセット前に飛んだ処理の結果を捨てる
  */
@@ -295,7 +295,7 @@ export function usePipeline({
     [],
   );
 
-  // ── jev の判定 ──────────────────────────────────────────────────
+  // ── Jev の判定 ──────────────────────────────────────────────────
 
   const runAnalysis = useCallback(
     async (job: AnalysisJob) => {
@@ -436,7 +436,7 @@ export function usePipeline({
     }
   }, [runAnalysis]);
 
-  /** 文字起こし 1 行を jev の判定に回す */
+  /** 文字起こし 1 行を Jev の判定に回す */
   const analyze = useCallback(
     (job: AnalysisJob) => {
       patchLine(job.lineId, { analysis: { state: "pending" } });
@@ -447,7 +447,7 @@ export function usePipeline({
     [patchLine, drain],
   );
 
-  /** 台本モード: 固定の変更をそのまま適用する（jev も gemma も呼ばない） */
+  /** 台本モード: 固定の変更をそのまま適用する（Jev も gemma も呼ばない） */
   const applyScript = useCallback(
     (ops: ModelOp[]) => commitOps(ops, "script"),
     [commitOps],

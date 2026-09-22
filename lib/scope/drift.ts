@@ -11,7 +11,7 @@ export const DRIFT_WINDOW = 3;
 export const DRIFT_FIRE = 0.6;
 /** バナーを出したあと、次の提案までの待ち */
 export const SHIFT_COOLDOWN_MS = 60_000;
-/** jev が「現状のまま」と判断したあと、次の提案までの待ち */
+/** Jev が「現状のまま」と判断したあと、次の提案までの待ち */
 export const SHIFT_KEEP_COOLDOWN_MS = 60_000;
 /** 参加者が「同じ業務として続ける」を選んだあと、次の提案までの待ち */
 export const SHIFT_DISMISS_COOLDOWN_MS = 5 * 60_000;

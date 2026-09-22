@@ -1,6 +1,6 @@
 import type { Verdict } from "@/lib/analysis/interpret";
 
-/** 1 行に対する jev の判定結果（表示用の要約） */
+/** 1 行に対する Jev の判定結果（表示用の要約） */
 export type LineAnalysis =
   | { state: "pending" }
   | {
@@ -9,7 +9,7 @@ export type LineAnalysis =
       /** 雑談らしさ 0..1 */
       chatter: number;
       summary: string;
-      /** サンプルの jev モードで、台本の想定と一致したか */
+      /** サンプルの Jev モードで、台本の想定と一致したか */
       match?: "match" | "mismatch";
     }
   | { state: "error"; error: string };
@@ -23,7 +23,7 @@ export type LineLabeling = {
   label?: string;
   ms?: number;
   error?: string;
-  /** 次の発話の jev による検証の結果 */
+  /** 次の発話の Jev による検証の結果 */
   check?: { outcome: string; detail: string };
 };
 
@@ -40,9 +40,9 @@ export type Line = {
   error?: string;
   /** サンプル台本から再生した行。マイクの実認識ではない */
   sample?: boolean;
-  /** サンプルの「台本」モードでの分類（台本に固定で書いたもの。jev の判定ではない） */
+  /** サンプルの「台本」モードでの分類（台本に固定で書いたもの。Jev の判定ではない） */
   tag?: "chatter" | "business";
-  /** サンプルの jev モードで、台本が想定している分類（jev の判定との一致を見る用） */
+  /** サンプルの Jev モードで、台本が想定している分類（Jev の判定との一致を見る用） */
   expected?: "chatter" | "business";
   analysis?: LineAnalysis;
   labeling?: LineLabeling;

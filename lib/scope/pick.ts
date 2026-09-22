@@ -3,8 +3,8 @@ import type { FlowModel } from "@/lib/model/types";
 import type { ShiftRelation } from "./drift";
 
 /**
- * 新しい業務名の選別。gemma が書いた候補の中から、jev が「いまの会話は何の業務の話か」を選ぶ。
- * 「現状のまま（新しい業務名は不要）」も選択肢に入れるので、jev は誤検知を止められる。純関数のみ。
+ * 新しい業務名の選別。gemma が書いた候補の中から、Jev が「いまの会話は何の業務の話か」を選ぶ。
+ * 「現状のまま（新しい業務名は不要）」も選択肢に入れるので、Jev は誤検知を止められる。純関数のみ。
  */
 
 export type TitleCandidate = { id: string; title: string; reason: string };
@@ -80,7 +80,7 @@ export function decideShift(answers: Answers, candidates: TitleCandidate[]): Shi
   const pickAnswer = answers.pick;
   const pick = pickAnswer && pickAnswer.type === "choice" ? (pickAnswer as JevChoiceAnswer) : null;
 
-  if (!pick) return { status: "keep", moved, summary: "jev の回答がないため提案しません" };
+  if (!pick) return { status: "keep", moved, summary: "Jev の回答がないため提案しません" };
 
   const keepProb = pick.probabilities[KEEP] ?? (pick.choice === KEEP ? pick.confidence : 0);
   if (pick.choice === KEEP || keepProb >= KEEP_MAX) {

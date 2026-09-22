@@ -14,7 +14,7 @@ function toRows(h: Health): Row[] {
   return [
     { key: "whisper", label: "whisper（文字起こし）", ok: h.whisper.ok, detail: h.whisper.detail },
     { key: "llama", label: "llama（gemma）", ok: h.llama.ok, detail: llamaDetail },
-    { key: "jev", label: "jev", ok: h.jev.ok, detail: h.jev.detail },
+    { key: "jev", label: "Jev", ok: h.jev.ok, detail: h.jev.detail },
   ];
 }
 
@@ -130,7 +130,7 @@ export function HealthButton({ initial }: { initial: Health }) {
           )}
         </ul>
         <p className="border-t border-black/10 px-4 py-3 text-xs text-zinc-500 dark:border-white/15">
-          jev は課金される外部 API のため、ここではキーの有無だけを確認します（実際の疎通は未確認）。
+          Jev は課金される外部 API のため、ここではキーの有無だけを確認します（実際の疎通は未確認）。
         </p>
       </dialog>
     </>

@@ -2,9 +2,9 @@ import type { JevAnswer, JevChoiceAnswer, JevNoulAnswer, JevQuestion } from "@/l
 import type { FlowModel, IssueKind } from "@/lib/model/types";
 
 /**
- * 問いの選別。gemma が書いた候補のうち「いま出すべき 1 問」を jev に選ばせる。
- * 生成はローカル、選別は jev という役割分担（gemma は問いを書けるが、いま出すべきかを
- * 確率つきで判断するのは jev の得意分野）。純関数のみ。
+ * 問いの選別。gemma が書いた候補のうち「いま出すべき 1 問」を Jev に選ばせる。
+ * 生成はローカル、選別は Jev という役割分担（gemma は問いを書けるが、いま出すべきかを
+ * 確率つきで判断するのは Jev の得意分野）。純関数のみ。
  */
 
 export type Candidate = {

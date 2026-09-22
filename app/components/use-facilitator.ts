@@ -29,7 +29,7 @@ type Options = {
 };
 
 /**
- * ファシリテーター。gemma が問いの候補を書き、jev が「いま出すべき 1 問」を選ぶ（/api/facilitate）。
+ * ファシリテーター。gemma が問いの候補を書き、Jev が「いま出すべき 1 問」を選ぶ（/api/facilitate）。
  * 自動では、前回から一定時間あいていて、間が空いた・論点が溜まったなどのときに動く（lib/facilitator/trigger.ts）。
  * 出せるのは 1 度に 1 問。出したあと答え・保留になるまでは、次を生成しない。
  */
@@ -52,7 +52,7 @@ export function useFacilitator({ getModel, getSignals, getRecent, commit, pushEn
 
       busyRef.current = true;
       const epoch = epochRef.current;
-      setStatus({ kind: "generating", message: "問いを考えています…（gemma が候補を作り、jev が選びます）" });
+      setStatus({ kind: "generating", message: "問いを考えています…（gemma が候補を作り、Jev が選びます）" });
       try {
         const res = await fetch("/api/facilitate", {
           method: "POST",
@@ -61,7 +61,7 @@ export function useFacilitator({ getModel, getSignals, getRecent, commit, pushEn
             model: before,
             recent: getRecent(),
             force,
-            // 最後の発言から何秒経ったか。jev が「いま割り込んでよいか」を判断する材料
+            // 最後の発言から何秒経ったか。Jev が「いま割り込んでよいか」を判断する材料
             silenceSec: sig.analyzed > 0 ? (Date.now() - sig.lastActivityAt) / 1000 : null,
           }),
         });
@@ -106,7 +106,7 @@ export function useFacilitator({ getModel, getSignals, getRecent, commit, pushEn
     [commit, getModel, getRecent, getSignals, pushEntry],
   );
 
-  // 自動: 一定間隔で「いま出してよいか」を見る。実際に出すかは jev の判断（黙ることもある）。
+  // 自動: 一定間隔で「いま出してよいか」を見る。実際に出すかは Jev の判断（黙ることもある）。
   useEffect(() => {
     if (!auto) return;
     const timer = setInterval(() => {

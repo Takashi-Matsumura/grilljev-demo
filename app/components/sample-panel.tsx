@@ -61,20 +61,20 @@ export function SamplePanel({
             className="rounded-md border border-black/15 bg-transparent px-2 py-1 dark:border-white/20"
           >
             <option value="loan">与信照会つき見積作成</option>
-            <option value="app">このアプリの仕組み（jev 専用）</option>
+            <option value="app">このアプリの仕組み（Jev 専用）</option>
           </select>
         </label>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-zinc-600 dark:text-zinc-400">判定方法</span>
           <div className="flex overflow-hidden rounded-md border border-black/15 dark:border-white/20">
             {topic === "loan" && seg("script", "台本（固定）")}
-            {seg("jev", "jev")}
+            {seg("jev", "Jev")}
           </div>
         </div>
         <p className="text-xs text-zinc-500">
           {mode === "script"
-            ? "台本に固定で書いた変更を図に反映します（jev は呼びません。課金なし）。"
-            : "1 行ごとに jev を 1 回呼んで判定します（外部 API・課金あり）。ステップ名・新しい登場人物・分岐の条件文はローカルの gemma が作り、次の発話で jev が検証します。台本の想定と一致したかを各行に表示します。"}
+            ? "台本に固定で書いた変更を図に反映します（Jev は呼びません。課金なし）。"
+            : "1 行ごとに Jev を 1 回呼んで判定します（外部 API・課金あり）。ステップ名・新しい登場人物・分岐の条件文はローカルの gemma が作り、次の発話で Jev が検証します。台本の想定と一致したかを各行に表示します。"}
         </p>
         <label className="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           <input
@@ -86,7 +86,7 @@ export function SamplePanel({
           <span>
             最後に「話題が請求書発行の話へ移る場面」を足す
             <span className="block text-xs text-zinc-500">
-              対象業務の変化の検知を試す用。jev モードでだけ検知します（台本モードでは図は変わりません）。
+              対象業務の変化の検知を試す用。Jev モードでだけ検知します（台本モードでは図は変わりません）。
             </span>
           </span>
         </label>
@@ -106,7 +106,7 @@ export function SamplePanel({
           </span>
         </div>
         <p className="text-xs text-zinc-500">
-          リセットすると、文字起こしと図を初期状態に戻します（マイクの行も消えます。jev コンソールの履歴は残ります）。
+          リセットすると、文字起こしと図を初期状態に戻します（マイクの行も消えます。Jev コンソールの履歴は残ります）。
         </p>
       </div>
     </details>

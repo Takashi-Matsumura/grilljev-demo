@@ -15,7 +15,7 @@ const CHECK_TEXT: Record<string, { text: string; cls: string }> = {
   merged: { text: "既存アクターの言い換えのため統合", cls: "text-amber-600 dark:text-amber-400" },
 };
 
-/** gemma がステップ名・登場人物を作った結果と、次の発話での jev の検証結果 */
+/** gemma がステップ名・登場人物を作った結果と、次の発話での Jev の検証結果 */
 function LabelingView({ labeling }: { labeling: LineLabeling }) {
   if (labeling.state === "pending") {
     return (
@@ -57,7 +57,7 @@ const VERDICT_TEXT = {
 
 function AnalysisView({ analysis }: { analysis: LineAnalysis }) {
   if (analysis.state === "pending") {
-    return <span className="ml-2 text-xs text-zinc-400">⋯ jev で判定中</span>;
+    return <span className="ml-2 text-xs text-zinc-400">⋯ Jev で判定中</span>;
   }
   if (analysis.state === "error") {
     return (
@@ -101,7 +101,7 @@ type Props = {
   /** 行は左右のペインで共有するため、親（Studio）が持つ */
   lines: Line[];
   setLines: Dispatch<SetStateAction<Line[]>>;
-  /** 文字起こしが確定した行。jev での判定に回す */
+  /** 文字起こしが確定した行。Jev での判定に回す */
   onFinalText: (lineId: string, text: string) => void;
   jevEnabled: boolean;
   onJevEnabledChange: (enabled: boolean) => void;
@@ -229,14 +229,14 @@ export function MicTranscriber({
         <h2 className="font-medium">文字起こし</h2>
         <label
           className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"
-          title="ON の間、確定した文字起こしを 1 行ごとに jev（外部 API・課金）へ送って判定します"
+          title="ON の間、確定した文字起こしを 1 行ごとに Jev（外部 API・課金）へ送って判定します"
         >
           <input
             type="checkbox"
             checked={jevEnabled}
             onChange={(e) => onJevEnabledChange(e.target.checked)}
           />
-          マイクの行を jev で判定
+          マイクの行を Jev で判定
         </label>
       </div>
 

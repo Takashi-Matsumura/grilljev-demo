@@ -79,7 +79,7 @@ export type ActorPlan = Extract<FollowUp, { kind: "actors" }> & {
 export type ActorStepResult = {
   ops: ModelOp[];
   stepId: string;
-  /** 新しく作ったアクター。次の jev リクエストで「既存の言い換えではないか」を検証する */
+  /** 新しく作ったアクター。次の Jev リクエストで「既存の言い換えではないか」を検証する */
   created: { id: string; name: string }[];
 };
 
