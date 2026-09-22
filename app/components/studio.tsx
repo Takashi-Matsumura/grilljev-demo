@@ -11,7 +11,6 @@ import { clock, type Line, type LineLabeling } from "@/lib/transcript/line";
 import { autoVocab } from "@/lib/transcript/vocab";
 import { DiagramPane } from "./diagram-pane";
 import { DiagramTabs } from "./diagram-tabs";
-import { FacilitatorPane } from "./facilitator-pane";
 import { JevConsole } from "./jev-console";
 import { MicTranscriber } from "./mic-transcriber";
 import { SamplePanel } from "./sample-panel";
@@ -20,10 +19,10 @@ import { useAutosave, type SaveStatus } from "./use-autosave";
 import { ToggleSwitch } from "./toggle-switch";
 import { useDevMode } from "./use-dev-mode";
 import { useFacilitator } from "./use-facilitator";
+import { useFacilitatorAuto } from "./use-facilitator-auto";
 import { useLeftWidth } from "./use-left-width";
 import { usePipeline, type AnalysisJob } from "./use-pipeline";
 import { useScopeShift } from "./use-scope-shift";
-import { useSpeech } from "./use-speech";
 
 const SAMPLE_INTERVAL_MS = 1_800;
 /** 手動で「答えた」にしたときの記録（発言そのものは無い） */
@@ -69,7 +68,6 @@ export function Studio({ session }: { session: StudioSession }) {
   /** 台本の題材。"app" はこのアプリの仕組み */
   const [topic, setTopic] = useState<"loan" | "app">("loan");
   const [jevEnabled, setJevEnabled] = useState(true);
-  const [speakEnabled, setSpeakEnabled] = useState(false);
   /** いま見ている図。"current" か、過去の図の id */
   const [viewId, setViewId] = useState("current");
   const [devMode, setDevMode] = useDevMode();
@@ -77,7 +75,6 @@ export function Studio({ session }: { session: StudioSession }) {
   const [resetConfirming, setResetConfirming] = useState(false);
   const jevEnabledRef = useRef(jevEnabled);
   const linesRef = useRef(lines);
-  const lastSpokenRef = useRef<string | null>(null);
 
   // ── 左カラム（文字起こし）の幅をドラッグで調整 ──
   const [leftWidth, setLeftWidth] = useLeftWidth();
@@ -177,21 +174,12 @@ export function Studio({ session }: { session: StudioSession }) {
     [],
   );
 
-  const facilitator = useFacilitator({ getModel, getSignals, getRecent, commit, pushEntry });
+  // 自動問いかけ ON/OFF。バックエンドの状態ダイアログのトグルと共有する（別の React ツリーのため）
+  const [facilitatorAuto] = useFacilitatorAuto();
+  const facilitator = useFacilitator({ auto: facilitatorAuto, getModel, getSignals, getRecent, commit, pushEntry });
   const { generate: generateQuestion, reset: resetFacilitator } = facilitator;
-  const speech = useSpeech();
-  const { speak, cancel: cancelSpeech } = speech;
 
   const asked = pipeline.model.issues.find((i) => i.status === "asked") ?? null;
-  const askedId = asked?.id ?? null;
-  const askedText = asked?.prompt?.text ?? null;
-
-  // 新しい問いが出たら読み上げる（ON のとき）。同じ問いを二度は読まない（もう一度は手動）。
-  useEffect(() => {
-    if (!askedId || !askedText || lastSpokenRef.current === askedId) return;
-    lastSpokenRef.current = askedId;
-    if (speakEnabled) speak(askedText);
-  }, [askedId, askedText, speakEnabled, speak]);
 
   const onMicText = useCallback(
     (lineId: string, text: string) => {
@@ -231,38 +219,32 @@ export function Studio({ session }: { session: StudioSession }) {
     resetPipeline();
     resetFacilitator();
     resetShift();
-    cancelSpeech();
-    lastSpokenRef.current = null;
     setLines([]);
     setCursor(0);
     setPlaying(false);
     setViewId("current");
     setResetConfirming(false);
-  }, [resetPipeline, resetFacilitator, resetShift, cancelSpeech]);
+  }, [resetPipeline, resetFacilitator, resetShift]);
 
-  /** 「図を分ける」: 前の図に向けた問いかけ・読み上げは新しい図には持ち込まない */
+  /** 「図を分ける」: 前の図に向けた問いかけは新しい図には持ち込まない */
   const onSplit = useCallback(() => {
     splitByProposal();
     resetFacilitator();
-    cancelSpeech();
-    lastSpokenRef.current = null;
     setViewId("current");
-  }, [splitByProposal, resetFacilitator, cancelSpeech]);
+  }, [splitByProposal, resetFacilitator]);
 
   // ── ファシリテーターの操作 ──
   const onAnswered = useCallback(
     (id: string) => {
-      cancelSpeech();
       commit([{ op: "issue.resolve", id, answer: MANUAL_ANSWER }], "manual");
     },
-    [commit, cancelSpeech],
+    [commit],
   );
   const onPark = useCallback(
     (id: string) => {
-      cancelSpeech();
       commit([{ op: "issue.park", id }], "manual");
     },
-    [commit, cancelSpeech],
+    [commit],
   );
   const onNext = useCallback(
     (id: string) => {
@@ -290,6 +272,13 @@ export function Studio({ session }: { session: StudioSession }) {
 
   const archived = pipeline.archives.find((a) => a.id === viewId) ?? null;
   const viewing = archived ? archived.model : pipeline.model;
+
+  // 自動問いかけ ON かつ質問中のときだけ、図の上にフローティングカードで出す。
+  // 過去の図（読み取り専用）では出さない（問いは常に「現在」の図に属する）。
+  const facilitatorOverlay =
+    !archived && facilitatorAuto && asked
+      ? { asked, onAnswered, onPark, onNext }
+      : null;
 
   // whisper への語彙ヒントの自動部分。図が育つほど（登場人物・書類名が増えるほど）伸びる
   const autoVocabText = useMemo(() => autoVocab(pipeline.model), [pipeline.model]);
@@ -356,7 +345,6 @@ export function Studio({ session }: { session: StudioSession }) {
             onFinalText={onMicText}
             jevEnabled={jevEnabled}
             onJevEnabledChange={setJevEnabled}
-            paused={speech.speaking}
             devMode={devMode}
             autoVocab={autoVocabText}
           />
@@ -388,25 +376,6 @@ export function Studio({ session }: { session: StudioSession }) {
           }`}
         />
         <div className="flex min-h-[28rem] flex-col lg:min-h-0 lg:overflow-hidden">
-          <FacilitatorPane
-            devMode={devMode}
-            asked={asked}
-            status={facilitator.status}
-            auto={facilitator.auto}
-            onAutoChange={facilitator.setAuto}
-            speakSupported={speech.supported}
-            speakEnabled={speakEnabled}
-            onSpeakEnabledChange={(on) => {
-              setSpeakEnabled(on);
-              if (!on) cancelSpeech();
-            }}
-            speaking={speech.speaking}
-            onGenerate={() => void generateQuestion(true)}
-            onAnswered={onAnswered}
-            onPark={onPark}
-            onNext={onNext}
-            onReplay={() => askedText && speak(askedText)}
-          />
           <DiagramTabs
             archives={pipeline.archives}
             currentTitle={pipeline.model.scope.title}
@@ -423,6 +392,7 @@ export function Studio({ session }: { session: StudioSession }) {
             model={viewing}
             source={archived ? "none" : pipeline.source}
             onDecideStep={archived ? undefined : onDecideStep}
+            facilitator={facilitatorOverlay}
             devMode={devMode}
           />
         </div>
