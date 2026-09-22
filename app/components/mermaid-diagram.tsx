@@ -35,6 +35,7 @@ export function MermaidDiagram({
   onSvg,
   zoom,
   fill = false,
+  onContainerRef,
 }: {
   code: string;
   /** 指定すると、図の幅を表示領域の zoom 倍にする（全画面表示用。1 = 幅に合わせる） */
@@ -43,6 +44,8 @@ export function MermaidDiagram({
   fill?: boolean;
   /** 描画に成功するたびに、SVG と、それがどのコードのものかを渡す（.svg の書き出し用） */
   onSvg?: (svg: string, forCode: string) => void;
+  /** スクロールする外枠の DOM 要素を、親に渡す（全画面表示のパン・ズーム操作用） */
+  onContainerRef?: (el: HTMLDivElement | null) => void;
 }) {
   const [rendered, setRendered] = useState<Rendered | null>(null);
   const onSvgRef = useRef(onSvg);
@@ -86,6 +89,7 @@ export function MermaidDiagram({
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div
+        ref={onContainerRef}
         className={`min-h-0 flex-1 overflow-auto ${fill ? "" : "rounded-md border border-black/10 p-4 dark:border-white/15"}`}
       >
         {rendered ? (
