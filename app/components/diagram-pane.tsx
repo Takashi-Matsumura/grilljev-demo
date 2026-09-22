@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { buildAttention } from "@/lib/model/attention";
 import { ISSUE_KIND_LABEL } from "@/lib/model/labels";
 import type { FlowModel } from "@/lib/model/types";
 import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
+import { DiagramMeta } from "./diagram-meta";
 import { DisclosureIcon } from "./disclosure-icon";
 import { FullscreenButton } from "./diagram-fullscreen";
 import { ExportButtons } from "./export-buttons";
@@ -18,28 +20,6 @@ const ISSUE_STATUS_LABEL: Record<string, string> = {
 
 /** 図を最後に更新したのが何か。 */
 export type UpdateSource = "none" | "jev" | "manual";
-
-/** 開発者モード: 何によって更新されたかの内訳。本番向けは、更新があったかどうかだけ伝える。 */
-const SOURCE_BADGE_DEV: Record<UpdateSource, { text: string; cls: string }> = {
-  none: {
-    text: "更新なし",
-    cls: "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-300",
-  },
-  jev: {
-    text: "直近の更新: Jev の判定",
-    cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  },
-  manual: {
-    text: "直近の更新: 手動操作",
-    cls: "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300",
-  },
-};
-
-const SOURCE_BADGE_PLAIN: Record<UpdateSource, { text: string; cls: string }> = {
-  none: SOURCE_BADGE_DEV.none,
-  jev: { text: "更新あり", cls: SOURCE_BADGE_DEV.jev.cls },
-  manual: { text: "更新あり", cls: SOURCE_BADGE_DEV.manual.cls },
-};
 
 export function DiagramPane({
   model,
@@ -58,32 +38,14 @@ export function DiagramPane({
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   const provisional = visibleSteps(model).filter((s) => s.status === "provisional");
   const openIssues = model.issues.filter((i) => i.status !== "answered");
-  const badge = (devMode ? SOURCE_BADGE_DEV : SOURCE_BADGE_PLAIN)[source];
+  const attention = useMemo(() => buildAttention(model), [model]);
   // .svg の書き出し用。「どのコードの SVG か」を持ち、いまの図と一致するときだけ使う
   const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
   const svgForExport = rendered && rendered.code === code ? rendered.svg : null;
 
   return (
     <section aria-label="業務フロー図" className="flex min-h-0 flex-1 flex-col">
-      {/* 上段（固定）: 見出し・更新バッジ・メタ情報 */}
-      <div className="flex shrink-0 flex-col gap-2 border-b border-black/10 px-4 py-2 dark:border-white/15">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="font-medium">業務フロー図</h2>
-          <span className={`rounded px-2 py-0.5 text-xs ${badge.cls}`}>{badge.text}</span>
-        </div>
-
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-          <dt className="text-zinc-500">対象業務</dt>
-          <dd className="min-w-0 break-words">
-            {model.scope.title || "（未設定）"}
-            {devMode && <span className="ml-2 text-xs tabular-nums text-zinc-400">rev.{model.rev}</span>}
-          </dd>
-          <dt className="text-zinc-500">目的</dt>
-          <dd className="min-w-0 break-words">
-            {model.scope.purpose || <span className="text-zinc-400">（未確定）</span>}
-          </dd>
-        </dl>
-      </div>
+      <DiagramMeta model={model} readiness={attention.readiness} source={source} devMode={devMode} />
 
       {/* 中段（可変・単独スクロール）: 図と、確認待ち・論点 */}
       <div className="flex min-h-[20rem] flex-1 flex-col gap-3 overflow-y-auto p-4 lg:min-h-0">
