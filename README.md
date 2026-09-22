@@ -39,7 +39,7 @@ Jev は「既存のアクター一覧・ステップ一覧・未解決の論点�
 
 ## 必要なもの
 
-- Node.js 20.9 以上（Next.js 16）
+- Node.js 22.5 以上（Next.js 16。`node:sqlite` を使うため）
 - **whisper.cpp**: `whisper-server` と、日本語向けのモデル（動作確認は `ggml-large-v3-turbo-q5_0.bin`）
 - **llama.cpp**: `llama-server` と、gemma 系の instruct モデル（動作確認は `gemma-4-12b-it` Q4_K_M）
 - **TypeSafe AI の API キー**（[コンソール](https://console.typesafe.ai/)で発行）
@@ -90,7 +90,7 @@ http://localhost:3000 を開きます。画面右上の心拍アイコンで、3
 保存済みの会議は一覧から開いて再開でき、名前の変更・削除（確認つき）もできます。会議は `/s/<slug>` で開きます。
 
 画面は 3 列です。会議の内容（図・過去の図・文字起こし）は、変更の 1.5 秒後に自動で保存されます
-（`sessions/<slug>/session.json`。`.gitignore` 済み）。再開時、処理中だった行は「中断」扱いになります。
+（SQLite、`sessions/sessions.db`。`.gitignore` 済み）。再開時、処理中だった行は「中断」扱いになります。
 
 - **左: 文字起こし** — 「録音開始」で話すと、区切りごとに行が増えます。
   「マイクの行を Jev で判定」を ON にすると、確定した行を 1 行ずつ Jev で判定して図に反映します。
@@ -210,9 +210,9 @@ lib/
   facilitator/  scope/     問いかけ・対象業務の変化
   audio/                   マイク → 16kHz WAV（AudioWorklet + RMS ベースの発話区間検出）
   render/                  モデル → Mermaid（mermaid.ts）/ draw.io の XML（layout.ts で座標計算 → drawio.ts）/ 書き出しの補助（export.ts）
-  store/                   会議の JSON ファイル保存（slug の検証・原子的な書き込み）
+  store/                   会議の SQLite 保存（node:sqlite。slug の検証）
   summary/                 業務分掌ドキュメントの Markdown 生成
-  Jev.ts  llm.ts           Jev / llama-server のクライアント
+  jev.ts  llm.ts           Jev / llama-server のクライアント
 prompts/                   gemma に渡すプロンプト（Markdown。dev では毎回読み直す）
 ```
 
