@@ -5,6 +5,7 @@ import { resampleTo16k, encodeWav } from "@/lib/audio/wav";
 import { useRecorder } from "@/lib/audio/use-recorder";
 import type { Segment } from "@/lib/audio/vad";
 import { clock, type Line, type LineAnalysis, type LineLabeling } from "@/lib/transcript/line";
+import { combineVocab } from "@/lib/transcript/vocab";
 import { ToggleSwitch } from "./toggle-switch";
 
 type Pending = { id: string; blob: Blob };
@@ -121,6 +122,8 @@ type Props = {
   paused?: boolean;
   /** 開発用サンプルパネルが出ているか（空状態の案内文を変える） */
   devMode?: boolean;
+  /** 図から自動で集めた語彙ヒント（対象業務名・登場人物名・書類/システム名）。会議が進むほど育つ */
+  autoVocab?: string;
 };
 
 export function MicTranscriber({
@@ -131,10 +134,13 @@ export function MicTranscriber({
   onJevEnabledChange,
   paused = false,
   devMode = false,
+  autoVocab = "",
 }: Props) {
-  const [vocab, setVocab] = useState("");
+  /** 利用者が手で足す分だけを持つ。自動の語彙とは送信時に合成し、自動側の増減で消えたりしない */
+  const [manualVocab, setManualVocab] = useState("");
 
-  const vocabRef = useRef(vocab);
+  const combinedVocab = combineVocab(autoVocab, manualVocab);
+  const vocabRef = useRef(combinedVocab);
   const onFinalTextRef = useRef(onFinalText);
   useEffect(() => {
     onFinalTextRef.current = onFinalText;
@@ -145,7 +151,7 @@ export function MicTranscriber({
   const setMaxSegmentMsRef = useRef<(ms: number) => void>(() => {});
 
   useEffect(() => {
-    vocabRef.current = vocab;
+    vocabRef.current = combinedVocab;
   });
 
   const patchLine = useCallback(
@@ -251,13 +257,21 @@ export function MicTranscriber({
       </div>
 
       <label className="flex flex-col gap-1 text-sm">
-        <span className="text-zinc-600 dark:text-zinc-400">
-          語彙ヒント（業務名・部署名など。認識を寄せる。任意）
+        <span
+          className="text-zinc-600 dark:text-zinc-400"
+          title="対象業務名・登場人物名・書類やシステムの名前は、図が育つのに合わせて自動で whisper に渡ります。ここには、まだ図に出ていない語彙だけ足してください"
+        >
+          追加の語彙ヒント（任意。認識を寄せる）
         </span>
+        {autoVocab && (
+          <p className="break-words text-xs text-zinc-400" title="図から自動で集めた語彙。会議が進むほど増えます">
+            自動: {autoVocab}
+          </p>
+        )}
         <input
-          value={vocab}
-          onChange={(e) => setVocab(e.target.value)}
-          placeholder="例: 月次請求書発行。営業、経理、与信部"
+          value={manualVocab}
+          onChange={(e) => setManualVocab(e.target.value)}
+          placeholder="例: まだ話していない固有名詞があれば"
           className="rounded-md border border-black/15 bg-transparent px-3 py-2 dark:border-white/20"
         />
       </label>
