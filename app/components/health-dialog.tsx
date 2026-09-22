@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Health } from "@/lib/health";
+import { useDevMode } from "./use-dev-mode";
 
 const POLL_MS = 10_000;
 
@@ -22,6 +23,8 @@ function toRows(h: Health): Row[] {
 export function HealthButton({ initial }: { initial: Health }) {
   const [health, setHealth] = useState<Health>(initial);
   const [stale, setStale] = useState(false);
+  // Studio 側と同じキーを見る（`useDevMode` は同じブラウザ内なら自動で同期する）
+  const [devMode] = useDevMode();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -118,7 +121,15 @@ export function HealthButton({ initial }: { initial: Health }) {
               <div className="min-w-0">
                 <div className="font-medium">{r.label}</div>
                 <div className="break-words text-sm text-zinc-600 dark:text-zinc-400">
-                  {r.ok ? "OK" : "NG"} — {r.detail}
+                  {devMode ? (
+                    <>
+                      {r.ok ? "OK" : "NG"} — {r.detail}
+                    </>
+                  ) : r.ok ? (
+                    "使えます"
+                  ) : (
+                    "使えません"
+                  )}
                 </div>
               </div>
             </li>
@@ -129,9 +140,11 @@ export function HealthButton({ initial }: { initial: Health }) {
             </li>
           )}
         </ul>
-        <p className="border-t border-black/10 px-4 py-3 text-xs text-zinc-500 dark:border-white/15">
-          Jev は課金される外部 API のため、ここではキーの有無だけを確認します（実際の疎通は未確認）。
-        </p>
+        {devMode && (
+          <p className="border-t border-black/10 px-4 py-3 text-xs text-zinc-500 dark:border-white/15">
+            Jev は課金される外部 API のため、ここではキーの有無だけを確認します（実際の疎通は未確認）。
+          </p>
+        )}
       </dialog>
     </>
   );
