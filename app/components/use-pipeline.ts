@@ -5,6 +5,7 @@ import type { ActorsResult, StepLabelResult } from "@/lib/analysis/label";
 import { buildActorStepOps, buildLabelOps, previousBranchOf, type ActorPlan } from "@/lib/analysis/label-ops";
 import type { FollowUp, Interpretation } from "@/lib/analysis/interpret";
 import type { UtteranceState } from "@/lib/analysis/questions";
+import { placeByUtterance } from "@/lib/analysis/place";
 import { rebaseOps } from "@/lib/analysis/rebase";
 import { BRANCH_HINT_MIN } from "@/lib/analysis/thresholds";
 import { checkKey, MAX_CHECKS_PER_REQUEST, type PendingCheck } from "@/lib/analysis/verify";
@@ -111,9 +112,13 @@ export function usePipeline({
   /** ファシリテーターが出すタイミングを測る信号（判定のたびに更新） */
   const signalsRef = useRef<Signals>({ analyzed: 0, startedAt: 0, lastActivityAt: 0, grillScore: 0 });
 
+  /** 発話を受け付けた順（lineId → 通し番号）。ステップを話した順に並べるための基準 */
+  const seqRef = useRef(new Map<string, number>());
+
   const commitOps = useCallback((ops: ModelOp[], from: UpdateSource) => {
     if (ops.length === 0) return;
-    const next = applyOps(modelRef.current, ops, new Date().toISOString());
+    const placed = placeByUtterance(modelRef.current, ops, (id) => seqRef.current.get(id));
+    const next = applyOps(modelRef.current, placed, new Date().toISOString());
     modelRef.current = next;
     setModel(next);
     setSource(from);
@@ -435,6 +440,7 @@ export function usePipeline({
   const analyze = useCallback(
     (job: AnalysisJob) => {
       patchLine(job.lineId, { analysis: { state: "pending" } });
+      seqRef.current.set(job.lineId, seqRef.current.size + 1);
       analysisQueue.current.push(job);
       void drain();
     },
@@ -453,6 +459,7 @@ export function usePipeline({
     followQueue.current = [];
     recentRef.current = [];
     pendingRef.current = [];
+    seqRef.current.clear();
     signalsRef.current = { analyzed: 0, startedAt: 0, lastActivityAt: 0, grillScore: 0 };
     docRef.current += 1;
     setArchives([]);
