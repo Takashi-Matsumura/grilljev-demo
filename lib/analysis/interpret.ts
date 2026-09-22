@@ -118,12 +118,25 @@ function score(a: Answers, key: string): JevScoreAnswer | null {
 
 const fmt = (n: number) => n.toFixed(2);
 
-/** ステップ名の暫定文。gemma の文言が入る（または採用されない）までの間、発話の先頭を使う。 */
+/**
+ * ステップ名の暫定文。gemma の文言が入る（または採用されない）までの間、発話から抜き出して使う。
+ *
+ * 途中で切ると「…」で終わる読みにくい名前になるので、読点（、）で区切った節のうち、
+ * **文末側から**文字数に収まる範囲だけを使う（「〜なら、」の条件節は落ちる）。
+ * 最後の節だけで収まらない長い発話のときに限り、先頭から切って「…」を付ける。
+ */
 export function fallbackLabel(utterance: string): string {
   const oneLine = utterance.replace(/\s+/g, " ").replace(/[。．.！!？?]+$/, "").trim();
-  return oneLine.length > FALLBACK_LABEL_CHARS
-    ? `${oneLine.slice(0, FALLBACK_LABEL_CHARS)}…`
-    : oneLine;
+  if (oneLine.length <= FALLBACK_LABEL_CHARS) return oneLine;
+  const clauses = oneLine.split(/(?<=[、,，])/);
+  let picked = "";
+  for (let i = clauses.length - 1; i >= 0; i--) {
+    const next = clauses[i] + picked;
+    if (next.length > FALLBACK_LABEL_CHARS) break;
+    picked = next;
+  }
+  picked = picked.replace(/^[、,，\s]+|[、,，\s]+$/g, "");
+  return picked !== "" ? picked : `${oneLine.slice(0, FALLBACK_LABEL_CHARS)}…`;
 }
 
 /** "S12" のような接頭辞つき連番の、次の id。 */
@@ -204,15 +217,20 @@ function interpretChecks(
       if (faithful === null) continue; // 回答が返ってこなかった。検証待ちのまま残す
 
       if (faithful < FAITHFUL_MIN) {
+        // 発話に無い情報（または逆の意味）が入っていた。表示は暫定の文に戻し、
+        // 1 度だけ gemma に別の言い方で作り直させる。それでも駄目なら暫定の文のまま。
         ops.push({
           op: "step.update",
           id: c.stepId,
           patch: { label: fallbackLabel(c.source) },
         });
+        const retry = c.attempts < MAX_LABEL_ATTEMPTS;
         results.push({
           key,
-          outcome: "fallback",
-          detail: `「${c.label}」は発話に無い情報を含む疑い（忠実さ ${fmt(faithful)}）。発話の先頭に戻しました`,
+          outcome: retry ? "relabel" : "fallback",
+          detail: `「${c.label}」は発話に無い情報を含む疑い（忠実さ ${fmt(faithful)}）。${
+            retry ? "作り直します" : "発話から抜き出した文に戻しました"
+          }`,
         });
       } else if (readable && readable.score < READABLE_MIN && c.attempts < MAX_LABEL_ATTEMPTS) {
         results.push({

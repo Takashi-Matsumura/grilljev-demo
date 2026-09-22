@@ -46,4 +46,4 @@ export const BRANCH_HINT_MIN = 0.5;
 export const noulConfidence = (p: number): number => Math.abs(p - 0.5) * 2;
 
 /** ステップ名の暫定文（gemma が入るまで）の最大文字数 */
-export const FALLBACK_LABEL_CHARS = 24;
+export const FALLBACK_LABEL_CHARS = 32;
