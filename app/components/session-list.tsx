@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { APP_SCOPE, SAMPLE_SCOPE } from "@/lib/sample/scenario";
 import { splitDepartments, type SessionMeta } from "@/lib/store/session-types";
 
 const fmt = (iso: string) => new Date(iso).toLocaleString("ja-JP", { hour12: false });
@@ -83,59 +82,63 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
       <section className="flex flex-col gap-3">
         <h2 className="font-medium">新しい会議を始める</h2>
         <form
-          className="flex flex-col gap-3"
+          className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start"
           onSubmit={(e) => {
             e.preventDefault();
             void create(title, splitDepartments(departments));
           }}
         >
-          <label className="flex flex-col gap-1 text-sm">
-            <span>
-              業務名
-              <span className="text-red-600 dark:text-red-400" aria-hidden>
-                {" "}
-                *
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              <span>
+                業務名
+                <span className="text-red-600 dark:text-red-400" aria-hidden>
+                  {" "}
+                  *
+                </span>
               </span>
-            </span>
-            <input
-              className={input}
-              value={title}
-              maxLength={60}
-              required
-              aria-required="true"
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="例: 月次請求書発行業務"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            関係部署（「、」または「,」区切り・任意）
-            <input className={input} value={departments} onChange={(e) => setDepartments(e.target.value)} placeholder="例: 営業、経理、部長" />
-          </label>
-          <p className="text-xs text-zinc-500">
-            <span className="text-red-600 dark:text-red-400">*</span> は必須項目です
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" className={btn} disabled={busy || title.trim() === ""}>
-              会議を始める
-            </button>
-            <button
-              type="button"
-              className={btn}
-              disabled={busy}
-              onClick={() => void create(SAMPLE_SCOPE.title, [...SAMPLE_SCOPE.departments])}
-            >
-              サンプルで始める
-            </button>
-            <button
-              type="button"
-              className={btn}
-              disabled={busy}
-              title="このアプリ自身の仕組みを題材にしたサンプル（台本の題材は「このアプリの仕組み」）"
-              onClick={() => void create(APP_SCOPE.title, [...APP_SCOPE.departments])}
-            >
-              アプリの仕組みで始める
-            </button>
+              <input
+                className={input}
+                value={title}
+                maxLength={60}
+                required
+                aria-required="true"
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="例: 月次請求書発行業務"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              関係部署（「、」または「,」区切り・任意）
+              <input
+                className={input}
+                value={departments}
+                onChange={(e) => setDepartments(e.target.value)}
+                placeholder="例: 営業、経理、部長"
+              />
+            </label>
+            <p className="text-xs text-zinc-500">
+              <span className="text-red-600 dark:text-red-400">*</span> は必須項目です
+            </p>
           </div>
+
+          {/* 一番押してほしい操作なので、正方形の大きなボタンにして目立たせる */}
+          <button
+            type="submit"
+            disabled={busy || title.trim() === ""}
+            className="group flex h-32 w-32 shrink-0 flex-col items-center justify-center gap-2 self-center rounded-2xl bg-foreground text-background shadow-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-lg active:translate-y-0 active:scale-95 disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none sm:self-start"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="30"
+              height="30"
+              fill="currentColor"
+              aria-hidden
+              className="transition-transform duration-150 ease-out group-hover:translate-x-0.5"
+            >
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <span className="text-sm font-medium">会議を始める</span>
+          </button>
         </form>
         {error && (
           <p role="alert" className="text-sm text-amber-600 dark:text-amber-400">
