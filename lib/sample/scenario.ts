@@ -13,11 +13,6 @@ import type { ModelOp, NewStep, StepFlags } from "@/lib/model/types";
  * どちらも、出現順に A3・A4 と採番されるので id は一致する。
  */
 
-export const SAMPLE_SCOPE = {
-  title: "与信照会つき見積作成",
-  departments: ["営業", "与信部"],
-} as const;
-
 export type SampleEntry = {
   id: string;
   text: string;
@@ -211,11 +206,6 @@ export const SAMPLE_SHIFT_SCENARIO: SampleEntry[] = [
  * 台本モード用の固定 ops は持たない — **Jev モード専用**。期待値（kind）は人が付けた目安で、
  * Jev の判定との一致・不一致を見るためのもの。
  */
-export const APP_SCOPE = {
-  title: "会議音声から業務フロー図を作る仕組み",
-  departments: ["ブラウザ", "サーバー", "whisper", "Jev", "gemma", "Mermaid"],
-} as const;
-
 const line = (id: string, kind: SampleEntry["kind"], text: string): SampleEntry => ({ id, text, kind, ops: [] });
 
 export const APP_SCENARIO: SampleEntry[] = [
