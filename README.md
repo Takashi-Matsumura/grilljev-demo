@@ -211,7 +211,7 @@ lib/
   render/                  モデル → Mermaid（mermaid.ts）/ draw.io の XML（layout.ts で座標計算 → drawio.ts）/ 書き出しの補助（export.ts）
   store/                   会議の JSON ファイル保存（slug の検証・原子的な書き込み）
   summary/                 業務分掌ドキュメントの Markdown 生成
-  jev.ts  llm.ts           Jev / llama-server のクライアント
+  Jev.ts  llm.ts           Jev / llama-server のクライアント
 prompts/                   gemma に渡すプロンプト（Markdown。dev では毎回読み直す）
 ```
 

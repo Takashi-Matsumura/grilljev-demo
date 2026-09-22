@@ -43,7 +43,7 @@ import {
 import { checkKey, type CheckResult, type PendingCheck } from "./verify";
 
 /**
- * jev の回答 → 図の変更。
+ * Jev の回答 → 図の変更。
  *
  * - drop      雑談。図を動かさない
  * - apply     図を変更した（実線）
@@ -52,7 +52,7 @@ import { checkKey, type CheckResult, type PendingCheck } from "./verify";
  *
  * 文言（ステップ名・新しい登場人物の名前・分岐の条件文）の生成は gemma の役目。
  * ここではまず暫定の文言（発話の先頭）で図に足し、gemma に回す仕事を `followUps` として返す。
- * gemma が作った文言は、次のリクエストの `checks` で jev が検証する。
+ * gemma が作った文言は、次のリクエストの `checks` で Jev が検証する。
  */
 
 export type Verdict = "drop" | "apply" | "confirm" | "unchanged";
@@ -63,7 +63,7 @@ export type FollowUp =
       /** 追加したステップに、ステップ名・書類名・分岐の条件文を付ける */
       kind: "label";
       stepId: string;
-      /** jev の branch_marker / artifact_present（0..1）。gemma に考えさせるかの手がかり */
+      /** Jev の branch_marker / artifact_present（0..1）。gemma に考えさせるかの手がかり */
       branchHint: number;
       artifactHint: number;
     }
@@ -291,7 +291,7 @@ function interpretUtterance(
   };
 
   if (chatter === null) {
-    return { ...base, verdict: "unchanged", ops: [], summary: "jev の回答に chatter がありません" };
+    return { ...base, verdict: "unchanged", ops: [], summary: "Jev の回答に chatter がありません" };
   }
   if (chatter >= CHATTER_DROP) {
     return {
@@ -379,7 +379,7 @@ function interpretUtterance(
         mk && (MESSAGE_KINDS as string[]).includes(mk.choice) ? (mk.choice as MessageKind) : "sync";
 
       if (isNew(from) || isNew(to)) {
-        // 名前は jev には作れない。gemma に特定させ、ステップはそのあと追加する
+        // 名前は Jev には作れない。gemma に特定させ、ステップはそのあと追加する
         const resolved = [from, to].filter((c) => !isNew(c)) as JevChoiceAnswer[];
         followUps.push({
           kind: "actors",

@@ -1,9 +1,9 @@
 /**
- * TypeSafe AI / jev (System One) のクライアント。https://docs.typesafe.ai/api
+ * TypeSafe AI / Jev (System One) のクライアント。https://docs.typesafe.ai/api
  *
  * **server 専用。** API キーはここから先へ出さない。
  *
- * jev はテキストを生成しない。`state` と型つきの質問を送ると、各質問に
+ * Jev はテキストを生成しない。`state` と型つきの質問を送ると、各質問に
  * 確率つきの型安全な答えだけを返す。全質問は並列評価されるので、質問を足しても
  * レイテンシはほぼ増えない（1 発話 1 リクエストに詰める）。
  *
@@ -21,7 +21,7 @@ const COOL_DOWN_AFTER = 3;
 /** 休む時間。ネットが死んでいるときに毎回 8 秒待つのが最悪の体験なので必須。 */
 const COOL_DOWN_MS = 5 * 60_000;
 
-// ─── ワイヤ形式（jev の API そのままの語彙） ────────────────────────────
+// ─── ワイヤ形式（Jev の API そのままの語彙） ────────────────────────────
 
 /** 二値。P(true) が返る。confidence は返らない。 */
 export type JevNoulQuestion = {
@@ -158,7 +158,7 @@ export async function postJev<S extends object>(
   const { coolingDown, retryAfterMs } = jevBreakerState();
   if (coolingDown) {
     throw new JevError(
-      `jev が連続で失敗したため休止中です（あと ${Math.ceil(retryAfterMs / 1000)} 秒）`,
+      `Jev が連続で失敗したため休止中です（あと ${Math.ceil(retryAfterMs / 1000)} 秒）`,
       503,
       "breaker",
     );
@@ -179,12 +179,12 @@ export async function postJev<S extends object>(
   } catch (e) {
     if (timeout.aborted) {
       recordFailure();
-      throw new JevError(`jev が ${TIMEOUT_MS / 1000} 秒以内に応答しませんでした`, 504, "timeout");
+      throw new JevError(`Jev が ${TIMEOUT_MS / 1000} 秒以内に応答しませんでした`, 504, "timeout");
     }
     if (signal?.aborted) throw e;
     recordFailure();
     throw new JevError(
-      `jev に接続できません: ${e instanceof Error ? e.message : "不明なエラー"}`,
+      `Jev に接続できません: ${e instanceof Error ? e.message : "不明なエラー"}`,
       502,
       "network",
     );
@@ -194,7 +194,7 @@ export async function postJev<S extends object>(
     if (isTransient(res.status)) recordFailure();
     const body = await res.text().catch(() => "");
     throw new JevError(
-      `jev API が ${res.status} を返しました: ${body.slice(0, 300)}`,
+      `Jev API が ${res.status} を返しました: ${body.slice(0, 300)}`,
       res.status,
       classify(res.status),
     );

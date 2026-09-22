@@ -31,7 +31,7 @@ const MAX_STEP_OPTIONS = 40;
 const MAX_RECENT_UTTERANCES = 3;
 
 /**
- * jev の state。**自由テキストが入るのは `utterance`（と直近の発話）だけ。**
+ * Jev の state。**自由テキストが入るのは `utterance`（と直近の発話）だけ。**
  * それ以外は、業務名・アクター名・ステップ名といったフロー要素で、外部送信される。
  */
 export type UtteranceState = {
@@ -139,7 +139,7 @@ export function buildUtteranceQuestions(
       ],
     },
 
-    // ── closed-set: jev の本領。既存の要素を選択肢にする ─────────────────
+    // ── closed-set: Jev の本領。既存の要素を選択肢にする ─────────────────
     actor_from: {
       type: "choice",
       instructions:

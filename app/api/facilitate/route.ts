@@ -18,7 +18,7 @@ export type FacilitateResponse = {
   chosen?: Candidate;
   candidates: Candidate[];
   summary: string;
-  /** 誰が決めたか。目的が未確定のときは jev を介さず、コードで決める */
+  /** 誰が決めたか。目的が未確定のときは Jev を介さず、コードで決める */
   decidedBy: "first-principle" | "jev";
   gemmaMs: number;
   /** 採用した 1 問の推奨回答を作るのにかかった時間 */
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const { candidates, ms: gemmaMs } = await generateCandidates(model, recent);
 
     // 2. 存在意義が未確定なら、それを問うのが最優先（ops-grill の第一原理）。
-    //    ここは判断ではなく規律なので、jev を介さずコードで決める。
+    //    ここは判断ではなく規律なので、Jev を介さずコードで決める。
     if (purposeMissing(model)) {
       const picked = candidates.find((c) => c.kind === "purpose") ?? candidates[0];
       const s = await suggestAnswer(model, recent, picked.text);
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       return Response.json(res);
     }
 
-    // 3. jev が「いま出すべき 1 問」を選ぶ（根拠なし・回答済みは捨てる。決め手に欠けるなら黙る）
+    // 3. Jev が「いま出すべき 1 問」を選ぶ（根拠なし・回答済みは捨てる。決め手に欠けるなら黙る）
     const exchange = await postJev(
       buildPickState(model, recent, candidates, silenceSec),
       buildPickQuestions(candidates),

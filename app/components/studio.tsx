@@ -39,7 +39,7 @@ const SAVE_LABEL: Record<SaveStatus, { text: string; cls: string }> = {
   error: { text: "保存できていません（再試行します）", cls: "text-amber-600 dark:text-amber-400" },
 };
 
-/** 3 列（文字起こし / 図とファシリテーター / jev コンソール）で状態を共有するための親。 */
+/** 3 列（文字起こし / 図とファシリテーター / Jev コンソール）で状態を共有するための親。 */
 export function Studio({ session }: { session: StudioSession }) {
   const [lines, setLines] = useState<Line[]>(session.lines);
   // やり直し（リセット）で戻る先は、会議を始めたときの初期設定
@@ -51,7 +51,7 @@ export function Studio({ session }: { session: StudioSession }) {
   const [playing, setPlaying] = useState(false);
   const [mode, setMode] = useState<SampleMode>("script");
   const [withShift, setWithShift] = useState(false);
-  /** 台本の題材。"app" はこのアプリの仕組み（jev モード専用） */
+  /** 台本の題材。"app" はこのアプリの仕組み（Jev モード専用） */
   const [topic, setTopic] = useState<"loan" | "app">("loan");
   const [jevEnabled, setJevEnabled] = useState(true);
   const [speakEnabled, setSpeakEnabled] = useState(false);
@@ -257,7 +257,7 @@ export function Studio({ session }: { session: StudioSession }) {
         onRename={shift.rename}
         onDismiss={shift.dismiss}
       />
-      {/* 3 列: 左=文字起こし / 中=ファシリテーターと図 / 右=jev コンソール（折りたためる）。
+      {/* 3 列: 左=文字起こし / 中=ファシリテーターと図 / 右=Jev コンソール（折りたためる）。
           1024px 未満は縦に積み、ページ全体をスクロールさせる。 */}
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:overflow-hidden">
         <div className="flex min-h-[28rem] flex-col border-b border-black/10 lg:min-h-0 lg:border-b-0 lg:border-r dark:border-white/15">

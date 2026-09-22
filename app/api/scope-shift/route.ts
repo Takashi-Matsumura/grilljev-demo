@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   try {
     // 1. gemma が新しい業務名の候補を書く（ローカル）
     const { candidates, ms: gemmaMs } = await generateTitleCandidates(model, recent, relation);
-    // 2. jev が「いまの会話は何の業務の話か」を選ぶ。「現状のまま」も選べる（誤検知を止める）
+    // 2. Jev が「いまの会話は何の業務の話か」を選ぶ。「現状のまま」も選べる（誤検知を止める）
     const exchange = await postJev(
       buildShiftState(model, recent, relation, candidates),
       buildShiftQuestions(model, candidates),

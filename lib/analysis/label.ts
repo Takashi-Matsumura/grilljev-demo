@@ -6,7 +6,7 @@ import type { ActorKind } from "@/lib/model/types";
 /**
  * gemma に「文言」を作らせる。server 専用。
  * gemma の出力は信用しない: 形・長さ・種別を検証し、駄目なら例外（呼び出し側は
- * 暫定の文言のまま見送る）。ここで作った文言は、次の jev リクエストで必ず検証される。
+ * 暫定の文言のまま見送る）。ここで作った文言は、次の Jev リクエストで必ず検証される。
  */
 
 const MAX_LABEL_CHARS = 30;

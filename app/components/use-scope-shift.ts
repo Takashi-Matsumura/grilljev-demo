@@ -48,7 +48,7 @@ type Options = {
  * 対象業務（共通認識）が会話の中で変わったときの検知と提案。
  *
  * 判定した発話ごとに scope_drift を窓（3 件）に積み、平均が高く、ズレの種類が 2 件以上で一致したら
- * gemma に新しい業務名を書かせ、jev が絞る（/api/scope-shift）。**自動では絶対に変えない**:
+ * gemma に新しい業務名を書かせ、Jev が絞る（/api/scope-shift）。**自動では絶対に変えない**:
  * 提案をバナーで見せ、参加者が選んだ操作だけがモデルに入る。
  */
 export function useScopeShift({ getModel, commit, splitDiagram, pushEntry }: Options) {
@@ -111,7 +111,7 @@ export function useScopeShift({ getModel, commit, splitDiagram, pushEntry }: Opt
           });
           setStatus({ kind: "idle", message: "" });
         } else {
-          // jev が「現状のまま」と判断した（誤検知）。しばらく聞き直さない
+          // Jev が「現状のまま」と判断した（誤検知）。しばらく聞き直さない
           cooldownUntilRef.current = Date.now() + SHIFT_KEEP_COOLDOWN_MS;
           setStatus({ kind: "idle", message: "" });
         }
