@@ -326,7 +326,7 @@ export function Studio({ session }: { session: StudioSession }) {
             />
           )}
         </div>
-        <div className="flex min-h-[28rem] flex-col lg:min-h-0 lg:overflow-y-auto">
+        <div className="flex min-h-[28rem] flex-col lg:min-h-0 lg:overflow-hidden">
           <FacilitatorPane
             devMode={devMode}
             asked={asked}
@@ -353,11 +353,12 @@ export function Studio({ session }: { session: StudioSession }) {
             onView={setViewId}
           />
           {archived && (
-            <p className="border-b border-black/10 bg-zinc-50 px-4 py-1.5 text-xs text-zinc-500 dark:border-white/15 dark:bg-white/5">
+            <p className="shrink-0 border-b border-black/10 bg-zinc-50 px-4 py-1.5 text-xs text-zinc-500 dark:border-white/15 dark:bg-white/5">
               過去の図（読み取り専用）です。「図を分ける」までの内容が残っています。
             </p>
           )}
           <DiagramPane
+            key={viewId}
             model={viewing}
             source={archived ? "none" : pipeline.source}
             onDecideStep={archived ? undefined : onDecideStep}

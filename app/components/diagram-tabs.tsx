@@ -36,7 +36,7 @@ export function DiagramTabs({ archives, currentTitle, viewId, onView }: Props) {
     <div
       role="tablist"
       aria-label="業務フロー図"
-      className="flex gap-1 overflow-x-auto border-b border-black/10 px-4 pt-2 dark:border-white/15"
+      className="flex shrink-0 gap-1 overflow-x-auto border-b border-black/10 px-4 pt-2 dark:border-white/15"
     >
       {archives.map((a) => tab(a.id, a.title || "（未設定）", "過去"))}
       {tab("current", currentTitle || "（未設定）", "現在")}
