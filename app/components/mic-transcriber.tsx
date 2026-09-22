@@ -15,22 +15,32 @@ const CHECK_TEXT: Record<string, { text: string; cls: string }> = {
   merged: { text: "既存アクターの言い換えのため統合", cls: "text-amber-600 dark:text-amber-400" },
 };
 
-/** gemma がステップ名・登場人物を作った結果と、次の発話での Jev の検証結果 */
-function LabelingView({ labeling }: { labeling: LineLabeling }) {
+/**
+ * gemma がステップ名・登場人物を作った結果と、次の発話での Jev の検証結果。
+ *
+ * 本番（devMode オフ）では控えめに: 生成中は小さな「⋯」だけ、できあがった後は何も出さない
+ * （図に反映済みなので、この行での確認は要らない）。失敗だけは、何が起きたか分かるよう常に出す。
+ */
+function LabelingView({ labeling, devMode }: { labeling: LineLabeling; devMode: boolean }) {
   if (labeling.state === "pending") {
-    return (
+    return devMode ? (
       <span className="block pl-1 text-xs text-violet-500">
         ⋯ gemma: {labeling.note ?? "生成中"}
+      </span>
+    ) : (
+      <span className="ml-2 text-xs text-zinc-400" title="名前を作成中">
+        ⋯
       </span>
     );
   }
   if (labeling.state === "error") {
     return (
       <span className="block pl-1 text-xs text-red-600 dark:text-red-400">
-        gemma: {labeling.error}
+        {devMode ? `gemma: ${labeling.error}` : `名前の作成でエラー: ${labeling.error}`}
       </span>
     );
   }
+  if (!devMode) return null;
   const check = labeling.check ? CHECK_TEXT[labeling.check.outcome] : undefined;
   return (
     <span className="block pl-1 text-xs text-violet-600 dark:text-violet-400">
@@ -55,7 +65,7 @@ const VERDICT_TEXT = {
   unchanged: "業務 · 図は変更なし",
 } as const;
 
-function AnalysisView({ analysis }: { analysis: LineAnalysis }) {
+function AnalysisView({ analysis, devMode }: { analysis: LineAnalysis; devMode: boolean }) {
   if (analysis.state === "pending") {
     return <span className="ml-2 text-xs text-zinc-400">⋯ Jev で判定中</span>;
   }
@@ -79,15 +89,16 @@ function AnalysisView({ analysis }: { analysis: LineAnalysis }) {
   return (
     <>
       <span className={`ml-2 rounded px-1.5 py-0.5 text-xs ${cls}`} title={analysis.summary}>
-        {VERDICT_TEXT[analysis.verdict]} {strength.toFixed(2)}
+        {VERDICT_TEXT[analysis.verdict]}
+        {devMode && ` ${strength.toFixed(2)}`}
       </span>
-      {analysis.match === "match" && (
+      {devMode && analysis.match === "match" && (
         <span className="ml-2 text-xs text-emerald-600 dark:text-emerald-400">台本と一致</span>
       )}
-      {analysis.match === "mismatch" && (
+      {devMode && analysis.match === "mismatch" && (
         <span className="ml-2 text-xs font-medium text-red-600 dark:text-red-400">台本と不一致</span>
       )}
-      <span className="block pl-1 text-xs text-zinc-500">{analysis.summary}</span>
+      {devMode && <span className="block pl-1 text-xs text-zinc-500">{analysis.summary}</span>}
     </>
   );
 }
@@ -289,7 +300,7 @@ export function MicTranscriber({
                 ? "発話を検出"
                 : "待機中"
             : "停止中"}
-          {recorder.sampleRate ? ` · ${recorder.sampleRate / 1000}kHz` : ""}
+          {devMode && recorder.sampleRate ? ` · ${recorder.sampleRate / 1000}kHz` : ""}
         </span>
       </div>
 
@@ -321,9 +332,6 @@ export function MicTranscriber({
                 {l.status === "done" && (
                   <span className={l.tag === "chatter" ? "text-zinc-500" : ""}>{l.text}</span>
                 )}
-                {l.status === "done" && l.tag === "chatter" && (
-                  <span className="ml-2 text-xs text-zinc-400">雑談（図は変更なし）</span>
-                )}
                 {l.status === "silent" && (
                   <span className="text-zinc-500">
                     （音声なし{l.raw ? `・除外: ${l.raw}` : ""}）
@@ -337,13 +345,13 @@ export function MicTranscriber({
                 {l.status === "error" && (
                   <span className="text-red-600 dark:text-red-400">エラー: {l.error}</span>
                 )}
-                {l.latencyMs !== undefined && (
+                {devMode && l.latencyMs !== undefined && (
                   <span className="ml-2 tabular-nums text-xs text-zinc-400">
                     {l.latencyMs}ms
                   </span>
                 )}
-                {l.analysis && <AnalysisView analysis={l.analysis} />}
-                {l.labeling && <LabelingView labeling={l.labeling} />}
+                {l.analysis && <AnalysisView analysis={l.analysis} devMode={devMode} />}
+                {l.labeling && <LabelingView labeling={l.labeling} devMode={devMode} />}
               </li>
             ))}
           </ol>
