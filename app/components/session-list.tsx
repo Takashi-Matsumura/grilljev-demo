@@ -90,13 +90,30 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
           }}
         >
           <label className="flex flex-col gap-1 text-sm">
-            業務名
-            <input className={input} value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} placeholder="例: 月次請求書発行業務" />
+            <span>
+              業務名
+              <span className="text-red-600 dark:text-red-400" aria-hidden>
+                {" "}
+                *
+              </span>
+            </span>
+            <input
+              className={input}
+              value={title}
+              maxLength={60}
+              required
+              aria-required="true"
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="例: 月次請求書発行業務"
+            />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            関係部署（「、」または「,」区切り）
+            関係部署（「、」または「,」区切り・任意）
             <input className={input} value={departments} onChange={(e) => setDepartments(e.target.value)} placeholder="例: 営業、経理、部長" />
           </label>
+          <p className="text-xs text-zinc-500">
+            <span className="text-red-600 dark:text-red-400">*</span> は必須項目です
+          </p>
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={btn} disabled={busy || title.trim() === ""}>
               会議を始める
