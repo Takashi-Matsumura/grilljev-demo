@@ -116,9 +116,6 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
                 placeholder="例: 営業、経理、部長"
               />
             </label>
-            <p className="text-xs text-zinc-500">
-              <span className="text-red-600 dark:text-red-400">*</span> は必須項目です
-            </p>
           </div>
 
           {/* 一番押してほしい操作なので、正方形の大きなボタンにして目立たせる */}
