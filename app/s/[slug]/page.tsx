@@ -21,9 +21,21 @@ export default async function SessionPage(props: PageProps<"/s/[slug]">) {
             href="/"
             aria-label="一覧に戻る"
             title="一覧に戻る"
-            className="shrink-0 rounded-md border border-black/15 px-2 py-1 text-sm text-zinc-500 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/15 text-zinc-500 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
           >
-            ←
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
           </Link>
           <h1 className="truncate text-lg font-semibold">{session.name}</h1>
         </div>
