@@ -1,22 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ISSUE_KIND_LABEL } from "@/lib/model/labels";
 import type { FlowModel } from "@/lib/model/types";
 import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
 import { FullscreenButton } from "./diagram-fullscreen";
 import { ExportButtons } from "./export-buttons";
 import { MermaidDiagram } from "./mermaid-diagram";
 import { SummaryButton } from "./summary-dialog";
-
-const ISSUE_KIND_LABEL: Record<string, string> = {
-  purpose: "目的",
-  who: "担当",
-  when: "時期",
-  criteria: "基準",
-  exception: "例外",
-  tool: "道具",
-  handoff: "引継ぎ",
-};
 
 const ISSUE_STATUS_LABEL: Record<string, string> = {
   open: "未確認",
@@ -27,7 +18,8 @@ const ISSUE_STATUS_LABEL: Record<string, string> = {
 /** 図を最後に更新したのが何か。台本は固定の変更であり、Jev の判定ではない。 */
 export type UpdateSource = "none" | "script" | "jev" | "manual";
 
-const SOURCE_BADGE: Record<UpdateSource, { text: string; cls: string }> = {
+/** 開発者モード: 何によって更新されたかの内訳。本番向けは、更新があったかどうかだけ伝える。 */
+const SOURCE_BADGE_DEV: Record<UpdateSource, { text: string; cls: string }> = {
   none: {
     text: "更新なし",
     cls: "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-300",
@@ -46,22 +38,31 @@ const SOURCE_BADGE: Record<UpdateSource, { text: string; cls: string }> = {
   },
 };
 
+const SOURCE_BADGE_PLAIN: Record<UpdateSource, { text: string; cls: string }> = {
+  none: SOURCE_BADGE_DEV.none,
+  script: { text: "更新あり", cls: SOURCE_BADGE_DEV.script.cls },
+  jev: { text: "更新あり", cls: SOURCE_BADGE_DEV.jev.cls },
+  manual: { text: "更新あり", cls: SOURCE_BADGE_DEV.manual.cls },
+};
+
 export function DiagramPane({
   model,
   source,
   onDecideStep,
+  devMode = false,
 }: {
   model: FlowModel;
   source: UpdateSource;
   /** 仮のステップの承認・却下（過去の図では渡さない） */
   onDecideStep?: (id: string, decision: "approve" | "reject") => void;
+  devMode?: boolean;
 }) {
   const code = useMemo(() => toMermaid(model), [model]);
   const drawable = hasDiagram(model);
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   const provisional = visibleSteps(model).filter((s) => s.status === "provisional");
   const openIssues = model.issues.filter((i) => i.status !== "answered");
-  const badge = SOURCE_BADGE[source];
+  const badge = (devMode ? SOURCE_BADGE_DEV : SOURCE_BADGE_PLAIN)[source];
   // .svg の書き出し用。「どのコードの SVG か」を持ち、いまの図と一致するときだけ使う
   const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
   const svgForExport = rendered && rendered.code === code ? rendered.svg : null;
@@ -77,7 +78,7 @@ export function DiagramPane({
         <dt className="text-zinc-500">対象業務</dt>
         <dd className="min-w-0 break-words">
           {model.scope.title || "（未設定）"}
-          <span className="ml-2 text-xs tabular-nums text-zinc-400">rev.{model.rev}</span>
+          {devMode && <span className="ml-2 text-xs tabular-nums text-zinc-400">rev.{model.rev}</span>}
         </dd>
         <dt className="text-zinc-500">目的</dt>
         <dd className="min-w-0 break-words">
@@ -103,7 +104,9 @@ export function DiagramPane({
               <li key={s.id} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 break-words">
                   {nameOf(s.from)} → {nameOf(s.to)}「{s.label}」
-                  <span className="ml-1 text-xs text-zinc-400">確度 {s.confidence.toFixed(2)}</span>
+                  <span className="ml-1 text-xs text-zinc-400">
+                    {devMode ? `確度 ${s.confidence.toFixed(2)}` : "確認が必要"}
+                  </span>
                 </span>
                 {onDecideStep && (
                   <span className="flex shrink-0 gap-1">
@@ -128,9 +131,11 @@ export function DiagramPane({
       )}
 
       {openIssues.length > 0 && (
-        <div className="max-h-28 overflow-y-auto rounded-md border border-black/10 p-3 dark:border-white/15">
-          <h3 className="mb-1 text-sm font-medium">未解決の論点（{openIssues.length}）</h3>
-          <ul className="flex flex-col gap-1 text-sm">
+        <details className="rounded-md border border-black/10 p-3 dark:border-white/15">
+          <summary className="cursor-pointer text-sm font-medium">
+            未解決の論点（{openIssues.length}）
+          </summary>
+          <ul className="mt-2 flex max-h-28 flex-col gap-1 overflow-y-auto text-sm">
             {openIssues.map((i) => (
               <li key={i.id} className="flex gap-2">
                 <span className="shrink-0 rounded bg-zinc-100 px-1.5 text-xs leading-5 text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
@@ -143,7 +148,7 @@ export function DiagramPane({
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -152,12 +157,14 @@ export function DiagramPane({
         <FullscreenButton title={model.scope.title} code={code} disabled={!drawable} />
       </div>
 
-      <details className="text-sm">
-        <summary className="cursor-pointer text-zinc-500">Mermaid コードを表示</summary>
-        <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-zinc-100 p-3 text-xs dark:bg-white/10">
-          {code}
-        </pre>
-      </details>
+      {devMode && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-zinc-500">Mermaid コードを表示</summary>
+          <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-zinc-100 p-3 text-xs dark:bg-white/10">
+            {code}
+          </pre>
+        </details>
+      )}
     </section>
   );
 }

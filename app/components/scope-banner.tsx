@@ -14,13 +14,16 @@ type Props = {
   onSplit: () => void;
   onRename: () => void;
   onDismiss: () => void;
+  devMode?: boolean;
 };
 
 /** 対象業務（共通認識）の変更案。**自動では変えず**、選んだ操作だけが反映される。 */
-export function ScopeBanner({ proposal, status, onSplit, onRename, onDismiss }: Props) {
+export function ScopeBanner({ proposal, status, onSplit, onRename, onDismiss, devMode = false }: Props) {
   if (!proposal) {
-    // 確認中・失敗は控えめに 1 行だけ。何も無ければ場所を取らない
+    // 確認中は開発者モードでだけ見せる（進捗のつぶやきで、本番では場所を取るだけ）。
+    // 失敗は常に見せる。何も無ければ場所を取らない
     if (status.kind === "idle") return null;
+    if (status.kind === "checking" && !devMode) return null;
     return (
       <div
         role={status.kind === "error" ? "alert" : "status"}
@@ -48,7 +51,7 @@ export function ScopeBanner({ proposal, status, onSplit, onRename, onDismiss }: 
         <div className="min-w-0">
           <p className="font-medium">
             ⚠ {HEADLINE[proposal.relation]}
-            {proposal.moved !== null && (
+            {devMode && proposal.moved !== null && (
               <span className="ml-2 text-xs font-normal tabular-nums text-zinc-500">
                 （範囲外 {proposal.moved.toFixed(2)}）
               </span>
