@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { download } from "./download";
 import type { FlowModel } from "@/lib/model/types";
 import { toDrawio } from "@/lib/render/drawio";
+import { DisclosureIcon } from "./disclosure-icon";
 import {
   EXPORT_MIME,
   exportFileName,
@@ -28,9 +29,13 @@ const BUTTONS: { format: ExportFormat; label: string; hint: string }[] = [
   { format: "svg", label: ".svg", hint: "画像として使えます（画面に描画された図そのもの）" },
 ];
 
-/** 図の書き出し（.drawio / .mmd / .svg）。 */
+const TRIGGER_BTN =
+  "flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-black/15 px-2.5 py-1 text-sm hover:bg-black/5 [&::-webkit-details-marker]:hidden dark:border-white/20 dark:hover:bg-white/10";
+
+/** 図の書き出し（.drawio / .mmd / .svg）。「書き出し ▾」の下に3形式を畳む。 */
 export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
   const [message, setMessage] = useState<string | null>(null);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
 
   const run = (format: ExportFormat) => {
     try {
@@ -41,27 +46,45 @@ export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
       setMessage(`${name} を保存しました`);
     } catch (e) {
       setMessage(e instanceof Error ? `保存できませんでした: ${e.message}` : "保存できませんでした");
+    } finally {
+      if (detailsRef.current) detailsRef.current.open = false;
     }
   };
 
+  if (empty) {
+    return (
+      <button type="button" disabled title="図がまだありません" className={`${TRIGGER_BTN} disabled:opacity-40`}>
+        ⤓ 書き出し
+        <DisclosureIcon />
+      </button>
+    );
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-zinc-500">書き出し</span>
-      {BUTTONS.map((b) => {
-        const disabled = empty || (b.format === "svg" && svg === null);
-        return (
-          <button
-            key={b.format}
-            type="button"
-            onClick={() => run(b.format)}
-            disabled={disabled}
-            title={disabled && !empty ? "図を描画しています…" : b.hint}
-            className="rounded-md border border-black/15 px-2.5 py-1 text-sm hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/20 dark:hover:bg-white/10"
-          >
-            ⤓ {b.label}
-          </button>
-        );
-      })}
+    <div className="relative flex items-center gap-2">
+      <details ref={detailsRef} className="group relative">
+        <summary className={TRIGGER_BTN}>
+          ⤓ 書き出し
+          <DisclosureIcon />
+        </summary>
+        <div className="absolute bottom-full right-0 z-10 mb-1 w-56 rounded-md border border-black/15 bg-background p-1 shadow-lg dark:border-white/20">
+          {BUTTONS.map((b) => {
+            const disabled = b.format === "svg" && svg === null;
+            return (
+              <button
+                key={b.format}
+                type="button"
+                onClick={() => run(b.format)}
+                disabled={disabled}
+                title={disabled ? "図を描画しています…" : b.hint}
+                className="flex w-full items-center justify-start rounded px-2 py-1.5 text-left text-sm hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-white/10"
+              >
+                {b.label}
+              </button>
+            );
+          })}
+        </div>
+      </details>
       {message && (
         <span role="status" className="min-w-0 break-words text-xs text-zinc-500">
           {message}

@@ -32,7 +32,7 @@ export function FacilitatorPane(p: Props) {
   return (
     <section
       aria-label="ファシリテーター"
-      className="flex flex-col gap-2 border-b border-black/10 px-4 py-3 dark:border-white/15"
+      className="flex shrink-0 flex-col gap-2 border-b border-black/10 px-4 py-3 dark:border-white/15"
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <h2 className="font-medium">ファシリテーター</h2>
