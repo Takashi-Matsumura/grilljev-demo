@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { SAMPLE_SCOPE } from "@/lib/sample/scenario";
+import { APP_SCOPE, SAMPLE_SCOPE } from "@/lib/sample/scenario";
 import { splitDepartments, type SessionMeta } from "@/lib/store/session-types";
 
 const fmt = (iso: string) => new Date(iso).toLocaleString("ja-JP", { hour12: false });
@@ -77,6 +77,15 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
               onClick={() => void create(SAMPLE_SCOPE.title, [...SAMPLE_SCOPE.departments])}
             >
               サンプルで始める
+            </button>
+            <button
+              type="button"
+              className={btn}
+              disabled={busy}
+              title="このアプリ自身の仕組みを題材にしたサンプル（台本の題材は「このアプリの仕組み」）"
+              onClick={() => void create(APP_SCOPE.title, [...APP_SCOPE.departments])}
+            >
+              アプリの仕組みで始める
             </button>
           </div>
         </form>
