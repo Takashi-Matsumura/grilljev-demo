@@ -285,8 +285,10 @@ export function Studio({ session }: { session: StudioSession }) {
             </button>
           )}
         </div>
+        {/* 「保存済み」の定常表示はしない（常に出ていると意味を持たない）。保存中・失敗だけ知らせる。
+            要素自体は残し、後で切り替わったときに aria-live で読み上げられるようにする。 */}
         <p className={`text-xs ${SAVE_LABEL[saveStatus].cls}`} aria-live="polite">
-          {SAVE_LABEL[saveStatus].text}
+          {saveStatus === "saved" ? "" : SAVE_LABEL[saveStatus].text}
         </p>
         <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
           <input
