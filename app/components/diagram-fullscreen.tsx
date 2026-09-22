@@ -28,7 +28,18 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 /** ズームの基準点。ホイールはカーソル位置、ボタン・キーは表示領域の中心、リセットは左上に固定する */
 type Anchor = { x: number; y: number } | "reset" | null;
 
-export function FullscreenButton({ title, code, disabled }: { title: string; code: string; disabled: boolean }) {
+export function FullscreenButton({
+  title,
+  code,
+  disabled,
+  compact = false,
+}: {
+  title: string;
+  code: string;
+  disabled: boolean;
+  /** true なら図の右上に置くアイコンだけのボタンにする（フッターのボタンとは別に使う） */
+  compact?: boolean;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -148,22 +159,40 @@ export function FullscreenButton({ title, code, disabled }: { title: string; cod
   const btn =
     "rounded-md border border-black/15 px-2.5 py-1 text-sm hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/20 dark:hover:bg-white/10";
 
-  return (
-    <>
+  const open = () => {
+    setZoom(1);
+    prevZoomRef.current = 1;
+    setIsOpen(true);
+    dialogRef.current?.showModal();
+  };
+
+  const trigger = compact ? (
+    disabled ? null : (
       <button
         type="button"
-        className={btn}
-        disabled={disabled}
-        onClick={() => {
-          setZoom(1);
-          prevZoomRef.current = 1;
-          setIsOpen(true);
-          dialogRef.current?.showModal();
-        }}
+        aria-label="全画面表示"
         title="図をウィンドウいっぱいに表示します（Esc で閉じる）"
+        className="rounded-md border border-black/15 bg-background px-2 py-1 text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+        onClick={open}
       >
-        ⛶ 全画面
+        ⛶
       </button>
+    )
+  ) : (
+    <button
+      type="button"
+      className={btn}
+      disabled={disabled}
+      onClick={open}
+      title="図をウィンドウいっぱいに表示します（Esc で閉じる）"
+    >
+      ⛶ 全画面
+    </button>
+  );
+
+  return (
+    <>
+      {trigger}
       <dialog
         ref={dialogRef}
         onClose={() => {
