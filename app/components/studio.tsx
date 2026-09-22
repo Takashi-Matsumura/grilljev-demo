@@ -271,7 +271,7 @@ export function Studio({ session }: { session: StudioSession }) {
                 やり直す
               </button>
               <button type="button" className={TOPBAR_BTN} onClick={() => setResetConfirming(false)}>
-                やめる
+                キャンセル
               </button>
             </>
           ) : (
