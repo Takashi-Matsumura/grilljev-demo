@@ -16,6 +16,7 @@ import { MicTranscriber } from "./mic-transcriber";
 import { SamplePanel, type SampleMode } from "./sample-panel";
 import { ScopeBanner } from "./scope-banner";
 import { useAutosave, type SaveStatus } from "./use-autosave";
+import { ToggleSwitch } from "./toggle-switch";
 import { useDevMode } from "./use-dev-mode";
 import { useFacilitator } from "./use-facilitator";
 import { usePipeline, type AnalysisJob } from "./use-pipeline";
@@ -290,14 +291,13 @@ export function Studio({ session }: { session: StudioSession }) {
         <p className={`text-xs ${SAVE_LABEL[saveStatus].cls}`} aria-live="polite">
           {saveStatus === "saved" ? "" : SAVE_LABEL[saveStatus].text}
         </p>
-        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-          <input
-            type="checkbox"
-            checked={devMode}
-            onChange={(e) => setDevMode(e.target.checked)}
-          />
-          開発者モード
-        </label>
+        <ToggleSwitch
+          checked={devMode}
+          onChange={setDevMode}
+          label="開発者モード"
+          onColorClass="bg-indigo-500"
+          className="text-xs text-zinc-500 dark:text-zinc-400"
+        />
       </div>
       <ScopeBanner
         proposal={shift.proposal}
