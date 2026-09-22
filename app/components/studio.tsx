@@ -303,6 +303,7 @@ export function Studio({ session }: { session: StudioSession }) {
         onSplit={onSplit}
         onRename={shift.rename}
         onDismiss={shift.dismiss}
+        devMode={devMode}
       />
       {/* 開発者モードのときだけ 3 列（右列= Jev コンソール）、それ以外は 2 列。
           1024px 未満は縦に積み、ページ全体をスクロールさせる。 */}
@@ -340,6 +341,7 @@ export function Studio({ session }: { session: StudioSession }) {
         </div>
         <div className="flex min-h-[28rem] flex-col lg:min-h-0 lg:overflow-y-auto">
           <FacilitatorPane
+            devMode={devMode}
             asked={asked}
             status={facilitator.status}
             auto={facilitator.auto}
@@ -372,6 +374,7 @@ export function Studio({ session }: { session: StudioSession }) {
             model={viewing}
             source={archived ? "none" : pipeline.source}
             onDecideStep={archived ? undefined : onDecideStep}
+            devMode={devMode}
           />
         </div>
         {devMode && <JevConsole entries={pipeline.entries} />}

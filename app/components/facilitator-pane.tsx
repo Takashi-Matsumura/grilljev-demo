@@ -1,19 +1,11 @@
 "use client";
 
-import type { IssueKind, OpenIssue } from "@/lib/model/types";
+import { ISSUE_KIND_LABEL } from "@/lib/model/labels";
+import type { OpenIssue } from "@/lib/model/types";
 import type { FacilitatorStatus } from "./use-facilitator";
 
-const KIND_LABEL: Record<IssueKind, string> = {
-  purpose: "目的",
-  who: "担当",
-  when: "時期",
-  criteria: "基準",
-  exception: "例外",
-  tool: "道具",
-  handoff: "引継ぎ",
-};
-
 type Props = {
+  devMode?: boolean;
   /** いま参加者に出している問い（無ければ null） */
   asked: OpenIssue | null;
   status: FacilitatorStatus;
@@ -72,7 +64,7 @@ export function FacilitatorPane(p: Props) {
         <div className="rounded-md border border-violet-300 bg-violet-50 p-3 dark:border-violet-500/40 dark:bg-violet-500/10">
           <div className="flex items-start gap-2">
             <span className="mt-0.5 shrink-0 rounded bg-violet-200 px-1.5 text-xs leading-5 text-violet-900 dark:bg-violet-500/30 dark:text-violet-100">
-              {KIND_LABEL[p.asked.kind]}
+              {ISSUE_KIND_LABEL[p.asked.kind]}
             </span>
             <p className="min-w-0 break-words text-base font-medium">{p.asked.prompt.text}</p>
           </div>
@@ -82,7 +74,7 @@ export function FacilitatorPane(p: Props) {
               {p.asked.prompt.suggestedAnswer}
             </p>
           )}
-          {(p.asked.ignored ?? 0) > 0 && (
+          {p.devMode && (p.asked.ignored ?? 0) > 0 && (
             <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
               答えないまま話が進みました（{p.asked.ignored}/2）。もう一度進むと保留にします。
             </p>
