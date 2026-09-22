@@ -1,5 +1,7 @@
 "use client";
 
+import { DisclosureIcon } from "./disclosure-icon";
+
 type Props = {
   cursor: number;
   total: number;
@@ -20,8 +22,11 @@ export function SamplePanel({ cursor, total, playing, topic, onTopicChange, onTo
     "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/20 dark:hover:bg-white/10";
 
   return (
-    <details open className="border-t border-black/10 px-4 py-3 dark:border-white/15">
-      <summary className="cursor-pointer text-sm font-medium">開発用サンプル</summary>
+    <details open className="group border-t border-black/10 px-4 py-3 dark:border-white/15">
+      <summary className="flex list-none cursor-pointer items-center gap-1.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
+        <DisclosureIcon />
+        開発用サンプル
+      </summary>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           題材
