@@ -107,6 +107,8 @@ type Props = {
   onJevEnabledChange: (enabled: boolean) => void;
   /** true の間はマイクの入力を無視する（ファシリテーターの読み上げ中） */
   paused?: boolean;
+  /** 開発用サンプルパネルが出ているか（空状態の案内文を変える） */
+  devMode?: boolean;
 };
 
 export function MicTranscriber({
@@ -116,6 +118,7 @@ export function MicTranscriber({
   jevEnabled,
   onJevEnabledChange,
   paused = false,
+  devMode = false,
 }: Props) {
   const [vocab, setVocab] = useState("");
 
@@ -300,7 +303,7 @@ export function MicTranscriber({
         {lines.length === 0 ? (
           <p className="text-sm text-zinc-500">
             「録音開始」を押して話すと、区切りごとにここへ行が増えます。最初の 1 秒は環境音の計測に使います。
-            マイクなしで試すときは、下の「開発用サンプル」を使えます。
+            {devMode && "マイクなしで試すときは、下の「開発用サンプル」を使えます。"}
           </p>
         ) : (
           <ol className="flex flex-col gap-2">
