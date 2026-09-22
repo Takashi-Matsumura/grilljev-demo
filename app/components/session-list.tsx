@@ -16,6 +16,9 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [renaming, setRenaming] = useState(false);
 
   async function create(t: string, d: string[]) {
     setBusy(true);
@@ -40,6 +43,34 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
     const res = await fetch(`/api/sessions/${slug}`, { method: "DELETE" });
     if (res.ok || res.status === 404) setSessions((s) => s.filter((x) => x.slug !== slug));
     else setError("削除に失敗しました");
+  }
+
+  function startEdit(slug: string, name: string) {
+    setConfirming(null);
+    setError(null);
+    setEditingSlug(slug);
+    setEditName(name);
+  }
+
+  async function saveRename(slug: string) {
+    setRenaming(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sessions/${slug}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: editName }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { name?: string; error?: string };
+      if (!res.ok || !data.name) throw new Error(data.error ?? "名前の変更に失敗しました");
+      const name = data.name;
+      setSessions((prev) => prev.map((x) => (x.slug === slug ? { ...x, name } : x)));
+      setEditingSlug(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "名前の変更に失敗しました");
+    } finally {
+      setRenaming(false);
+    }
   }
 
   const input =
@@ -104,13 +135,45 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
           <ul className="flex flex-col gap-2">
             {sessions.map((s) => (
               <li key={s.slug} className="flex items-center gap-3 rounded-md border border-black/10 p-3 dark:border-white/15">
-                <a href={`/s/${s.slug}`} className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{s.name}</span>
-                  <span className="block text-xs text-zinc-500">
-                    {s.title} ／ 更新 {fmt(s.updatedAt)} ／ 発話 {s.lines}・ステップ {s.steps}
+                {editingSlug === s.slug ? (
+                  <div className="min-w-0 flex-1">
+                    <input
+                      autoFocus
+                      className={input}
+                      value={editName}
+                      maxLength={60}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void saveRename(s.slug);
+                        if (e.key === "Escape") setEditingSlug(null);
+                      }}
+                    />
+                    <span className="block text-xs text-zinc-500">
+                      {s.title} ／ 更新 {fmt(s.updatedAt)} ／ 発話 {s.lines}・ステップ {s.steps}
+                    </span>
+                  </div>
+                ) : (
+                  <a href={`/s/${s.slug}`} className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{s.name}</span>
+                    <span className="block text-xs text-zinc-500">
+                      {s.title} ／ 更新 {fmt(s.updatedAt)} ／ 発話 {s.lines}・ステップ {s.steps}
+                    </span>
+                  </a>
+                )}
+                {editingSlug === s.slug ? (
+                  <span className="flex shrink-0 gap-2">
+                    <button
+                      className={btn}
+                      disabled={renaming || editName.trim() === ""}
+                      onClick={() => void saveRename(s.slug)}
+                    >
+                      保存
+                    </button>
+                    <button className={btn} disabled={renaming} onClick={() => setEditingSlug(null)}>
+                      やめる
+                    </button>
                   </span>
-                </a>
-                {confirming === s.slug ? (
+                ) : confirming === s.slug ? (
                   <span className="flex shrink-0 gap-2">
                     <button className={btn} onClick={() => void remove(s.slug)}>
                       削除する
@@ -120,9 +183,14 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
                     </button>
                   </span>
                 ) : (
-                  <button className={btn} onClick={() => setConfirming(s.slug)}>
-                    削除
-                  </button>
+                  <span className="flex shrink-0 gap-2">
+                    <button className={btn} onClick={() => startEdit(s.slug, s.name)}>
+                      名前を変更
+                    </button>
+                    <button className={btn} onClick={() => setConfirming(s.slug)}>
+                      削除
+                    </button>
+                  </span>
                 )}
               </li>
             ))}

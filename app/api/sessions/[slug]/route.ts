@@ -1,5 +1,5 @@
-import { deleteSession, readSession, saveSession } from "@/lib/store/sessions";
-import { parseSessionPatch } from "@/lib/store/session-types";
+import { deleteSession, readSession, renameSession, saveSession } from "@/lib/store/sessions";
+import { parseName, parseSessionPatch } from "@/lib/store/session-types";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +32,18 @@ export async function PUT(request: Request, { params }: Ctx) {
   const saved = await saveSession(slug, patch);
   if (!saved) return Response.json({ error: "セッションが見つかりません" }, { status: 404 });
   return Response.json({ updatedAt: saved.updatedAt });
+}
+
+/** 会議名（一覧の表示名）だけを変える。図・文字起こしは PUT で保存する別経路。 */
+export async function PATCH(request: Request, { params }: Ctx) {
+  const { slug } = await params;
+  const body: unknown = await request.json().catch(() => null);
+  const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  const name = parseName(b.name);
+  if (!name) return Response.json({ error: "会議名を入力してください（60 文字以内）" }, { status: 400 });
+  const renamed = await renameSession(slug, name);
+  if (!renamed) return Response.json({ error: "セッションが見つかりません" }, { status: 404 });
+  return Response.json({ name: renamed.name, updatedAt: renamed.updatedAt });
 }
 
 export async function DELETE(_req: Request, { params }: Ctx) {
