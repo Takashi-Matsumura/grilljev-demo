@@ -121,6 +121,19 @@ export async function listSessions(): Promise<SessionMeta[]> {
   return metas.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+/** 会議名（一覧に出す表示名）だけを変える。対象業務そのもの（seed/model.scope.title）は変えない。 */
+export async function renameSession(slug: unknown, name: string): Promise<SessionFile | null> {
+  const loc = locate(slug);
+  if (!loc || !isValidSlug(slug)) return null;
+  return serial(slug, async () => {
+    const current = await readSession(slug);
+    if (!current) return null;
+    const next: SessionFile = { ...current, name, updatedAt: new Date().toISOString() };
+    await writeAtomic(loc.file, next);
+    return next;
+  });
+}
+
 export async function deleteSession(slug: unknown): Promise<boolean> {
   const loc = locate(slug);
   if (!loc || !isValidSlug(slug)) return false;
