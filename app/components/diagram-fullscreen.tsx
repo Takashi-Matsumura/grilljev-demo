@@ -233,8 +233,26 @@ export function FullscreenButton({
                 >
                   ＋
                 </button>
-                <button type="button" className={btn} onClick={() => dialogRef.current?.close()}>
-                  閉じる（Esc）
+                <button
+                  type="button"
+                  aria-label="閉じる（Esc）"
+                  title="閉じる（Esc）"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  onClick={() => dialogRef.current?.close()}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
                 </button>
               </div>
             </div>
