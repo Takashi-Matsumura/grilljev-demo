@@ -2,6 +2,7 @@
 
 import { ISSUE_KIND_LABEL } from "@/lib/model/labels";
 import type { OpenIssue } from "@/lib/model/types";
+import { ToggleSwitch } from "./toggle-switch";
 import type { FacilitatorStatus } from "./use-facilitator";
 
 type Props = {
@@ -36,27 +37,25 @@ export function FacilitatorPane(p: Props) {
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <h2 className="font-medium">ファシリテーター</h2>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-          <label className="flex items-center gap-1.5" title="間が空いたときなどに、自動で問いを出します">
-            <input type="checkbox" checked={p.auto} onChange={(e) => p.onAutoChange(e.target.checked)} />
-            自動で問いかける
-          </label>
-          <label
-            className="flex items-center gap-1.5"
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <ToggleSwitch
+            checked={p.auto}
+            onChange={p.onAutoChange}
+            label="自動で問いかける"
+            title="間が空いたときなどに、自動で問いを出します"
+          />
+          <ToggleSwitch
+            checked={p.speakEnabled}
+            onChange={p.onSpeakEnabledChange}
+            label="読み上げ"
             title={
               p.speakSupported
                 ? "問いをブラウザ内蔵の音声で読み上げます（読み上げ中はマイクの入力を無視します）"
                 : "このブラウザは読み上げに対応していません"
             }
-          >
-            <input
-              type="checkbox"
-              checked={p.speakEnabled}
-              disabled={!p.speakSupported}
-              onChange={(e) => p.onSpeakEnabledChange(e.target.checked)}
-            />
-            読み上げ
-          </label>
+            onColorClass="bg-sky-500"
+            disabled={!p.speakSupported}
+          />
         </div>
       </div>
 
