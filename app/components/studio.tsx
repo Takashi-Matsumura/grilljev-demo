@@ -6,14 +6,14 @@ import { modelFromScope } from "@/lib/model/reducer";
 import type { FlowModel } from "@/lib/model/types";
 import type { ArchivedDiagram } from "@/lib/scope/apply";
 import type { SessionSeed } from "@/lib/store/session-types";
-import { APP_SCENARIO, SAMPLE_SCENARIO, SAMPLE_SHIFT_SCENARIO } from "@/lib/sample/scenario";
+import { APP_SCENARIO, SAMPLE_SCENARIO } from "@/lib/sample/scenario";
 import { clock, type Line, type LineLabeling } from "@/lib/transcript/line";
 import { DiagramPane } from "./diagram-pane";
 import { DiagramTabs } from "./diagram-tabs";
 import { FacilitatorPane } from "./facilitator-pane";
 import { JevConsole } from "./jev-console";
 import { MicTranscriber } from "./mic-transcriber";
-import { SamplePanel, type SampleMode } from "./sample-panel";
+import { SamplePanel } from "./sample-panel";
 import { ScopeBanner } from "./scope-banner";
 import { useAutosave, type SaveStatus } from "./use-autosave";
 import { ToggleSwitch } from "./toggle-switch";
@@ -59,9 +59,7 @@ export function Studio({ session }: { session: StudioSession }) {
   );
   const [cursor, setCursor] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [mode, setMode] = useState<SampleMode>("script");
-  const [withShift, setWithShift] = useState(false);
-  /** 台本の題材。"app" はこのアプリの仕組み（Jev モード専用） */
+  /** 台本の題材。"app" はこのアプリの仕組み */
   const [topic, setTopic] = useState<"loan" | "app">("loan");
   const [jevEnabled, setJevEnabled] = useState(true);
   const [speakEnabled, setSpeakEnabled] = useState(false);
@@ -108,7 +106,7 @@ export function Studio({ session }: { session: StudioSession }) {
     resumeModel: session.model,
     initialArchives: session.archives,
   });
-  const { analyze, applyScript, commit, getModel, getSignals, pushEntry, splitDiagram } = pipeline;
+  const { analyze, commit, getModel, getSignals, pushEntry, splitDiagram } = pipeline;
   const { reset: resetPipeline } = pipeline;
 
   const shift = useScopeShift({ getModel, commit, splitDiagram, pushEntry });
@@ -155,17 +153,10 @@ export function Studio({ session }: { session: StudioSession }) {
     [analyze],
   );
 
-  const scenario = useMemo(
-    () =>
-      topic === "app"
-        ? APP_SCENARIO
-        : withShift
-          ? [...SAMPLE_SCENARIO, ...SAMPLE_SHIFT_SCENARIO]
-          : SAMPLE_SCENARIO,
-    [topic, withShift],
-  );
+  const scenario = useMemo(() => (topic === "app" ? APP_SCENARIO : SAMPLE_SCENARIO), [topic]);
   const finished = cursor >= scenario.length;
 
+  /** 台本を 1 行進める。判定は常に Jev（固定の変更をそのまま流す「台本」モードは廃止した） */
   const playNext = useCallback(() => {
     const entry = scenario[cursor];
     if (!entry) return;
@@ -178,16 +169,10 @@ export function Studio({ session }: { session: StudioSession }) {
       audioMs: 0,
       sample: true,
     };
-
-    if (mode === "script") {
-      setLines((prev) => [...prev, { ...base, tag: entry.kind }]);
-      applyScript(entry.ops);
-    } else {
-      setLines((prev) => [...prev, { ...base, expected: entry.kind }]);
-      analyze({ lineId: id, text: entry.text, expected: entry.kind });
-    }
+    setLines((prev) => [...prev, { ...base, expected: entry.kind }]);
+    analyze({ lineId: id, text: entry.text, expected: entry.kind });
     setCursor(cursor + 1);
-  }, [cursor, mode, scenario, applyScript, analyze]);
+  }, [cursor, scenario, analyze]);
 
   useEffect(() => {
     if (!playing || finished) return;
@@ -325,17 +310,12 @@ export function Studio({ session }: { session: StudioSession }) {
               cursor={cursor}
               total={scenario.length}
               playing={playing}
-              mode={mode}
-              onModeChange={setMode}
               topic={topic}
               onTopicChange={(t) => {
                 setTopic(t);
                 setCursor(0);
                 setPlaying(false);
-                if (t === "app") setMode("jev");
               }}
-              withShift={withShift}
-              onWithShiftChange={setWithShift}
               onTogglePlay={() => setPlaying((p) => !p)}
               onNext={playNext}
             />
