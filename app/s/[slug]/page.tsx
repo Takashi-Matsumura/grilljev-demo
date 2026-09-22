@@ -17,8 +17,13 @@ export default async function SessionPage(props: PageProps<"/s/[slug]">) {
     <div className="flex h-dvh flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-black/10 px-4 py-2 dark:border-white/15">
         <div className="flex min-w-0 items-baseline gap-3">
-          <Link href="/" className="text-sm text-zinc-500 hover:underline">
-            ← 一覧
+          <Link
+            href="/"
+            aria-label="一覧に戻る"
+            title="一覧に戻る"
+            className="shrink-0 rounded-md border border-black/15 px-2 py-1 text-sm text-zinc-500 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            ←
           </Link>
           <h1 className="truncate text-lg font-semibold">{session.name}</h1>
         </div>

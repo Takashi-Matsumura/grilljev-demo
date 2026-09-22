@@ -20,6 +20,7 @@ import { useAutosave, type SaveStatus } from "./use-autosave";
 import { ToggleSwitch } from "./toggle-switch";
 import { useDevMode } from "./use-dev-mode";
 import { useFacilitator } from "./use-facilitator";
+import { useLeftWidth } from "./use-left-width";
 import { usePipeline, type AnalysisJob } from "./use-pipeline";
 import { useScopeShift } from "./use-scope-shift";
 import { useSpeech } from "./use-speech";
@@ -42,10 +43,15 @@ const SAVE_LABEL: Record<SaveStatus, { text: string; cls: string }> = {
   error: { text: "保存できていません（再試行します）", cls: "text-amber-600 dark:text-amber-400" },
 };
 
-/** Jev コンソール（開発者モード）を含めるかどうかで、3 列 / 2 列を切り替える。
- * Tailwind の JIT スキャンに引っかかるよう、クラス文字列は分岐せず両方をそのまま書く。 */
-const GRID_DEV = "flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:overflow-hidden";
-const GRID_PLAIN = "flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-2 lg:overflow-hidden";
+/** 開発者モードなら3列（右列= Jev コンソール）、それ以外は2列。
+ * 列幅はここでは決めない（下の gridTemplateColumns を参照。左カラムをドラッグで
+ * 調整できるようにするため、Tailwind の静的クラスではなく実行時に組み立てる）。 */
+const MAIN_CLASS = "flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:overflow-hidden";
+
+const DIVIDER_PX = 6;
+const LEFT_MIN_PX = 280;
+/** 右側（開発者モードなら Jev コンソール分も込みで）に必ず残す幅 */
+const REST_MIN_PX = 320;
 
 const TOPBAR_BTN =
   "rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10";
@@ -72,6 +78,46 @@ export function Studio({ session }: { session: StudioSession }) {
   const jevEnabledRef = useRef(jevEnabled);
   const linesRef = useRef(lines);
   const lastSpokenRef = useRef<string | null>(null);
+
+  // ── 左カラム（文字起こし）の幅をドラッグで調整 ──
+  const [leftWidth, setLeftWidth] = useLeftWidth();
+  const mainRef = useRef<HTMLElement>(null);
+  const leftPaneRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const onDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const width = leftPaneRef.current?.getBoundingClientRect().width ?? LEFT_MIN_PX;
+    dragStartRef.current = { startX: e.clientX, startWidth: width };
+    setDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      const start = dragStartRef.current;
+      const rect = mainRef.current?.getBoundingClientRect();
+      if (!start || !rect) return;
+      const max = Math.max(LEFT_MIN_PX, rect.width - DIVIDER_PX - REST_MIN_PX);
+      const next = start.startWidth + (e.clientX - start.startX);
+      setLeftWidth(Math.min(Math.max(next, LEFT_MIN_PX), max));
+    };
+    const onUp = () => {
+      dragStartRef.current = null;
+      setDragging(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragging, setLeftWidth]);
+
+  const gridTemplateColumns = `${leftWidth === null ? "minmax(0,1fr)" : `${leftWidth}px`} ${DIVIDER_PX}px minmax(0,1fr)${
+    devMode ? " auto" : ""
+  }`;
 
   useEffect(() => {
     jevEnabledRef.current = jevEnabled;
@@ -297,9 +343,13 @@ export function Studio({ session }: { session: StudioSession }) {
         devMode={devMode}
       />
       {/* 開発者モードのときだけ 3 列（右列= Jev コンソール）、それ以外は 2 列。
-          1024px 未満は縦に積み、ページ全体をスクロールさせる。 */}
-      <main className={devMode ? GRID_DEV : GRID_PLAIN}>
-        <div className="flex min-h-[28rem] flex-col border-b border-black/10 lg:min-h-0 lg:border-b-0 lg:border-r dark:border-white/15">
+          1024px 未満は縦に積み、ページ全体をスクロールさせる。左カラムの幅は
+          gridTemplateColumns で実行時に決める（ドラッグで調整できるようにするため）。 */}
+      <main ref={mainRef} className={MAIN_CLASS} style={{ gridTemplateColumns }}>
+        <div
+          ref={leftPaneRef}
+          className="flex min-h-[28rem] flex-col border-b border-black/10 lg:min-h-0 lg:border-b-0 dark:border-white/15"
+        >
           <MicTranscriber
             lines={lines}
             setLines={setLines}
@@ -326,6 +376,17 @@ export function Studio({ session }: { session: StudioSession }) {
             />
           )}
         </div>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="左右のペインの境界"
+          title="ドラッグして幅を調整（ダブルクリックで既定に戻す）"
+          onMouseDown={onDividerMouseDown}
+          onDoubleClick={() => setLeftWidth(null)}
+          className={`hidden shrink-0 cursor-col-resize border-x border-black/10 lg:block dark:border-white/15 ${
+            dragging ? "bg-black/10 dark:bg-white/15" : "hover:bg-black/5 dark:hover:bg-white/10"
+          }`}
+        />
         <div className="flex min-h-[28rem] flex-col lg:min-h-0 lg:overflow-hidden">
           <FacilitatorPane
             devMode={devMode}

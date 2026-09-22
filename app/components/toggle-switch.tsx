@@ -8,6 +8,7 @@ type Props = {
   /** ON のときの色（トグルごとに変えて見分けやすくする）。既定は Jev 判定と同じ緑 */
   onColorClass?: string;
   className?: string;
+  disabled?: boolean;
 };
 
 /** ON/OFF のスイッチ（チェックボックスの代わり）。ラベルは短く、意味は title で補う。 */
@@ -18,15 +19,17 @@ export function ToggleSwitch({
   title,
   onColorClass = "bg-emerald-500",
   className = "text-sm text-zinc-600 dark:text-zinc-400",
+  disabled = false,
 }: Props) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
       title={title}
-      className={`flex items-center gap-2 ${className}`}
+      className={`flex items-center gap-2 disabled:opacity-40 ${className}`}
     >
       <span
         aria-hidden
