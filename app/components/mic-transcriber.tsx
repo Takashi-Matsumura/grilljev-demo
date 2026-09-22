@@ -5,6 +5,7 @@ import { resampleTo16k, encodeWav } from "@/lib/audio/wav";
 import { useRecorder } from "@/lib/audio/use-recorder";
 import type { Segment } from "@/lib/audio/vad";
 import { clock, type Line, type LineAnalysis, type LineLabeling } from "@/lib/transcript/line";
+import { ToggleSwitch } from "./toggle-switch";
 
 type Pending = { id: string; blob: Blob };
 
@@ -241,28 +242,12 @@ export function MicTranscriber({
     <section className="flex min-h-0 flex-1 flex-col gap-3 p-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-medium">文字起こし</h2>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={jevEnabled}
-          onClick={() => onJevEnabledChange(!jevEnabled)}
+        <ToggleSwitch
+          checked={jevEnabled}
+          onChange={onJevEnabledChange}
+          label="Jev"
           title="ON の間、確定した文字起こしを 1 行ごとに Jev（外部 API・課金）へ送って判定します"
-          className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"
-        >
-          <span
-            aria-hidden
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              jevEnabled ? "bg-emerald-500" : "bg-zinc-300 dark:bg-white/20"
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                jevEnabled ? "translate-x-4" : "translate-x-0.5"
-              }`}
-            />
-          </span>
-          Jev
-        </button>
+        />
       </div>
 
       <label className="flex flex-col gap-1 text-sm">
