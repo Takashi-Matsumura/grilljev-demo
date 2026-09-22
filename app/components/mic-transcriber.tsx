@@ -254,14 +254,20 @@ export function MicTranscriber({
             type="button"
             onClick={recording ? recorder.stop : () => void recorder.start()}
             disabled={recorder.state === "starting"}
-            className="group flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-2xl bg-foreground text-background shadow-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-lg active:translate-y-0 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
+            className={`group flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-2xl shadow-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-lg active:translate-y-0 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none ${
+              recording ? "bg-red-600 text-white hover:bg-red-700" : "bg-foreground text-background"
+            }`}
           >
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
-              {recording ? (
-                <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
-              ) : (
-                <circle cx="12" cy="12" r="7" fill="currentColor" />
-              )}
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+              {/* 録音中は、この丸が心拍のように鼓動する（transform-box を fill-box にして、
+                  丸自身の中心を基準に拡大縮小させる） */}
+              <circle
+                cx="12"
+                cy="12"
+                r="7"
+                fill="currentColor"
+                className={recording ? "origin-center animate-heartbeat [transform-box:fill-box]" : ""}
+              />
             </svg>
             <span className="text-xs font-medium">
               {recorder.state === "starting" ? "準備中…" : recording ? "停止" : "録音開始"}
@@ -269,7 +275,7 @@ export function MicTranscriber({
           </button>
 
           <div
-            className="h-2 w-24 overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
+            className="h-2 w-20 overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
             role="meter"
             aria-label="マイクの音量"
             aria-valuemin={0}
@@ -299,7 +305,15 @@ export function MicTranscriber({
         {/* 右: 見出し・Jevトグルと、追加の語彙ヒント */}
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="font-medium">文字起こし</h2>
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="font-medium">文字起こし</h2>
+              <span
+                className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600 dark:bg-white/10 dark:text-zinc-300"
+                title="音声認識にはローカルの whisper.cpp（Whisper）を使っています。音声は外に出ません"
+              >
+                Whisper
+              </span>
+            </div>
             <ToggleSwitch
               checked={jevEnabled}
               onChange={onJevEnabledChange}
@@ -309,17 +323,19 @@ export function MicTranscriber({
           </div>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span
-              className="text-zinc-600 dark:text-zinc-400"
-              title="対象業務名・登場人物名・書類やシステムの名前は、図が育つのに合わせて自動で whisper に渡ります。ここには、まだ図に出ていない語彙だけ足してください"
-            >
-              追加の語彙ヒント
+            <span className="flex items-center justify-between gap-2">
+              <span
+                className="shrink-0 text-zinc-600 dark:text-zinc-400"
+                title="対象業務名・登場人物名・書類やシステムの名前は、図が育つのに合わせて自動で whisper に渡ります。ここには、まだ図に出ていない語彙だけ足してください"
+              >
+                語彙ヒント
+              </span>
+              {autoVocab && (
+                <span className="min-w-0 truncate text-xs text-zinc-400" title={`自動: ${autoVocab}`}>
+                  自動: {autoVocab}
+                </span>
+              )}
             </span>
-            {autoVocab && (
-              <p className="truncate text-xs text-zinc-400" title={`自動: ${autoVocab}`}>
-                自動: {autoVocab}
-              </p>
-            )}
             <input
               value={manualVocab}
               onChange={(e) => setManualVocab(e.target.value)}
