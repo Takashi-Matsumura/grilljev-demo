@@ -8,6 +8,7 @@ import type { ArchivedDiagram } from "@/lib/scope/apply";
 import type { SessionSeed } from "@/lib/store/session-types";
 import { APP_SCENARIO, SAMPLE_SCENARIO } from "@/lib/sample/scenario";
 import { clock, type Line, type LineLabeling } from "@/lib/transcript/line";
+import { autoVocab } from "@/lib/transcript/vocab";
 import { DiagramPane } from "./diagram-pane";
 import { DiagramTabs } from "./diagram-tabs";
 import { FacilitatorPane } from "./facilitator-pane";
@@ -244,6 +245,9 @@ export function Studio({ session }: { session: StudioSession }) {
   const archived = pipeline.archives.find((a) => a.id === viewId) ?? null;
   const viewing = archived ? archived.model : pipeline.model;
 
+  // whisper への語彙ヒントの自動部分。図が育つほど（登場人物・書類名が増えるほど）伸びる
+  const autoVocabText = useMemo(() => autoVocab(pipeline.model), [pipeline.model]);
+
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-black/10 px-4 py-1.5 dark:border-white/15">
@@ -304,6 +308,7 @@ export function Studio({ session }: { session: StudioSession }) {
             onJevEnabledChange={setJevEnabled}
             paused={speech.speaking}
             devMode={devMode}
+            autoVocab={autoVocabText}
           />
           {devMode && (
             <SamplePanel

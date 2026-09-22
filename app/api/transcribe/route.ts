@@ -1,9 +1,9 @@
 import { cleanJapanese } from "@/lib/transcribe/clean";
+import { MAX_VOCAB_CHARS } from "@/lib/transcript/vocab";
 
 export const dynamic = "force-dynamic";
 
 const MAX_AUDIO_BYTES = 5 * 1024 * 1024; // 16kHz/16bit で 12 秒 ≈ 0.4MB。十分な余裕
-const MAX_VOCAB_CHARS = 200;
 const WHISPER_TIMEOUT_MS = 25_000;
 
 // whisper-server はモデル 1 個を排他で使うので、並列に投げても速くならない。
