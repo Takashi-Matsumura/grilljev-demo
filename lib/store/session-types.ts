@@ -4,8 +4,8 @@ import type { ArchivedDiagram } from "../scope/apply";
 import type { Line } from "../transcript/line";
 
 /**
- * 会議（セッション）の保存データ。純粋な部分（型・検証・正規化）。fs には触れない。
- * 保存は `sessions/<slug>/session.json`（lib/store/sessions.ts）。
+ * 会議（セッション）の保存データ。純粋な部分（型・検証・正規化）。DB には触れない。
+ * 保存は SQLite（`sessions/sessions.db`。lib/store/sessions.ts）。
  */
 
 /** 開始時の初期設定＝共通認識。「リセット」の戻り先にもなる。 */

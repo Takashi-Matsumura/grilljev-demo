@@ -4,6 +4,9 @@
   "description": "会議の音声から、業務フロー（シーケンス図）をリアルタイムに立ち上げるデモ（Jev + ローカル LLM）",
   "license": "MIT",
   "private": true,
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -20,7 +23,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
