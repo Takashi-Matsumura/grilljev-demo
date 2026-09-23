@@ -9,10 +9,22 @@
  *
  * **外部送信であることに注意。** state に入れたものは TypeSafe のサーバへ送られる。
  * 音声は外に出ないが、文字起こしテキストとフロー要素（アクター名・ステップ名・業務名）は出る。
+ *
+ * `JEV_BACKEND=local` にすると、同じ質問をローカルの OpenAI 互換サーバに答えさせる
+ * （`./jev-local`）。呼び出し側は何も変えなくてよいが、確率の性質が違う点に注意。
  */
+
+import { localBaseUrl, localTimeoutMs, postLocal } from "./jev-local";
 
 export const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 export const JEV_MODEL = "jev-latest";
+
+export type JevBackend = "typesafe" | "local";
+
+/** 既定は TypeSafe。`JEV_BACKEND=local` のときだけローカル判定器に切り替える。 */
+export function jevBackend(): JevBackend {
+  return process.env.JEV_BACKEND === "local" ? "local" : "typesafe";
+}
 
 /** 応答を待つ上限。ネットが遅いときに会議の進行を止めない。 */
 const TIMEOUT_MS = 8_000;
@@ -146,65 +158,97 @@ export function hasJevApiKey(): boolean {
   return !!process.env.TYPESAFE_API_KEY;
 }
 
+/** 1 回の呼び出しの結果。どのバックエンドに送ったかも持つ（コンソールにそのまま出す）。 */
+type BackendResult = { endpoint: string; model: string; response: JevResponse };
+
+type Backend = {
+  name: string;
+  timeoutMs: number;
+  call: (state: object, questions: Record<string, JevQuestion>, signal: AbortSignal) => Promise<BackendResult>;
+};
+
+const typesafeBackend: Backend = {
+  name: "Jev",
+  timeoutMs: TIMEOUT_MS,
+  async call(state, questions, signal) {
+    const apiKey = process.env.TYPESAFE_API_KEY;
+    if (!apiKey) throw new JevError("TYPESAFE_API_KEY が設定されていません", 500, "config");
+    const res = await fetch(JEV_ENDPOINT, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: JEV_MODEL, state, questions }),
+      signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw Object.assign(new Error(`Jev API が ${res.status} を返しました: ${body.slice(0, 300)}`), {
+        status: res.status,
+      });
+    }
+    return { endpoint: JEV_ENDPOINT, model: JEV_MODEL, response: (await res.json()) as JevResponse };
+  },
+};
+
+const localBackend: Backend = {
+  name: "ローカル判定器",
+  get timeoutMs() {
+    return localTimeoutMs();
+  },
+  async call(state, questions, signal) {
+    const r = await postLocal(state, questions, signal);
+    return { endpoint: `${localBaseUrl()}/v1/chat/completions`, model: r.model, response: r.response };
+  },
+};
+
 /** state と型つき質問群を 1 回のコールで並列評価させる。 */
 export async function postJev<S extends object>(
   state: S,
   questions: Record<string, JevQuestion>,
   signal?: AbortSignal,
 ): Promise<JevExchange<S>> {
-  const apiKey = process.env.TYPESAFE_API_KEY;
-  if (!apiKey) throw new JevError("TYPESAFE_API_KEY が設定されていません", 500, "config");
+  const backend = jevBackend() === "local" ? localBackend : typesafeBackend;
 
   const { coolingDown, retryAfterMs } = jevBreakerState();
   if (coolingDown) {
     throw new JevError(
-      `Jev が連続で失敗したため休止中です（あと ${Math.ceil(retryAfterMs / 1000)} 秒）`,
+      `${backend.name}が連続で失敗したため休止中です（あと ${Math.ceil(retryAfterMs / 1000)} 秒）`,
       503,
       "breaker",
     );
   }
 
   const startedAt = performance.now();
-  const timeout = AbortSignal.timeout(TIMEOUT_MS);
+  const timeoutMs = backend.timeoutMs;
+  const timeout = AbortSignal.timeout(timeoutMs);
   const combined = signal ? AbortSignal.any([timeout, signal]) : timeout;
 
-  let res: Response;
+  let result: BackendResult;
   try {
-    res = await fetch(JEV_ENDPOINT, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: JEV_MODEL, state, questions }),
-      signal: combined,
-    });
+    result = await backend.call(state, questions, combined);
   } catch (e) {
+    if (e instanceof JevError) throw e;
     if (timeout.aborted) {
       recordFailure();
-      throw new JevError(`Jev が ${TIMEOUT_MS / 1000} 秒以内に応答しませんでした`, 504, "timeout");
+      throw new JevError(`${backend.name}が ${timeoutMs / 1000} 秒以内に応答しませんでした`, 504, "timeout");
     }
     if (signal?.aborted) throw e;
+    const status = (e as { status?: unknown }).status;
+    if (typeof status === "number") {
+      if (isTransient(status)) recordFailure();
+      throw new JevError((e as Error).message, status, classify(status));
+    }
     recordFailure();
     throw new JevError(
-      `Jev に接続できません: ${e instanceof Error ? e.message : "不明なエラー"}`,
+      `${backend.name}に接続できません: ${e instanceof Error ? e.message : "不明なエラー"}`,
       502,
       "network",
     );
   }
 
-  if (!res.ok) {
-    if (isTransient(res.status)) recordFailure();
-    const body = await res.text().catch(() => "");
-    throw new JevError(
-      `Jev API が ${res.status} を返しました: ${body.slice(0, 300)}`,
-      res.status,
-      classify(res.status),
-    );
-  }
-
-  const response = (await res.json()) as JevResponse;
   recordSuccess();
   return {
-    request: { endpoint: JEV_ENDPOINT, model: JEV_MODEL, state, questions },
-    response,
+    request: { endpoint: result.endpoint, model: result.model, state, questions },
+    response: result.response,
     elapsedMs: Math.round(performance.now() - startedAt),
   };
 }

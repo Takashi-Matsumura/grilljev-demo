@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Interpretation } from "@/lib/analysis/interpret";
+import type { JevBackend } from "@/lib/jev";
 import { modelFromScope } from "@/lib/model/reducer";
 import type { FlowModel } from "@/lib/model/types";
 import type { ArchivedDiagram } from "@/lib/scope/apply";
@@ -56,7 +57,14 @@ const TOPBAR_BTN =
   "rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10";
 
 /** 3 列（文字起こし / 図とファシリテーター / Jev コンソール）で状態を共有するための親。 */
-export function Studio({ session }: { session: StudioSession }) {
+export function Studio({
+  session,
+  jevBackend,
+}: {
+  session: StudioSession;
+  /** 判定器の送り先。トグルの説明文を実態に合わせるためだけに使う */
+  jevBackend: JevBackend;
+}) {
   const [lines, setLines] = useState<Line[]>(session.lines);
   // やり直し（リセット）で戻る先は、会議を始めたときの初期設定
   const initialModel = useCallback(
@@ -345,6 +353,7 @@ export function Studio({ session }: { session: StudioSession }) {
             onFinalText={onMicText}
             jevEnabled={jevEnabled}
             onJevEnabledChange={setJevEnabled}
+            jevBackend={jevBackend}
             devMode={devMode}
             autoVocab={autoVocabText}
           />
