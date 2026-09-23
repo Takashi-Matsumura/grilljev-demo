@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Interpretation } from "@/lib/analysis/interpret";
-import type { JevBackend } from "@/lib/jev";
+import type { JevBackend } from "@/lib/jev-backend";
 import { modelFromScope } from "@/lib/model/reducer";
 import type { FlowModel } from "@/lib/model/types";
 import type { ArchivedDiagram } from "@/lib/scope/apply";
@@ -62,7 +62,7 @@ export function Studio({
   jevBackend,
 }: {
   session: StudioSession;
-  /** 判定器の送り先。トグルの説明文を実態に合わせるためだけに使う */
+  /** 判定器の送り先（サーバが cookie / 既定から決めた初期値）。トグルの説明文を実態に合わせるためだけに使う */
   jevBackend: JevBackend;
 }) {
   const [lines, setLines] = useState<Line[]>(session.lines);

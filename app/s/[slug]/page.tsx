@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { HealthButton } from "@/app/components/health-dialog";
 import { Studio } from "@/app/components/studio";
 import { checkHealth } from "@/lib/health";
-import { jevBackend } from "@/lib/jev";
 import { normalizeLoadedLines } from "@/lib/store/session-types";
 import { readSession } from "@/lib/store/sessions";
 
@@ -50,7 +49,7 @@ export default async function SessionPage(props: PageProps<"/s/[slug]">) {
           archives: session.archives,
           lines: normalizeLoadedLines(session.lines),
         }}
-        jevBackend={jevBackend()}
+        jevBackend={health.jevBackend}
       />
     </div>
   );
