@@ -3,10 +3,12 @@
  *
  * Jev は従量課金の外部 API なので、疎通確認では呼び出さない。
  * 「キーが設定されているか」だけを見る（実際の応答は段階 3 の /api/analyze で確かめる）。
- * ローカル判定器（JEV_BACKEND=local）はタダなので、/v1/models で実際に疎通を見る。
+ * ローカル判定器はタダなので、/v1/models で実際に疎通を見る。
+ * 判定器は画面で切り替えられるので、両方の状態を返す（`jev` は選んでいる方）。
  */
 
-import { jevBackend } from "./jev";
+import { currentJevBackend } from "./jev";
+import type { JevBackend } from "./jev-backend";
 import { localBaseUrl } from "./jev-local";
 
 export type ServiceStatus = {
@@ -18,7 +20,10 @@ export type ServiceStatus = {
 export type Health = {
   whisper: ServiceStatus;
   llama: ServiceStatus & { model?: string; nCtx?: number };
+  /** いま選んでいる判定器の状態（`jevBackends[jevBackend]` と同じ） */
   jev: ServiceStatus;
+  jevBackend: JevBackend;
+  jevBackends: Record<JevBackend, ServiceStatus>;
   checkedAt: string;
 };
 
@@ -83,21 +88,34 @@ async function checkLocalJev(): Promise<ServiceStatus> {
     const res = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
     if (!res.ok) return { ok: false, detail: `ローカル判定器 ${base}: HTTP ${res.status}` };
     const json = (await res.json()) as { data?: { id?: string }[] };
-    const model = process.env.JEV_LOCAL_MODEL ?? json.data?.[0]?.id ?? "モデル不明";
+    const model = process.env.JEV_LOCAL_MODEL || json.data?.[0]?.id || "モデル不明";
     return { ok: true, detail: `ローカル判定器 ${base}（${model}）` };
   } catch (e) {
     return { ok: false, detail: `ローカル判定器 ${base}: ${errorMessage(e)}` };
   }
 }
 
-async function checkJev(): Promise<ServiceStatus> {
-  if (jevBackend() === "local") return checkLocalJev();
+function checkTypesafeJev(): ServiceStatus {
   return process.env.TYPESAFE_API_KEY
     ? { ok: true, detail: "TYPESAFE_API_KEY 設定済み（疎通は未確認）" }
     : { ok: false, detail: "TYPESAFE_API_KEY が未設定（.env.local に設定）" };
 }
 
+/** リクエストの中でだけ呼べる（選んでいる判定器を cookie から読む）。 */
 export async function checkHealth(): Promise<Health> {
-  const [whisper, llama, jev] = await Promise.all([checkWhisper(), checkLlama(), checkJev()]);
-  return { whisper, llama, jev, checkedAt: new Date().toISOString() };
+  const [whisper, llama, local, jevBackend] = await Promise.all([
+    checkWhisper(),
+    checkLlama(),
+    checkLocalJev(),
+    currentJevBackend(),
+  ]);
+  const jevBackends = { typesafe: checkTypesafeJev(), local };
+  return {
+    whisper,
+    llama,
+    jev: jevBackends[jevBackend],
+    jevBackend,
+    jevBackends,
+    checkedAt: new Date().toISOString(),
+  };
 }

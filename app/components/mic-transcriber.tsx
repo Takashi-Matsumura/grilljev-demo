@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import { resampleTo16k, encodeWav } from "@/lib/audio/wav";
 import { useRecorder } from "@/lib/audio/use-recorder";
 import type { Segment } from "@/lib/audio/vad";
-import type { JevBackend } from "@/lib/jev";
+import type { JevBackend } from "@/lib/jev-backend";
 import { clock, type Line, type LineAnalysis, type LineLabeling } from "@/lib/transcript/line";
 import { combineVocab } from "@/lib/transcript/vocab";
 import { ToggleSwitch } from "./toggle-switch";
+import { useJevBackend } from "./use-jev-backend";
 
 type Pending = { id: string; blob: Blob };
 
@@ -119,7 +120,7 @@ type Props = {
   onFinalText: (lineId: string, text: string) => void;
   jevEnabled: boolean;
   onJevEnabledChange: (enabled: boolean) => void;
-  /** 判定器の送り先（TypeSafe の Jev か、ローカル判定器か） */
+  /** 判定器の送り先の初期値（切り替えはバックエンドの状態ダイアログで行い、ここへ同期される） */
   jevBackend: JevBackend;
   /** true の間はマイクの入力を無視する（ファシリテーターの読み上げ中） */
   paused?: boolean;
@@ -135,11 +136,12 @@ export function MicTranscriber({
   onFinalText,
   jevEnabled,
   onJevEnabledChange,
-  jevBackend,
+  jevBackend: initialJevBackend,
   paused = false,
   devMode = false,
   autoVocab = "",
 }: Props) {
+  const [jevBackend] = useJevBackend(initialJevBackend);
   /** 利用者が手で足す分だけを持つ。自動の語彙とは送信時に合成し、自動側の増減で消えたりしない */
   const [manualVocab, setManualVocab] = useState("");
 

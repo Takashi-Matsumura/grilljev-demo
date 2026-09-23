@@ -2,22 +2,34 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Health } from "@/lib/health";
+import { JEV_BACKENDS, JEV_BACKEND_LABELS, type JevBackend } from "@/lib/jev-backend";
 import { ToggleSwitch } from "./toggle-switch";
 import { useDevMode } from "./use-dev-mode";
 import { useFacilitatorAuto } from "./use-facilitator-auto";
+import { useJevBackend } from "./use-jev-backend";
 
 const POLL_MS = 10_000;
 
 type Row = { key: string; label: string; ok: boolean; detail: string };
 
-function toRows(h: Health): Row[] {
+const JEV_BACKEND_HINTS: Record<JevBackend, string> = {
+  typesafe: "外部 API・課金。確率は Jev が出す",
+  local: "外部に送らない。確率はモデルの自己申告",
+};
+
+function toRows(h: Health, backend: JevBackend): Row[] {
   const llamaDetail = h.llama.ok
     ? [h.llama.model, h.llama.nCtx ? `ctx ${h.llama.nCtx}` : null].filter(Boolean).join(" · ")
     : h.llama.detail;
   return [
     { key: "whisper", label: "whisper（文字起こし）", ok: h.whisper.ok, detail: h.whisper.detail },
     { key: "llama", label: "llama（gemma）", ok: h.llama.ok, detail: llamaDetail },
-    { key: "jev", label: "Jev", ok: h.jev.ok, detail: h.jev.detail },
+    {
+      key: "jev",
+      label: `判定器: ${JEV_BACKEND_LABELS[backend]}`,
+      ok: h.jevBackends[backend].ok,
+      detail: h.jevBackends[backend].detail,
+    },
   ];
 }
 
@@ -29,6 +41,8 @@ export function HealthButton({ initial }: { initial: Health }) {
   const [devMode] = useDevMode();
   // ファシリテーターの自動問いかけ。Studio とは別の React ツリーなので、同じ作法で共有する
   const [facilitatorAuto, setFacilitatorAuto] = useFacilitatorAuto();
+  // 判定器の送り先。cookie に入り、以降の /api/analyze などがそれを読む
+  const [jevBackend, setJevBackend] = useJevBackend(initial.jevBackend);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -48,7 +62,7 @@ export function HealthButton({ initial }: { initial: Health }) {
     return () => clearInterval(id);
   }, [refresh]);
 
-  const rows = toRows(health);
+  const rows = toRows(health, jevBackend);
   const allOk = rows.every((r) => r.ok);
   const dot = stale ? "bg-zinc-400" : allOk ? "bg-emerald-500" : "bg-red-500";
   const summary = stale
@@ -119,6 +133,43 @@ export function HealthButton({ initial }: { initial: Health }) {
             title="間が空いたときなどに、業務フロー図の上に問いを浮かせて出します"
           />
         </div>
+        <div className="flex flex-col gap-2 border-b border-black/10 px-4 py-3 dark:border-white/15">
+          <span className="font-medium">判定器</span>
+          <div role="radiogroup" aria-label="判定器" className="grid grid-cols-2 gap-2">
+            {JEV_BACKENDS.map((b) => {
+              const selected = b === jevBackend;
+              const status = health.jevBackends[b];
+              return (
+                <button
+                  key={b}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    setJevBackend(b);
+                    void refresh();
+                  }}
+                  className={`flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left ${
+                    selected
+                      ? "border-sky-500 bg-sky-500/10"
+                      : "border-black/10 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <span
+                      aria-hidden
+                      className={`inline-block h-2 w-2 rounded-full ${
+                        stale ? "bg-zinc-400" : status.ok ? "bg-emerald-500" : "bg-red-500"
+                      }`}
+                    />
+                    {JEV_BACKEND_LABELS[b]}
+                  </span>
+                  <span className="text-xs text-zinc-500">{JEV_BACKEND_HINTS[b]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <ul className="flex flex-col gap-2 p-4">
           {rows.map((r) => (
             <li
@@ -153,7 +204,7 @@ export function HealthButton({ initial }: { initial: Health }) {
             </li>
           )}
         </ul>
-        {devMode && (
+        {devMode && jevBackend === "typesafe" && (
           <p className="border-t border-black/10 px-4 py-3 text-xs text-zinc-500 dark:border-white/15">
             Jev は課金される外部 API のため、ここではキーの有無だけを確認します（実際の疎通は未確認）。
           </p>

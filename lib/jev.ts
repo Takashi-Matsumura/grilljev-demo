@@ -10,20 +10,30 @@
  * **外部送信であることに注意。** state に入れたものは TypeSafe のサーバへ送られる。
  * 音声は外に出ないが、文字起こしテキストとフロー要素（アクター名・ステップ名・業務名）は出る。
  *
- * `JEV_BACKEND=local` にすると、同じ質問をローカルの OpenAI 互換サーバに答えさせる
- * （`./jev-local`）。呼び出し側は何も変えなくてよいが、確率の性質が違う点に注意。
+ * 送り先は画面（バックエンドの状態ダイアログ）で切り替えられ、ブラウザの cookie
+ * （`JEV_BACKEND_COOKIE`）に入る。cookie が無ければ `JEV_BACKEND` の値に従う。
+ * `local` のときは同じ質問をローカルの OpenAI 互換サーバに答えさせる（`./jev-local`）。
+ * 呼び出し側は何も変えなくてよいが、確率の性質が違う点に注意。
  */
 
+import { cookies } from "next/headers";
+import { JEV_BACKEND_COOKIE, parseJevBackend, type JevBackend } from "./jev-backend";
 import { localBaseUrl, localTimeoutMs, postLocal } from "./jev-local";
+
+export type { JevBackend } from "./jev-backend";
 
 export const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 export const JEV_MODEL = "jev-latest";
 
-export type JevBackend = "typesafe" | "local";
+/** cookie が無いときの送り先。既定は TypeSafe。`JEV_BACKEND=local` のときだけローカル判定器。 */
+export function defaultJevBackend(): JevBackend {
+  return parseJevBackend(process.env.JEV_BACKEND) ?? "typesafe";
+}
 
-/** 既定は TypeSafe。`JEV_BACKEND=local` のときだけローカル判定器に切り替える。 */
-export function jevBackend(): JevBackend {
-  return process.env.JEV_BACKEND === "local" ? "local" : "typesafe";
+/** このリクエストの送り先。画面で選んだもの（cookie）、無ければ既定。リクエストの中でだけ呼べる。 */
+export async function currentJevBackend(): Promise<JevBackend> {
+  const store = await cookies();
+  return parseJevBackend(store.get(JEV_BACKEND_COOKIE)?.value) ?? defaultJevBackend();
 }
 
 /** 応答を待つ上限。ネットが遅いときに会議の進行を止めない。 */
@@ -121,10 +131,15 @@ export class JevError extends Error {
 
 // ─── 回路ブレーカ ────────────────────────────────────────────────────
 
-const breaker = { failures: 0, coolUntil: 0 };
+/** 送り先ごとに持つ。片方が落ちて休止中でも、切り替えた先はすぐ使えるようにする。 */
+const breakers: Record<JevBackend, { failures: number; coolUntil: number }> = {
+  typesafe: { failures: 0, coolUntil: 0 },
+  local: { failures: 0, coolUntil: 0 },
+};
 
 /** 一時的な失敗（回復しうるもの）だけを数える。401/422 は設定・実装の誤りなので数えない。 */
-function recordFailure(): void {
+function recordFailure(backend: JevBackend): void {
+  const breaker = breakers[backend];
   breaker.failures += 1;
   if (breaker.failures >= COOL_DOWN_AFTER) {
     breaker.coolUntil = Date.now() + COOL_DOWN_MS;
@@ -132,13 +147,14 @@ function recordFailure(): void {
   }
 }
 
-function recordSuccess(): void {
+function recordSuccess(backend: JevBackend): void {
+  const breaker = breakers[backend];
   breaker.failures = 0;
   breaker.coolUntil = 0;
 }
 
-export function jevBreakerState(): { coolingDown: boolean; retryAfterMs: number } {
-  const retryAfterMs = Math.max(0, breaker.coolUntil - Date.now());
+export function jevBreakerState(backend: JevBackend): { coolingDown: boolean; retryAfterMs: number } {
+  const retryAfterMs = Math.max(0, breakers[backend].coolUntil - Date.now());
   return { coolingDown: retryAfterMs > 0, retryAfterMs };
 }
 
@@ -206,9 +222,10 @@ export async function postJev<S extends object>(
   questions: Record<string, JevQuestion>,
   signal?: AbortSignal,
 ): Promise<JevExchange<S>> {
-  const backend = jevBackend() === "local" ? localBackend : typesafeBackend;
+  const which = await currentJevBackend();
+  const backend = which === "local" ? localBackend : typesafeBackend;
 
-  const { coolingDown, retryAfterMs } = jevBreakerState();
+  const { coolingDown, retryAfterMs } = jevBreakerState(which);
   if (coolingDown) {
     throw new JevError(
       `${backend.name}が連続で失敗したため休止中です（あと ${Math.ceil(retryAfterMs / 1000)} 秒）`,
@@ -228,16 +245,16 @@ export async function postJev<S extends object>(
   } catch (e) {
     if (e instanceof JevError) throw e;
     if (timeout.aborted) {
-      recordFailure();
+      recordFailure(which);
       throw new JevError(`${backend.name}が ${timeoutMs / 1000} 秒以内に応答しませんでした`, 504, "timeout");
     }
     if (signal?.aborted) throw e;
     const status = (e as { status?: unknown }).status;
     if (typeof status === "number") {
-      if (isTransient(status)) recordFailure();
+      if (isTransient(status)) recordFailure(which);
       throw new JevError((e as Error).message, status, classify(status));
     }
-    recordFailure();
+    recordFailure(which);
     throw new JevError(
       `${backend.name}に接続できません: ${e instanceof Error ? e.message : "不明なエラー"}`,
       502,
@@ -245,7 +262,7 @@ export async function postJev<S extends object>(
     );
   }
 
-  recordSuccess();
+  recordSuccess(which);
   return {
     request: { endpoint: result.endpoint, model: result.model, state, questions },
     response: result.response,
