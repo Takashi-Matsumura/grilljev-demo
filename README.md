@@ -42,7 +42,7 @@ Jev は「既存のアクター一覧・ステップ一覧・未解決の論点�
 
 - Node.js 22.5 以上（Next.js 16。`node:sqlite` を使うため）
 - **whisper.cpp**: `whisper-server` と、日本語向けのモデル（動作確認は `ggml-large-v3-turbo-q5_0.bin`）
-- **llama.cpp**: `llama-server` と、gemma 系の instruct モデル（動作確認は `gemma-4-12b-it` Q4_K_M）
+- **llama.cpp**: `llama-server` と、gemma 系の instruct モデル（動作確認は `gemma-4-12b-it` Q4_K_M と `gemma-4-E4B-it` Q4_K_M。常駐させているのは後者）
 - **TypeSafe AI の API キー**（[コンソール](https://console.typesafe.ai/)で発行）
 - Web Audio が使えるブラウザ（Chrome で確認）とマイク
 
@@ -73,6 +73,84 @@ npm run dev
 
 http://localhost:3000 を開きます。画面右上の心拍アイコンで、3 つのバックエンドの状態を確認できます
 （Jev はキーの有無だけを見ます。課金される外部 API なので、疎通確認では呼びません）。
+
+### llama-server（gemma）の常駐化（ポート 8080）
+
+毎回ターミナルで起動しなくて済むように、llama-server を launchd に登録して常駐させています。
+
+動作確認した環境: Mac Studio 2025（Apple M4 Max・メモリ 36GB）、Homebrew の `llama.cpp`（version 9590）。
+
+```bash
+brew install llama.cpp          # /opt/homebrew/bin/llama-server が入る
+mkdir -p ~/Models/llama.cpp/gemma-4-E4B-it
+```
+
+モデルは `~/Models/llama.cpp/gemma-4-E4B-it/` に置きます。
+
+- 本体: `gemma-4-E4B-it-Q4_K_M.gguf`（約 5.3GB）
+- 画像入力用のプロジェクタ: `mmproj-gemma-4-E4B-it-Q8_0.gguf`（約 0.56GB）。このアプリは画像を使わないので、無くても動きます
+  （そのときは plist の `--mmproj` の 2 行を消す）
+
+手元のファイルは入手元を特定できませんでした（Hugging Face の現在の配布物とハッシュが一致しない。配布元の更新と思われます）。
+同等のものは、たとえば次のように入手できます。
+
+```bash
+hf download unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-Q4_K_M.gguf \
+  --local-dir ~/Models/llama.cpp/gemma-4-E4B-it
+hf download ggml-org/gemma-4-E4B-it-GGUF mmproj-gemma-4-E4B-it-Q8_0.gguf \
+  --local-dir ~/Models/llama.cpp/gemma-4-E4B-it
+```
+
+`~/Library/LaunchAgents/jp.co.occ.ted.llama-server.plist`（`/Users/<you>` は自分のホームディレクトリに置き換える）:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>jp.co.occ.ted.llama-server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/llama-server</string>
+    <string>-m</string><string>/Users/<you>/Models/llama.cpp/gemma-4-E4B-it/gemma-4-E4B-it-Q4_K_M.gguf</string>
+    <string>--mmproj</string><string>/Users/<you>/Models/llama.cpp/gemma-4-E4B-it/mmproj-gemma-4-E4B-it-Q8_0.gguf</string>
+    <string>-ngl</string><string>999</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8080</string>
+    <string>--ctx-size</string><string>16384</string>
+    <string>--parallel</string><string>4</string>
+    <string>--cache-ram</string><string>2048</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/llama-server.out.log</string>
+  <key>StandardErrorPath</key><string>/tmp/llama-server.err.log</string>
+</dict>
+</plist>
+```
+
+- `-ngl 999`: 全層を GPU（Metal）に載せる
+- `--ctx-size 16384 --parallel 4`: 4 本を同時に処理する。コンテキストは 4 本で分けるので、1 本あたり 4096 トークン
+  （ステップ名・問いの候補・推奨回答が並行して来るため）
+- `--cache-ram 2048`: プロンプトのキャッシュに使うメモリの上限（MiB）。既定の 8192 から下げ、DiffusionGemma（8090）と同居できるようにしている
+
+```bash
+# 登録して起動
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/jp.co.occ.ted.llama-server.plist
+# 状態（PID が出ていれば起動中）
+launchctl list | grep llama-server
+# 設定を変えたら再読み込み（kickstart では plist は読み直されない）
+launchctl bootout gui/$(id -u)/jp.co.occ.ted.llama-server
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/jp.co.occ.ted.llama-server.plist
+# 再起動だけなら
+launchctl kickstart -k gui/$(id -u)/jp.co.occ.ted.llama-server
+# ログ
+tail -f /tmp/llama-server.err.log
+# 動作確認（モデル名が返れば OK）
+curl -s http://127.0.0.1:8080/v1/models
+```
+
+`llama-server` は `model` の名前を見ないので、`.env.local` の `LLAMA_MODEL` は既定の `gemma` のままで動きます。
 
 ### 環境変数（`.env.local`）
 
@@ -165,8 +243,9 @@ mkdir -p ~/diffusiongemma && cd ~/diffusiongemma
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/jp.co.occ.ted.diffusiongemma.plist
 # 状態（PID が出ていれば起動中）
 launchctl list | grep diffusiongemma
-# 再起動 / 停止して登録解除
+# 再起動（plist を変えたときは bootout → bootstrap で読み直す）
 launchctl kickstart -k gui/$(id -u)/jp.co.occ.ted.diffusiongemma
+# 停止して登録解除
 launchctl bootout gui/$(id -u)/jp.co.occ.ted.diffusiongemma
 # ログ（モデルの読み込み・リクエストごとの所要時間は err 側に出る）
 tail -f /tmp/diffusiongemma.err.log
