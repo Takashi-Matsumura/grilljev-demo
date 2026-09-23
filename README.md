@@ -132,7 +132,7 @@ hf download ggml-org/gemma-4-E4B-it-GGUF mmproj-gemma-4-E4B-it-Q8_0.gguf \
 - `-ngl 999`: 全層を GPU（Metal）に載せる
 - `--ctx-size 16384 --parallel 4`: 4 本を同時に処理する。コンテキストは 4 本で分けるので、1 本あたり 4096 トークン
   （ステップ名・問いの候補・推奨回答が並行して来るため）
-- `--cache-ram 2048`: プロンプトのキャッシュに使うメモリの上限（MiB）。既定の 8192 から下げ、DiffusionGemma（8090）と同居できるようにしている
+- `--cache-ram 2048`: プロンプトのキャッシュに使うメモリの上限（MiB）（既定は 8192）
 
 ```bash
 # 登録して起動
