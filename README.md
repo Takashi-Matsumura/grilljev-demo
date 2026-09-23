@@ -81,7 +81,7 @@ http://localhost:3000 を開きます。画面右上の心拍アイコンで、3
 | `TYPESAFE_API_KEY` | （必須） | Jev の API キー。`NEXT_PUBLIC_` を付けないこと。`JEV_BACKEND=local` なら不要 |
 | `JEV_BACKEND` | `typesafe` | 判定器。`local` にするとローカルの OpenAI 互換サーバで判定する |
 | `JEV_LOCAL_BASE_URL` | `http://127.0.0.1:8090` | ローカル判定器のサーバ |
-| `JEV_LOCAL_MODEL` | （空） | ローカル判定器のモデル名。空ならサーバの先頭のモデル |
+| `JEV_LOCAL_MODEL` | （空） | ローカル判定器のモデル名。空ならサーバの `/v1/models` の先頭（キャッシュ内の全モデルが並ぶので、明示を推奨） |
 | `JEV_LOCAL_TIMEOUT_MS` | `20000` | ローカル判定器の応答を待つ上限 |
 | `LLAMA_BASE_URL` | `http://localhost:8080` | llama-server |
 | `LLAMA_MODEL` | `gemma` | llama-server に渡すモデル名 |
@@ -102,6 +102,93 @@ Jev との違い:
   自己申告は 0.7〜1.0 に偏るので、Jev より言い切り寄りになります。閾値（`lib/analysis/thresholds.ts`）は Jev に合わせたままです。
 - 1 回 4〜8 秒かかります（Jev より遅い）。
 - 崩れた選択肢 id（`__none__` → `__none`）は近いものに寄せ、寄せられない問は「回答なし」になります。
+
+#### DiffusionGemma のセットアップ（ポート 8090）
+
+動作確認した環境: Mac Studio 2025（Apple M4 Max・メモリ 36GB）、macOS 27.0、Homebrew の Python 3.12.14、
+`mlx-vlm` 0.7.2（`mlx` 0.32.2・`transformers` 5.17.0）。
+モデルは約 16GB（4bit）で、推論中のピークメモリは約 17.5GB でした。gemma（8080）と同時に載せて動いています。
+
+```bash
+brew install python@3.12
+
+mkdir -p ~/diffusiongemma && cd ~/diffusiongemma
+/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv
+.venv/bin/pip install "mlx-vlm==0.7.2"
+
+# モデルを先に落としておく（約 16GB。~/.cache/huggingface/hub に入る）
+.venv/bin/hf download mlx-community/diffusiongemma-26B-A4B-it-4bit
+
+# 手で起動して確かめる（Ctrl+C で止める）
+.venv/bin/python -m mlx_vlm.server --host 127.0.0.1 --port 8090
+```
+
+- **モデルは起動時ではなく、最初のリクエストで読み込まれます**（`model` に指定された名前で読む。約 7 秒）。
+  2 回目以降は速くなります。
+- `/v1/models` は、読み込み済みのモデルだけでなく **HF キャッシュにある全モデル**を返します。
+  そのため `.env.local` では `JEV_LOCAL_MODEL` を明示してください（空だと、キャッシュ内で名前順が先頭のモデルが選ばれます）。
+- `--host 127.0.0.1` で起動します（既定は `0.0.0.0` で、LAN に公開されてしまいます）。
+- mlx-vlm 0.7.2 では `logprobs` を付けると HTTP 500 になり、`response_format` は拒否されます（拡散モデルは非対応）。
+  アダプタはどちらも使いません。
+
+#### 常駐化（launchd）
+
+ログイン時に自動で起動し、落ちたら再起動するように、LaunchAgent に登録します。
+`/Users/<you>` は自分のホームディレクトリに置き換えてください（plist では `~` が使えません）。
+
+`~/Library/LaunchAgents/jp.co.occ.ted.diffusiongemma.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>jp.co.occ.ted.diffusiongemma</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/<you>/diffusiongemma/.venv/bin/python</string>
+    <string>-m</string><string>mlx_vlm.server</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8090</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/<you>/diffusiongemma</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/diffusiongemma.out.log</string>
+  <key>StandardErrorPath</key><string>/tmp/diffusiongemma.err.log</string>
+</dict>
+</plist>
+```
+
+```bash
+# 登録して起動
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/jp.co.occ.ted.diffusiongemma.plist
+# 状態（PID が出ていれば起動中）
+launchctl list | grep diffusiongemma
+# 再起動 / 停止して登録解除
+launchctl kickstart -k gui/$(id -u)/jp.co.occ.ted.diffusiongemma
+launchctl bootout gui/$(id -u)/jp.co.occ.ted.diffusiongemma
+# ログ（モデルの読み込み・リクエストごとの所要時間は err 側に出る）
+tail -f /tmp/diffusiongemma.err.log
+```
+
+#### 動作確認と `.env.local`
+
+```bash
+curl -s http://127.0.0.1:8090/health        # "status":"healthy"
+curl -s http://127.0.0.1:8090/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"mlx-community/diffusiongemma-26B-A4B-it-4bit","messages":[{"role":"user","content":"こんにちは"}],"max_tokens":16}'
+```
+
+```bash
+# .env.local
+JEV_BACKEND=local
+JEV_LOCAL_BASE_URL=http://127.0.0.1:8090
+JEV_LOCAL_MODEL=mlx-community/diffusiongemma-26B-A4B-it-4bit
+JEV_LOCAL_TIMEOUT_MS=20000
+```
+
+アプリの画面右上の心拍アイコンで、Jev の欄に「ローカル判定器 http://127.0.0.1:8090（モデル名）」が出れば接続できています。
 
 ## 使い方
 

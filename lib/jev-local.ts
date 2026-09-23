@@ -37,7 +37,10 @@ export function localTimeoutMs(): number {
 
 let cachedModel: string | null = null;
 
-/** JEV_LOCAL_MODEL が無ければ、サーバが載せている先頭のモデルを使う。 */
+/**
+ * JEV_LOCAL_MODEL が無ければ、/v1/models の先頭を使う。mlx-vlm はキャッシュ内の未読み込みのモデルも
+ * 返すので、別のモデルが選ばれうる。本番では JEV_LOCAL_MODEL を明示すること。
+ */
 export async function localModel(signal?: AbortSignal): Promise<string> {
   const fromEnv = process.env.JEV_LOCAL_MODEL;
   if (fromEnv) return fromEnv;
