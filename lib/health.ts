@@ -7,7 +7,7 @@
  * 判定器は画面で切り替えられるので、両方の状態を返す（`jev` は選んでいる方）。
  */
 
-import { currentJevBackend } from "./jev";
+import { currentJevBackend, hasJevApiKey } from "./jev";
 import type { JevBackend } from "./jev-backend";
 import { localBaseUrl } from "./jev-local";
 
@@ -96,7 +96,7 @@ async function checkLocalJev(): Promise<ServiceStatus> {
 }
 
 function checkTypesafeJev(): ServiceStatus {
-  return process.env.TYPESAFE_API_KEY
+  return hasJevApiKey()
     ? { ok: true, detail: "TYPESAFE_API_KEY 設定済み（疎通は未確認）" }
     : { ok: false, detail: "TYPESAFE_API_KEY が未設定（.env.local に設定）" };
 }

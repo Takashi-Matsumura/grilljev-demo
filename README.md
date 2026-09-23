@@ -97,7 +97,8 @@ DiffusionGemma `mlx-community/diffusiongemma-26B-A4B-it-4bit` をポート 8090 
 
 切り替えはヘッダーの状態アイコン（バックエンドの状態ダイアログ）の「判定器」で行います。
 選んだ値はこのブラウザの cookie（`grilljev_jev_backend`）に残り、次の判定から効きます。
-cookie が無いときは `JEV_BACKEND` に従います。回路ブレーカは判定器ごとに持つので、
+cookie が無いときは `JEV_BACKEND` に従います。Jev は `TYPESAFE_API_KEY` が設定されているときだけ選べ、
+キーが無いときはローカル判定器が使われます。回路ブレーカは判定器ごとに持つので、
 片方が休止中でももう片方へ切り替えればすぐ使えます。
 
 Jev との違い:
