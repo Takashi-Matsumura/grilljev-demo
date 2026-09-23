@@ -36,6 +36,7 @@ Jev は「既存のアクター一覧・ステップ一覧・未解決の論点�
 - **Jev（`api.typesafe.ai`）には、文字起こしテキストと、図の要素（業務名・アクター名・ステップ名・問いの文）が送られます。**
   従量課金です。1 発話につき 1 リクエスト（入力約 3,000 トークン）が目安です。
 - API キーはサーバ側（Route Handler）でしか読みません。ブラウザには出ません。
+- `JEV_BACKEND=local` にすると、判定もローカルで行い、**外部には何も送りません**（下の「ローカル判定器」）。
 
 ## 必要なもの
 
@@ -77,12 +78,30 @@ http://localhost:3000 を開きます。画面右上の心拍アイコンで、3
 
 | 変数 | 既定 | 説明 |
 |---|---|---|
-| `TYPESAFE_API_KEY` | （必須） | Jev の API キー。`NEXT_PUBLIC_` を付けないこと |
+| `TYPESAFE_API_KEY` | （必須） | Jev の API キー。`NEXT_PUBLIC_` を付けないこと。`JEV_BACKEND=local` なら不要 |
+| `JEV_BACKEND` | `typesafe` | 判定器。`local` にするとローカルの OpenAI 互換サーバで判定する |
+| `JEV_LOCAL_BASE_URL` | `http://127.0.0.1:8090` | ローカル判定器のサーバ |
+| `JEV_LOCAL_MODEL` | （空） | ローカル判定器のモデル名。空ならサーバの先頭のモデル |
+| `JEV_LOCAL_TIMEOUT_MS` | `20000` | ローカル判定器の応答を待つ上限 |
 | `LLAMA_BASE_URL` | `http://localhost:8080` | llama-server |
 | `LLAMA_MODEL` | `gemma` | llama-server に渡すモデル名 |
 | `LLAMA_IDLE_TIMEOUT_MS` | `120000` | トークンが届かない無音がこの時間続いたらアボート |
 | `WHISPER_BASE_URL` | `http://127.0.0.1:8178` | whisper-server |
 | `SESSIONS_DIR` | `./sessions` | 会議の保存先 |
+
+### ローカル判定器（Jev の代わり）
+
+`JEV_BACKEND=local` にすると、Jev と同じ質問を、ローカルの OpenAI 互換サーバ（動作確認は
+DiffusionGemma `mlx-community/diffusiongemma-26B-A4B-it-4bit` をポート 8090 で起動したもの）に答えさせます
+（`lib/jev-local.ts`）。呼び出し側・画面はそのままで、Jev コンソールには送り先としてローカルのサーバが出ます。
+
+Jev との違い:
+
+- **確率はモデルの自己申告**です。拡散モデルは logprobs も構造化出力も使えないため、各答えに
+  確からしさ p を付けさせ、Jev の形（noul の P(true)、choice の確率分布、score の期待値）に組み直します。
+  自己申告は 0.7〜1.0 に偏るので、Jev より言い切り寄りになります。閾値（`lib/analysis/thresholds.ts`）は Jev に合わせたままです。
+- 1 回 4〜8 秒かかります（Jev より遅い）。
+- 崩れた選択肢 id（`__none__` → `__none`）は近いものに寄せ、寄せられない問は「回答なし」になります。
 
 ## 使い方
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import { resampleTo16k, encodeWav } from "@/lib/audio/wav";
 import { useRecorder } from "@/lib/audio/use-recorder";
 import type { Segment } from "@/lib/audio/vad";
+import type { JevBackend } from "@/lib/jev";
 import { clock, type Line, type LineAnalysis, type LineLabeling } from "@/lib/transcript/line";
 import { combineVocab } from "@/lib/transcript/vocab";
 import { ToggleSwitch } from "./toggle-switch";
@@ -118,6 +119,8 @@ type Props = {
   onFinalText: (lineId: string, text: string) => void;
   jevEnabled: boolean;
   onJevEnabledChange: (enabled: boolean) => void;
+  /** 判定器の送り先（TypeSafe の Jev か、ローカル判定器か） */
+  jevBackend: JevBackend;
   /** true の間はマイクの入力を無視する（ファシリテーターの読み上げ中） */
   paused?: boolean;
   /** 開発用サンプルパネルが出ているか（空状態の案内文を変える） */
@@ -132,6 +135,7 @@ export function MicTranscriber({
   onFinalText,
   jevEnabled,
   onJevEnabledChange,
+  jevBackend,
   paused = false,
   devMode = false,
   autoVocab = "",
@@ -318,7 +322,11 @@ export function MicTranscriber({
               checked={jevEnabled}
               onChange={onJevEnabledChange}
               label="Jev"
-              title="ON の間、確定した文字起こしを 1 行ごとに Jev（外部 API・課金）へ送って判定します"
+              title={
+                jevBackend === "local"
+                  ? "ON の間、確定した文字起こしを 1 行ごとにローカル判定器（Jev の代わり）で判定します。外部には送りません"
+                  : "ON の間、確定した文字起こしを 1 行ごとに Jev（外部 API・課金）へ送って判定します"
+              }
             />
           </div>
 

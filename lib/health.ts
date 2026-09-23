@@ -3,7 +3,11 @@
  *
  * Jev は従量課金の外部 API なので、疎通確認では呼び出さない。
  * 「キーが設定されているか」だけを見る（実際の応答は段階 3 の /api/analyze で確かめる）。
+ * ローカル判定器（JEV_BACKEND=local）はタダなので、/v1/models で実際に疎通を見る。
  */
+
+import { jevBackend } from "./jev";
+import { localBaseUrl } from "./jev-local";
 
 export type ServiceStatus = {
   ok: boolean;
@@ -73,13 +77,27 @@ async function checkLlama(): Promise<Health["llama"]> {
   }
 }
 
-function checkJev(): ServiceStatus {
+async function checkLocalJev(): Promise<ServiceStatus> {
+  const base = localBaseUrl();
+  try {
+    const res = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    if (!res.ok) return { ok: false, detail: `ローカル判定器 ${base}: HTTP ${res.status}` };
+    const json = (await res.json()) as { data?: { id?: string }[] };
+    const model = process.env.JEV_LOCAL_MODEL ?? json.data?.[0]?.id ?? "モデル不明";
+    return { ok: true, detail: `ローカル判定器 ${base}（${model}）` };
+  } catch (e) {
+    return { ok: false, detail: `ローカル判定器 ${base}: ${errorMessage(e)}` };
+  }
+}
+
+async function checkJev(): Promise<ServiceStatus> {
+  if (jevBackend() === "local") return checkLocalJev();
   return process.env.TYPESAFE_API_KEY
     ? { ok: true, detail: "TYPESAFE_API_KEY 設定済み（疎通は未確認）" }
     : { ok: false, detail: "TYPESAFE_API_KEY が未設定（.env.local に設定）" };
 }
 
 export async function checkHealth(): Promise<Health> {
-  const [whisper, llama] = await Promise.all([checkWhisper(), checkLlama()]);
-  return { whisper, llama, jev: checkJev(), checkedAt: new Date().toISOString() };
+  const [whisper, llama, jev] = await Promise.all([checkWhisper(), checkLlama(), checkJev()]);
+  return { whisper, llama, jev, checkedAt: new Date().toISOString() };
 }
