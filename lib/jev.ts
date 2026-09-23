@@ -30,10 +30,14 @@ export function defaultJevBackend(): JevBackend {
   return parseJevBackend(process.env.JEV_BACKEND) ?? "typesafe";
 }
 
-/** このリクエストの送り先。画面で選んだもの（cookie）、無ければ既定。リクエストの中でだけ呼べる。 */
+/**
+ * このリクエストの送り先。画面で選んだもの（cookie）、無ければ既定。リクエストの中でだけ呼べる。
+ * API キーが無いときの Jev は選べない扱いにして、ローカル判定器へ回す（画面でも選べなくしてある）。
+ */
 export async function currentJevBackend(): Promise<JevBackend> {
   const store = await cookies();
-  return parseJevBackend(store.get(JEV_BACKEND_COOKIE)?.value) ?? defaultJevBackend();
+  const chosen = parseJevBackend(store.get(JEV_BACKEND_COOKIE)?.value) ?? defaultJevBackend();
+  return chosen === "typesafe" && !hasJevApiKey() ? "local" : chosen;
 }
 
 /** 応答を待つ上限。ネットが遅いときに会議の進行を止めない。 */

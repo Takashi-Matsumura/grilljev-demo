@@ -62,6 +62,14 @@ export function HealthButton({ initial }: { initial: Health }) {
     return () => clearInterval(id);
   }, [refresh]);
 
+  // Jev はキーが設定されているときだけ選べる。疎通の OK/NG はキーの有無そのもの
+  const selectable = (b: JevBackend) => b !== "typesafe" || health.jevBackends.typesafe.ok;
+
+  // サーバが選べないものを弾いて別の判定器に回したら（キーを外した・古い cookie など）、画面もそれに合わせる
+  useEffect(() => {
+    if (!stale && health.jevBackend !== jevBackend) setJevBackend(health.jevBackend);
+  }, [stale, health.jevBackend, jevBackend, setJevBackend]);
+
   const rows = toRows(health, jevBackend);
   const allOk = rows.every((r) => r.ok);
   const dot = stale ? "bg-zinc-400" : allOk ? "bg-emerald-500" : "bg-red-500";
@@ -139,12 +147,15 @@ export function HealthButton({ initial }: { initial: Health }) {
             {JEV_BACKENDS.map((b) => {
               const selected = b === jevBackend;
               const status = health.jevBackends[b];
+              const disabled = !selectable(b);
               return (
                 <button
                   key={b}
                   type="button"
                   role="radio"
                   aria-checked={selected}
+                  disabled={disabled}
+                  title={disabled ? status.detail : undefined}
                   onClick={() => {
                     setJevBackend(b);
                     void refresh();
@@ -152,7 +163,9 @@ export function HealthButton({ initial }: { initial: Health }) {
                   className={`flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left ${
                     selected
                       ? "border-sky-500 bg-sky-500/10"
-                      : "border-black/10 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+                      : disabled
+                        ? "cursor-not-allowed border-black/10 opacity-50 dark:border-white/15"
+                        : "border-black/10 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
                   }`}
                 >
                   <span className="flex items-center gap-2 text-sm font-medium">
@@ -164,7 +177,9 @@ export function HealthButton({ initial }: { initial: Health }) {
                     />
                     {JEV_BACKEND_LABELS[b]}
                   </span>
-                  <span className="text-xs text-zinc-500">{JEV_BACKEND_HINTS[b]}</span>
+                  <span className="text-xs text-zinc-500">
+                    {disabled ? "API キーが未設定のため選べません（.env.local の TYPESAFE_API_KEY）" : JEV_BACKEND_HINTS[b]}
+                  </span>
                 </button>
               );
             })}
