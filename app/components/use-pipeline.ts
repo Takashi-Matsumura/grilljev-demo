@@ -9,7 +9,7 @@ import { placeByUtterance } from "@/lib/analysis/place";
 import { rebaseOps } from "@/lib/analysis/rebase";
 import { BRANCH_HINT_MIN } from "@/lib/analysis/thresholds";
 import { checkKey, MAX_CHECKS_PER_REQUEST, type PendingCheck } from "@/lib/analysis/verify";
-import type { JevExchange } from "@/lib/jev";
+import type { JevExchange, JevFailureDebug } from "@/lib/jev";
 import { applyOps } from "@/lib/model/reducer";
 import { splitModel, type ArchivedDiagram } from "@/lib/scope/apply";
 import type { FlowModel, ModelOp } from "@/lib/model/types";
@@ -48,6 +48,8 @@ type AnalyzeResponse = {
   interpretation?: Interpretation;
   exchange?: JevExchange<UtteranceState>;
   error?: string;
+  /** 失敗したときに、送った内容と生の応答が入る（コンソールで中身を見るため） */
+  debug?: JevFailureDebug;
 };
 
 export type Signals = {
@@ -301,10 +303,12 @@ export function usePipeline({
     async (job: AnalysisJob) => {
       const epoch = epochRef.current;
       const doc = docRef.current;
-      const fail = (message: string) => {
+      // 失敗しても、送った内容と生の応答が取れていればコンソールに残す。
+      // ローカル判定器は JSON が崩れることがあり、そのときこそ中身を見たい。
+      const fail = (message: string, debug?: JevFailureDebug) => {
         if (epoch !== epochRef.current) return;
         patchLine(job.lineId, { analysis: { state: "error", error: message } });
-        pushEntry({ id: crypto.randomUUID(), at: clock(), utterance: job.text, error: message });
+        pushEntry({ id: crypto.randomUUID(), at: clock(), utterance: job.text, error: message, debug });
       };
 
       try {
@@ -323,7 +327,7 @@ export function usePipeline({
         const json = (await res.json()) as AnalyzeResponse;
         if (epoch !== epochRef.current) return;
         if (!res.ok || json.error || !json.interpretation || !json.exchange) {
-          fail(json.error ?? `HTTP ${res.status}`);
+          fail(json.error ?? `HTTP ${res.status}`, json.debug);
           return;
         }
 

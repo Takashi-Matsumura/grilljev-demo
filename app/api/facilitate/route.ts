@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     return Response.json(res);
   } catch (e) {
     if (e instanceof JevError) {
-      return Response.json({ error: e.message, kind: e.kind }, { status: e.status });
+      return Response.json({ error: e.message, kind: e.kind, debug: e.debug }, { status: e.status });
     }
     if (e instanceof LlmError) {
       return Response.json(

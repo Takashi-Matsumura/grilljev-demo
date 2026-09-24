@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     return Response.json({ interpretation, exchange });
   } catch (e) {
     if (e instanceof JevError) {
-      return Response.json({ error: e.message, kind: e.kind }, { status: e.status });
+      return Response.json({ error: e.message, kind: e.kind, debug: e.debug }, { status: e.status });
     }
     return Response.json(
       { error: e instanceof Error ? e.message : "不明なエラー" },

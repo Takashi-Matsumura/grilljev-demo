@@ -122,11 +122,28 @@ export type JevErrorKind =
   | "overloaded"
   | "server";
 
+/**
+ * 失敗したときに「何を送って、何が返ってきたか」を残すための情報。
+ * ローカル判定器は Jev と違って JSON が崩れることがあり、そのときこそ中身を見たい。
+ * 送った内容は必ず分かるので、返答が読めなかった場合も request 側は埋まる。
+ */
+export type JevFailureDebug = {
+  endpoint: string;
+  model: string;
+  state: unknown;
+  questions: Record<string, JevQuestion>;
+  /** モデルが返した生のテキスト。JSON として読めなかったものをそのまま入れる */
+  rawResponse?: string;
+  elapsedMs: number;
+};
+
 export class JevError extends Error {
   constructor(
     message: string,
     readonly status: number,
     readonly kind: JevErrorKind,
+    /** コンソールに出す、送信内容と生の応答。取れなかったときは undefined */
+    readonly debug?: JevFailureDebug,
   ) {
     super(message);
     this.name = "JevError";
@@ -248,21 +265,37 @@ export async function postJev<S extends object>(
     result = await backend.call(state, questions, combined);
   } catch (e) {
     if (e instanceof JevError) throw e;
+    // 送った内容は必ず分かる。バックエンドが生の応答を添えていれば、それも一緒に残す。
+    const attached = (e as { debug?: Partial<JevFailureDebug> }).debug;
+    const debug: JevFailureDebug = {
+      endpoint: attached?.endpoint ?? backend.name,
+      model: attached?.model ?? "",
+      state,
+      questions,
+      rawResponse: attached?.rawResponse,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    };
     if (timeout.aborted) {
       recordFailure(which);
-      throw new JevError(`${backend.name}が ${timeoutMs / 1000} 秒以内に応答しませんでした`, 504, "timeout");
+      throw new JevError(
+        `${backend.name}が ${timeoutMs / 1000} 秒以内に応答しませんでした`,
+        504,
+        "timeout",
+        debug,
+      );
     }
     if (signal?.aborted) throw e;
     const status = (e as { status?: unknown }).status;
     if (typeof status === "number") {
       if (isTransient(status)) recordFailure(which);
-      throw new JevError((e as Error).message, status, classify(status));
+      throw new JevError((e as Error).message, status, classify(status), debug);
     }
     recordFailure(which);
     throw new JevError(
       `${backend.name}に接続できません: ${e instanceof Error ? e.message : "不明なエラー"}`,
       502,
       "network",
+      debug,
     );
   }
 

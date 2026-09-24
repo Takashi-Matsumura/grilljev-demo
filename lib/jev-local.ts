@@ -105,17 +105,73 @@ function parseObject(text: string): Record<string, RawAnswer> | null {
 }
 
 /**
+ * 厳密に読めなかったときの受け皿。`"問の id": { ... }` の形で完結している分だけを拾う。
+ *
+ * 全体を JSON.parse すると、末尾で切れている・1 問だけ壊れている、といっただけで
+ * 全問の回答を捨てることになる。postLocal は MIN_ANSWERED_RATIO で部分的な回答を
+ * 許容しているので、拾える分は拾って渡した方がよい。
+ */
+function salvagePairs(body: string): Record<string, RawAnswer> | null {
+  const out: Record<string, RawAnswer> = {};
+  const key = /"([A-Za-z0-9_.-]+)"\s*:\s*\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = key.exec(body)) !== null) {
+    const open = m.index + m[0].length - 1;
+    // 文字列の中の括弧を数えないよう、エスケープと引用符を見ながら対応を取る
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    let close = -1;
+    for (let i = open; i < body.length; i += 1) {
+      const c = body[i];
+      if (esc) {
+        esc = false;
+      } else if (c === "\\") {
+        esc = true;
+      } else if (c === '"') {
+        inStr = !inStr;
+      } else if (!inStr) {
+        if (c === "{") depth += 1;
+        else if (c === "}") {
+          depth -= 1;
+          if (depth === 0) {
+            close = i;
+            break;
+          }
+        }
+      }
+    }
+    if (close < 0) break; // ここから先は途中で切れている
+    try {
+      const v: unknown = JSON.parse(body.slice(open, close + 1));
+      if (typeof v === "object" && v !== null && !Array.isArray(v)) out[m[1]] = v as RawAnswer;
+    } catch {
+      // この 1 問だけ壊れている。次の問へ進む
+    }
+    key.lastIndex = close + 1; // 値の中の key を拾わないよう、値の後ろまで飛ばす
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
  * モデルの出力から JSON オブジェクトを取り出す。コードブロックの囲みは捨てる。
  * 外側の `{ }` が抜けて `"chatter": {...}, "intent": {...}` だけが返ることがある（実測）ので、
- * そのときは補って読む。
+ * そのときは補って読む。どうしても読めなければ、完結している問だけを拾う。
  */
 export function extractJson(text: string): Record<string, RawAnswer> | null {
   const body = text.replace(/```(?:json)?/g, "").trim();
   // `"chatter": ...` で始まる = 外側の括弧が抜けている
-  if (body.startsWith('"')) return parseObject(`{${body.replace(/,\s*$/, "")}}`);
+  if (body.startsWith('"')) {
+    const wrapped = parseObject(`{${body.replace(/,\s*$/, "")}}`);
+    if (wrapped) return wrapped;
+  }
   const start = body.indexOf("{");
   const end = body.lastIndexOf("}");
-  return start >= 0 && end > start ? parseObject(body.slice(start, end + 1)) : null;
+  if (start >= 0 && end > start) {
+    const strict = parseObject(body.slice(start, end + 1));
+    if (strict) return strict;
+  }
+  return salvagePairs(body);
 }
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
@@ -238,8 +294,11 @@ export async function postLocal(
   let best: LocalCallResult | null = null;
   let inTok = 0;
   let outTok = 0;
+  const endpoint = `${localBaseUrl()}/v1/chat/completions`;
+  // JSON として読めなかったときにコンソールへ出す、モデルの生の出力（試行ごとに残す）
+  const rawTexts: string[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(`${localBaseUrl()}/v1/chat/completions`, {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // 温度 0 だと聞き直しても同じ答えが返るので、2 回目は少し揺らす
@@ -250,6 +309,7 @@ export async function postLocal(
       const text = await res.text().catch(() => "");
       throw Object.assign(new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`), {
         status: res.status,
+        debug: { endpoint, model, rawResponse: text },
       });
     }
     const json = (await res.json()) as {
@@ -258,7 +318,9 @@ export async function postLocal(
     };
     inTok += json.usage?.prompt_tokens ?? 0;
     outTok += json.usage?.completion_tokens ?? 0;
-    const raw = extractJson(json.choices?.[0]?.message?.content ?? "");
+    const content = json.choices?.[0]?.message?.content ?? "";
+    rawTexts.push(content);
+    const raw = extractJson(content);
     const answers = raw ? toJevAnswers(raw, questions) : {};
     const count = Object.keys(answers).length;
     if (!best || count > Object.keys(best.response.answers).length) {
@@ -271,9 +333,15 @@ export async function postLocal(
   const result = best!;
   result.response.usage = { input_tokens: inTok, output_tokens: outTok };
   if (Object.keys(result.response.answers).length === 0) {
-    // 502 は一時的な失敗として回路ブレーカに数えられる
+    // 502 は一時的な失敗として回路ブレーカに数えられる。
+    // 何が返ってきたのかが分からないと直しようがないので、生の出力を添えて投げる。
     throw Object.assign(new Error("ローカル判定器の応答を JSON として読めませんでした"), {
       status: 502,
+      debug: {
+        endpoint,
+        model,
+        rawResponse: rawTexts.map((t, i) => `--- 試行 ${i + 1} ---\n${t}`).join("\n\n"),
+      },
     });
   }
   return result;

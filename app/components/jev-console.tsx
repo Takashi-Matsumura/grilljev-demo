@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Interpretation, Verdict } from "@/lib/analysis/interpret";
-import type { JevAnswer, JevExchange } from "@/lib/jev";
+import type { JevAnswer, JevExchange, JevFailureDebug } from "@/lib/jev";
 import { DisclosureIcon } from "./disclosure-icon";
 
 /** 1 回の Jev 呼び出しの記録。送った内容・返ってきた内容は組み立て直さず、そのまま持つ。 */
@@ -14,6 +14,8 @@ export type ConsoleEntry = {
   exchange?: JevExchange<object>;
   interpretation?: Interpretation;
   error?: string;
+  /** 失敗したときに、何を送って何が返ってきたか。成功時は exchange の方に入る */
+  debug?: JevFailureDebug;
   /** 発話の判定以外の呼び出し（問いかけの選別・対象業務の変化）。バッジと説明に使う */
   kind?: "facilitator" | "scope";
   note?: string;
@@ -130,6 +132,58 @@ function EntryDetail({ entry }: { entry: ConsoleEntry }) {
       {tab === "response" && (
         <pre className="max-h-96 overflow-auto rounded bg-zinc-100 p-2 text-xs dark:bg-white/10">
           {JSON.stringify(x.response, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 失敗したときの中身。成功時の EntryDetail と同じ見た目で、送った内容と生の応答を出す。
+ * ローカル判定器（拡散モデル）は JSON が崩れることがあり、何が返ってきたのかが
+ * 分からないと直しようがないので、既定では「受信（生）」を開いておく。
+ */
+function FailureDetail({ debug }: { debug: JevFailureDebug }) {
+  const [tab, setTab] = useState<"request" | "raw">("raw");
+  const tabBtn = (t: "request" | "raw", label: string) => (
+    <button
+      type="button"
+      onClick={() => setTab(t)}
+      className={`rounded px-2 py-1 text-xs ${
+        tab === t ? "bg-foreground text-background" : "hover:bg-black/5 dark:hover:bg-white/10"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <p className="text-xs break-all text-zinc-500">
+        {debug.endpoint}
+        {debug.model ? ` · ${debug.model}` : ""} · {debug.elapsedMs}ms
+      </p>
+      <div className="flex gap-1">
+        {tabBtn("raw", "受信（生）")}
+        {tabBtn("request", "送信 JSON")}
+      </div>
+      {tab === "raw" &&
+        (debug.rawResponse ? (
+          <pre className="max-h-96 overflow-auto rounded bg-red-50 p-2 text-xs whitespace-pre-wrap dark:bg-red-500/10">
+            {debug.rawResponse}
+          </pre>
+        ) : (
+          <p className="text-xs text-zinc-500">
+            応答そのものが返っていません（接続できない・時間切れなど）。
+          </p>
+        ))}
+      {tab === "request" && (
+        <pre className="max-h-96 overflow-auto rounded bg-zinc-100 p-2 text-xs dark:bg-white/10">
+          {JSON.stringify(
+            { model: debug.model, state: debug.state, questions: debug.questions },
+            null,
+            2,
+          )}
         </pre>
       )}
     </div>
@@ -264,6 +318,7 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
                       <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{e.note}</p>
                     )}
                     <EntryDetail entry={e} />
+                    {!e.exchange && e.debug && <FailureDetail debug={e.debug} />}
                   </details>
                 </li>
               );
