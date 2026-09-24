@@ -153,8 +153,9 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
   const failed = entries.length - calls;
 
   if (!open) {
+    // 畳んだときは 1 行分で足りるが、縦積みで縮められて潰れないよう shrink-0 にする
     return (
-      <aside className="border-t border-black/10 lg:h-full lg:border-l lg:border-t-0 dark:border-white/15">
+      <aside className="shrink-0 border-t border-black/10 lg:h-full lg:border-l lg:border-t-0 dark:border-white/15">
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -179,10 +180,13 @@ export function JevConsole({ entries }: { entries: ConsoleEntry[] }) {
     );
   }
 
+  // 縦積み（1024px 未満）では、左ペイン・図ペインと同じ min-h-[28rem] を持たせる。
+  // これが無いと、高さが足りないときに min-h-0 のこのペインだけが縮められ、
+  // 見出しだけを残して中身が潰れる。lg 以上は grid の列なので min-h-0 に戻す。
   return (
     <aside
       id="jev-console-body"
-      className="flex min-h-0 flex-col border-t border-black/10 lg:h-full lg:w-[27rem] lg:border-l lg:border-t-0 dark:border-white/15"
+      className="flex min-h-[28rem] shrink-0 flex-col border-t border-black/10 lg:h-full lg:w-[27rem] lg:min-h-0 lg:border-l lg:border-t-0 dark:border-white/15"
     >
       <div className="flex items-start justify-between gap-2 border-b border-black/10 px-4 py-3 dark:border-white/15">
         <div className="min-w-0">
