@@ -29,7 +29,10 @@ let cached: DatabaseSync | null = null;
 
 function db(): DatabaseSync {
   if (cached) return cached;
-  const dir = path.resolve(process.env.SESSIONS_DIR ?? path.join(process.cwd(), "sessions"));
+  // SESSIONS_DIR は実行時のデータ置き場で、バンドルに含めるものは無い。turbopack の静的解析は
+  // ここを「プロジェクト全体をトレースする動的アクセス」と見なすため、明示的に対象外にする
+  // （付けないと public を含む全ソースがサーバ出力に入る）。絶対パス指定を許すので cwd 配下には固定できない。
+  const dir = path.resolve(/*turbopackIgnore: true*/ process.env.SESSIONS_DIR ?? path.join(process.cwd(), "sessions"));
   mkdirSync(dir, { recursive: true });
   const conn = new DatabaseSync(path.join(dir, "sessions.db"));
   conn.exec(`
