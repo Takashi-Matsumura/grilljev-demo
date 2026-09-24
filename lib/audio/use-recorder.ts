@@ -73,6 +73,17 @@ export function useRecorder({ onSegment }: Options) {
     let stream: MediaStream | null = null;
     let ctx: AudioContext | null = null;
     try {
+      // ブラウザはマイクを secure context（HTTPS か localhost）でしか許可しない。
+      // http://<IP>:<port> で開くと navigator.mediaDevices ごと存在せず、そのまま呼ぶと
+      // 「Cannot read properties of undefined」になって原因が分からない。先に名指しで止める。
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(
+          window.isSecureContext
+            ? "このブラウザはマイク入力に対応していません"
+            : `この URL では録音できません。ブラウザはマイクを HTTPS か localhost でのみ許可します（現在 ${location.origin}）`,
+        );
+      }
+
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,

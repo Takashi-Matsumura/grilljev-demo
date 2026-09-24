@@ -99,6 +99,43 @@ curl -s -X POST http://127.0.0.1:8050/api/analyze -H 'Content-Type: application/
     "steps":[],"branches":[],"issues":[]}}'
 ```
 
+## 社内検証環境: IP アドレスで見せる
+
+`.env` で `APP_BIND=0.0.0.0` にすると、`http://<ホストのIP>:8050`（例 `http://172.16.2.222:8050`）で
+社内の端末から開ける。
+
+```bash
+sed -i "" "s|^APP_BIND=.*|APP_BIND=0.0.0.0|" .env
+docker-compose up -d
+```
+
+**ただし平文 HTTP なので、このままでは録音（マイク）が使えない。** 実測:
+
+| URL | `isSecureContext` | `navigator.mediaDevices` |
+|---|---|---|
+| `http://172.16.2.222:8050/` | `false` | **`undefined`** |
+| `http://localhost:8050/` | `true` | `object` |
+
+文字起こし以外（開発用サンプルの再生・図の生成・書き出し・業務分掌）は動くので、
+録音を使わないデモならこのままでよい。録音も試したい場合は、次のどちらかを取る。
+
+### A. 検証者の Chrome に例外を入れる（インフラ作業なし）
+
+各端末で 1 回だけ設定する。
+
+1. `chrome://flags/#unsafely-treat-insecure-origin-as-secure` を開く
+2. `http://172.16.2.222:8050` を入力して **Enabled** にする
+3. Chrome を再起動する
+
+これで `isSecureContext` が `true` になり、マイクが使えるようになる（実測で確認）。
+フラグ名のとおり安全側の扱いを外すので、**検証環境の URL にだけ**入れること。
+
+### B. IP アドレスに証明書を出す（端末ごとの設定は CA の導入だけ）
+
+Caddy の `tls internal` は IP アドレスにも証明書を出せる。下の HTTPS 公開の手順で
+サイト名をホスト名でなく `https://172.16.2.222` にする。利用者端末には
+BoX3 Internal CA のルート証明書が要る（次節を参照）。
+
 ## HTTPS で社内公開する
 
 マイクを使うにはここまでやる必要がある。既存の BoX3 Caddy（`box3-prod-caddy`）に
@@ -215,6 +252,20 @@ HTTPS で開けているか確認する。`http://` や、証明書が信頼さ�
 
 **`docker compose` が unknown command**
 このマシンはスタンドアロン版。`docker-compose`（ハイフンあり）を使う。
+
+**ビルドが `Failed to fetch Geist from Google Fonts` で落ちる**
+`app/layout.tsx` が `next/font/google` を使っており、ビルド時に fonts.googleapis.com を見に行く。
+Docker が `~/.docker/config.json` から自動で入れるのは `HTTPS_PROXY` だけで `HTTP_PROXY` が無く、
+Next.js は後者も見るため到達できずに落ちる。`docker-compose.yml` の `build.args` で両方渡している。
+中継（`jp.occ.ted.docker-proxy-relay`、ホストの :3128）が止まっていると同じ症状になるので確認する:
+
+```bash
+launchctl list | grep docker-proxy-relay
+curl -s -o /dev/null -w "%{http_code}\n" -x http://127.0.0.1:3128 https://fonts.googleapis.com/
+```
+
+中継の場所が違う環境では `.env` の `BUILD_PROXY` で上書きする。
+外部に出られない環境で動かすなら、`next/font/local` でフォントを同梱するのが確実。
 
 **判定が遅い / タイムアウトする**
 DiffusionGemma bf16 は初回リクエストでモデル（約 52GB）を読む。2 回目以降は速い。
