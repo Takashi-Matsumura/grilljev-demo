@@ -399,6 +399,14 @@ Jev・llama-server・whisper-server は、SDK を使わず素の `fetch` で呼�
 > このリポジトリの Next.js は、これまでのバージョンから破壊的変更があります。実装前に
 > `node_modules/next/dist/docs/` の該当ガイドを読んでください（`AGENTS.md` 参照）。
 
+## 社内へのデプロイ（Docker / Colima）
+
+Mac Studio 上の Colima でコンテナとして社内公開する手順は [DEPLOY.md](./DEPLOY.md) にまとめてあります。
+
+**マイクは HTTPS（または localhost）でしか動きません。** `http://<ホストのIP>:8050` を他の端末で
+開いても録音できないため、Caddy で TLS を付けて公開します。判定器・LLM・文字起こしは Metal GPU を
+使うのでコンテナには載せず、ホスト側の常駐プロセスを `host.docker.internal` 経由で呼びます。
+
 ## ライセンス
 
 [MIT License](./LICENSE) © 2026 Takashi Matsumura
