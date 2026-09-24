@@ -36,7 +36,7 @@ export function SamplePanel({ cursor, total, playing, topic, onTopicChange, onTo
             className="rounded-md border border-black/15 bg-transparent px-2 py-1 dark:border-white/20"
           >
             <option value="loan">与信照会つき見積作成</option>
-            <option value="app">このアプリの仕組み（Jev 専用）</option>
+            <option value="app">このアプリの仕組み（判定器で実行）</option>
           </select>
         </label>
       </div>
@@ -48,7 +48,7 @@ export function SamplePanel({ cursor, total, playing, topic, onTopicChange, onTo
           type="button"
           onClick={onNext}
           disabled={finished}
-          title="台本を 1 行だけ進めて、Jev の判定結果を確認する"
+          title="台本を 1 行だけ進めて、判定器の結果を確認する"
           className={btn}
         >
           ⏭ ステップ実行
