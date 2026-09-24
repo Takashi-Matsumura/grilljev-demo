@@ -1,0 +1,18 @@
+# ビルドコンテキストから外すもの。イメージを小さく、ビルドを速くする。
+node_modules
+.next
+.git
+.github
+sessions
+*.md
+!prompts/*.md
+.env
+.env.*
+!.env.example
+.DS_Store
+npm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+Dockerfile
+.dockerignore
+docker-compose.yml

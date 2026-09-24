@@ -1,0 +1,72 @@
+# grilljev-demo 社内デプロイ（Colima 想定）。
+#
+# 前提: 3 つのバックエンドは Mac/Colima ホスト側で Metal GPU を使って動かし、
+#       コンテナからは host.docker.internal 経由で呼ぶ。いずれも launchd 常駐。
+#         whisper-server              :8178  jp.co.occ.ted.whisper
+#         llama-server (gemma)        :8080  com.user.llama-server
+#         mlx-vlm (DiffusionGemma)    :8091  jp.co.occ.ted.diffusiongemma
+#
+#       ★ これらは既定で 127.0.0.1 にしか bind していないため、そのままでは
+#         コンテナから届かない。DEPLOY.md「ホスト側バックエンドの公開」を先に実施すること。
+#
+# ★ マイク（getUserMedia）は HTTPS か localhost でしか動かない。
+#   http://<ホストIP>:8050 で他端末から開くと録音できない。
+#   社内公開は Caddy 等で TLS を付けること（DEPLOY.md 参照）。
+#
+# 使い方:
+#   colima start                 # ランタイム起動（未起動なら）
+#   cp .env.docker.example .env  # 必要なら値を編集
+#   docker compose up -d --build
+#   docker compose logs -f app
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: grilljev-demo:latest
+    container_name: grilljev-demo
+    restart: unless-stopped
+    ports:
+      # 既定はホストの 127.0.0.1 だけに公開する。LAN へは Caddy(HTTPS) 経由で出す。
+      # マイクは HTTPS でしか動かないので、平文で LAN に晒す意味が薄い。
+      # 平文でも LAN に出したい場合（開発用サンプルのデモ等）だけ APP_BIND=0.0.0.0 にする。
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8050}:3000"
+    environment:
+      # --- 判定器（既定はローカルの DiffusionGemma。外部送信なし）---
+      JEV_BACKEND: "${JEV_BACKEND:-local}"
+      JEV_LOCAL_BASE_URL: "${JEV_LOCAL_BASE_URL:-http://host.docker.internal:8091}"
+      JEV_LOCAL_MODEL: "${JEV_LOCAL_MODEL:-mlx-community/diffusiongemma-26B-A4B-it-bf16}"
+      JEV_LOCAL_TIMEOUT_MS: "${JEV_LOCAL_TIMEOUT_MS:-20000}"
+      # Jev（TypeSafe AI・クラウド）を使うときだけ設定する。空なら判定器はローカル固定。
+      TYPESAFE_API_KEY: "${TYPESAFE_API_KEY:-}"
+      # --- 生成（gemma / llama-server）---
+      LLAMA_BASE_URL: "${LLAMA_BASE_URL:-http://host.docker.internal:8080}"
+      LLAMA_MODEL: "${LLAMA_MODEL:-gemma-4-12b-it}"
+      LLAMA_IDLE_TIMEOUT_MS: "${LLAMA_IDLE_TIMEOUT_MS:-120000}"
+      # --- 文字起こし（whisper.cpp）---
+      WHISPER_BASE_URL: "${WHISPER_BASE_URL:-http://host.docker.internal:8178}"
+      # --- 会議データの保存先（下の named volume と一致させる）---
+      SESSIONS_DIR: /data/sessions
+      # 社内プロキシがコンテナに注入される（~/.docker/config.json）。ホスト側の
+      # バックエンドへの通信をプロキシに送らせないため、明示的に除外する。
+      NO_PROXY: "localhost,127.0.0.1,host.docker.internal"
+      no_proxy: "localhost,127.0.0.1,host.docker.internal"
+    # Linux/Colima のコンテナから「ホスト」を host.docker.internal で解決させる。
+    # host-gateway は Docker/Colima が解決する特別値。
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # 会議データ（sessions.db）を named volume に永続化（コンテナ再作成でも残る）
+      - sessions:/data/sessions
+    healthcheck:
+      # アプリ自身の応答だけを見る（/api/health はホスト側バックエンドを毎回叩くので使わない）。
+      # BusyBox wget は no_proxy を解釈しないため、注入されたプロキシ環境変数を明示的に無効化する。
+      test: ["CMD-SHELL", "http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= wget -qO- http://127.0.0.1:3000/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  sessions:
