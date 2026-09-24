@@ -24,6 +24,7 @@ import { useFacilitatorAuto } from "./use-facilitator-auto";
 import { useLeftWidth } from "./use-left-width";
 import { usePipeline, type AnalysisJob } from "./use-pipeline";
 import { useScopeShift } from "./use-scope-shift";
+import { newId } from "@/lib/id";
 
 const SAMPLE_INTERVAL_MS = 1_800;
 /** 手動で「答えた」にしたときの記録（発言そのものは無い） */
@@ -203,7 +204,7 @@ export function Studio({
   const playNext = useCallback(() => {
     const entry = scenario[cursor];
     if (!entry) return;
-    const id = crypto.randomUUID();
+    const id = newId();
     const base: Line = {
       id,
       at: clock(),

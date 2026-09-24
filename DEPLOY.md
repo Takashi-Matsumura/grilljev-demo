@@ -240,7 +240,20 @@ compose が読むのは `.env`（`.env.docker.example` からコピー）。
 
 **録音ボタンを押しても何も起きない**
 HTTPS で開けているか確認する。`http://` や、証明書が信頼されていない `https://` では
-マイクが使えない。ブラウザの DevTools Console に `getUserMedia` のエラーが出る。
+マイクが使えない。この場合は「この URL では録音できません」と画面に出る。
+
+**平文 HTTP で動かない機能がないか**
+secure context を要る Web API は、`http://<IP>` では存在せず、呼ぶと TypeError になる。
+このアプリで使っているのは次の 3 つで、いずれも受け皿を用意してある。
+
+| API | 用途 | 平文 HTTP での挙動 |
+|---|---|---|
+| `navigator.mediaDevices` | 録音 | 使えない。画面に理由を出す |
+| `crypto.randomUUID` | 行・記録の id | `lib/id.ts` の `newId()` が `getRandomValues` で代替する |
+| `navigator.clipboard` | 業務分掌のコピー | `execCommand("copy")` に落とす |
+
+新しく Web API を使うときは、secure context を要らないか確認すること
+（要るなら握りつぶさず、画面に理由を出す）。
 
 **`/api/health` で whisper / llama / jev が `ok:false`**
 ホスト側の launchd プロセスが落ちている。`launchctl list | grep -E "whisper|diffusiongemma"`
