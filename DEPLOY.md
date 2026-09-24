@@ -18,7 +18,7 @@
 
 ```
         社内の端末（Chrome）
-              │ HTTPS  https://grilljev.es.occ.co.jp
+              │ HTTPS  https://grilljev.es.example.co.jp
               ▼
    ┌─────────────────────────────┐
    │ Mac Studio (M3 Ultra)       │
@@ -146,9 +146,9 @@ BoX3 Internal CA のルート証明書が要る（次節を参照）。
 
 ```caddyfile
 # ===================================================================
-# grilljev.es.occ.co.jp : 会議 → 業務フロー図デモ
+# grilljev.es.example.co.jp : 会議 → 業務フロー図デモ
 # ===================================================================
-grilljev.es.occ.co.jp {
+grilljev.es.example.co.jp {
 	tls internal
 
 	encode zstd gzip
@@ -178,11 +178,11 @@ grilljev.es.occ.co.jp {
 docker exec box3-prod-caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
-3. **社内 DNS で `grilljev.es.occ.co.jp` を この Mac Studio の IP に向ける**
-   （`box.es.occ.co.jp` と同じ仕組み。ここは情報システム側の作業）。
+3. **社内 DNS で `grilljev.es.example.co.jp` を この Mac Studio の IP に向ける**
+   （`box.es.example.co.jp` と同じ仕組み。ここは情報システム側の作業）。
 
 4. **利用者の端末に BoX3 Internal CA のルート証明書を入れる**。
-   `box.es.occ.co.jp` を使っている端末なら導入済み。未導入なら:
+   `box.es.example.co.jp` を使っている端末なら導入済み。未導入なら:
 
 ```bash
 docker cp box3-prod-caddy:/data/caddy/pki/authorities/local/root.crt ./root.crt
@@ -203,7 +203,7 @@ docker-compose down               # 停止（volume は残る）
 ```
 
 コンテナは `restart: unless-stopped`。Colima ごと再起動しても、Colima が上がれば復帰する。
-Colima 自体は `jp.occ.ted.colima` の LaunchAgent でログイン時に起動する。
+Colima 自体は `jp.example.ted.colima` の LaunchAgent でログイン時に起動する。
 
 ## データの永続化とバックアップ
 
@@ -257,7 +257,7 @@ secure context を要る Web API は、`http://<IP>` では存在せず、呼ぶ
 
 **`/api/health` で whisper / llama / jev が `ok:false`**
 ホスト側の launchd プロセスが落ちている。`launchctl list | grep -E "whisper|diffusiongemma"`
-で確認し、`launchctl kickstart -k gui/$(id -u)/jp.co.occ.ted.diffusiongemma` で再起動。
+で確認し、`launchctl kickstart -k gui/$(id -u)/jp.co.example.ted.diffusiongemma` で再起動。
 
 **コンテナから外部 URL は引けるのにホストに届かない**
 社内プロキシがコンテナに注入されている（`~/.docker/config.json`）。compose で
@@ -270,7 +270,7 @@ secure context を要る Web API は、`http://<IP>` では存在せず、呼ぶ
 `app/layout.tsx` が `next/font/google` を使っており、ビルド時に fonts.googleapis.com を見に行く。
 Docker が `~/.docker/config.json` から自動で入れるのは `HTTPS_PROXY` だけで `HTTP_PROXY` が無く、
 Next.js は後者も見るため到達できずに落ちる。`docker-compose.yml` の `build.args` で両方渡している。
-中継（`jp.occ.ted.docker-proxy-relay`、ホストの :3128）が止まっていると同じ症状になるので確認する:
+中継（`jp.example.ted.docker-proxy-relay`、ホストの :3128）が止まっていると同じ症状になるので確認する:
 
 ```bash
 launchctl list | grep docker-proxy-relay
