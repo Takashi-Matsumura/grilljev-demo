@@ -12,6 +12,35 @@ type State =
   | { kind: "error"; message: string };
 
 /** 業務分掌ドキュメント（Markdown）を作って、保存・コピーできるようにする。 */
+/**
+ * クリップボードへ書く。`navigator.clipboard` は secure context でしか使えないので
+ * （`http://<ホストのIP>` で開いた検証環境には無い）、その場合は選択＋execCommand に落とす。
+ */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // 権限が無いなど。下の方法を試す
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function SummaryButton({ model, empty }: { model: FlowModel; empty: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [state, setState] = useState<State>({ kind: "idle" });
@@ -78,12 +107,7 @@ export function SummaryButton({ model, empty }: { model: FlowModel; empty: boole
                 <button
                   type="button"
                   className={btn}
-                  onClick={() =>
-                    void navigator.clipboard.writeText(state.markdown).then(
-                      () => setCopied(true),
-                      () => setCopied(false),
-                    )
-                  }
+                  onClick={() => void copyText(state.markdown).then(setCopied)}
                 >
                   コピー
                 </button>

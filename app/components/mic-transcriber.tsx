@@ -9,6 +9,7 @@ import { clock, type Line, type LineAnalysis, type LineLabeling } from "@/lib/tr
 import { combineVocab } from "@/lib/transcript/vocab";
 import { ToggleSwitch } from "./toggle-switch";
 import { useJevBackend } from "./use-jev-backend";
+import { newId } from "@/lib/id";
 
 type Pending = { id: string; blob: Blob };
 
@@ -215,7 +216,7 @@ export function MicTranscriber({
 
   const onSegment = useCallback(
     (segment: Segment) => {
-      const id = crypto.randomUUID();
+      const id = newId();
       const blob = encodeWav(resampleTo16k(segment.pcm, segment.sampleRate));
       setLines((prev) => [
         ...prev,

@@ -19,6 +19,7 @@ import { clock } from "@/lib/transcript/line";
 import type { UpdateSource } from "./diagram-pane";
 import type { ConsoleEntry } from "./jev-console";
 import type { AnalysisJob } from "./use-pipeline";
+import { newId } from "@/lib/id";
 
 const RECENT_BUSINESS = 4;
 
@@ -88,7 +89,7 @@ export function useScopeShift({ getModel, commit, splitDiagram, pushEntry }: Opt
         }
 
         pushEntry({
-          id: crypto.randomUUID(),
+          id: newId(),
           at: clock(),
           utterance: "対象業務の変化の確認",
           kind: "scope",
@@ -100,7 +101,7 @@ export function useScopeShift({ getModel, commit, splitDiagram, pushEntry }: Opt
         if (json.status === "propose" && json.chosen) {
           cooldownUntilRef.current = Date.now() + SHIFT_COOLDOWN_MS;
           setProposal({
-            id: crypto.randomUUID(),
+            id: newId(),
             relation,
             currentTitle: model.scope.title,
             title: json.chosen.title,

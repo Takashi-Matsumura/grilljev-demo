@@ -16,6 +16,7 @@ import type { FlowModel, ModelOp } from "@/lib/model/types";
 import { clock, type Line, type LineLabeling } from "@/lib/transcript/line";
 import type { UpdateSource } from "./diagram-pane";
 import type { ConsoleEntry } from "./jev-console";
+import { newId } from "@/lib/id";
 
 /** コンソールに残す件数（送信 JSON が大きいので無制限にしない） */
 const MAX_CONSOLE_ENTRIES = 30;
@@ -308,7 +309,7 @@ export function usePipeline({
       const fail = (message: string, debug?: JevFailureDebug) => {
         if (epoch !== epochRef.current) return;
         patchLine(job.lineId, { analysis: { state: "error", error: message } });
-        pushEntry({ id: crypto.randomUUID(), at: clock(), utterance: job.text, error: message, debug });
+        pushEntry({ id: newId(), at: clock(), utterance: job.text, error: message, debug });
       };
 
       try {
@@ -344,7 +345,7 @@ export function usePipeline({
               summary: "図を分けたため、この発言の判定は前の図のものとして反映していません",
             },
           });
-          pushEntry({ id: crypto.randomUUID(), at: clock(), utterance: job.text, exchange, interpretation });
+          pushEntry({ id: newId(), at: clock(), utterance: job.text, exchange, interpretation });
           return;
         }
 
@@ -411,7 +412,7 @@ export function usePipeline({
           },
         });
         pushEntry({
-          id: crypto.randomUUID(),
+          id: newId(),
           at: clock(),
           utterance: job.text,
           exchange,
@@ -484,7 +485,7 @@ export function usePipeline({
     const now = new Date().toISOString();
     setArchives((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), title: previous.scope.title, model: previous, closedAt: now },
+      { id: newId(), title: previous.scope.title, model: previous, closedAt: now },
     ]);
     docRef.current += 1;
     followQueue.current = [];

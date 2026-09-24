@@ -10,6 +10,7 @@ import { clock } from "@/lib/transcript/line";
 import type { UpdateSource } from "./diagram-pane";
 import type { ConsoleEntry } from "./jev-console";
 import type { Signals } from "./use-pipeline";
+import { newId } from "@/lib/id";
 
 const CHECK_INTERVAL_MS = 2_000;
 
@@ -69,7 +70,7 @@ export function useFacilitator({ auto, getModel, getSignals, getRecent, commit, 
 
         if (json.exchange) {
           pushEntry({
-            id: crypto.randomUUID(),
+            id: newId(),
             at: clock(),
             utterance: "問いかけの選別",
             kind: "facilitator",
