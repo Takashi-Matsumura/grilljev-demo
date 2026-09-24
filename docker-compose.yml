@@ -2,9 +2,9 @@
 #
 # 前提: 3 つのバックエンドは Mac/Colima ホスト側で Metal GPU を使って動かし、
 #       コンテナからは host.docker.internal 経由で呼ぶ。いずれも launchd 常駐。
-#         whisper-server              :8178  jp.co.occ.ted.whisper
+#         whisper-server              :8178  jp.co.example.ted.whisper
 #         llama-server (gemma)        :8080  com.user.llama-server
-#         mlx-vlm (DiffusionGemma)    :8091  jp.co.occ.ted.diffusiongemma
+#         mlx-vlm (DiffusionGemma)    :8091  jp.co.example.ted.diffusiongemma
 #
 #       ★ これらは既定で 127.0.0.1 にしか bind していないため、そのままでは
 #         コンテナから届かない。DEPLOY.md「ホスト側バックエンドの公開」を先に実施すること。

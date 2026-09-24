@@ -137,47 +137,6 @@ mkdir -p ~/diffusiongemma && cd ~/diffusiongemma
 - mlx-vlm 0.7.2 では `logprobs` を付けると HTTP 500 になり、`response_format` は拒否されます（拡散モデルは非対応）。
   アダプタはどちらも使いません。
 
-#### 常駐化（launchd）
-
-ログイン時に自動で起動し、落ちたら再起動するように、LaunchAgent に登録します。
-`/Users/<you>` は自分のホームディレクトリに置き換えてください（plist では `~` が使えません）。
-
-`~/Library/LaunchAgents/jp.co.occ.ted.diffusiongemma.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>jp.co.occ.ted.diffusiongemma</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/Users/<you>/diffusiongemma/.venv/bin/python</string>
-    <string>-m</string><string>mlx_vlm.server</string>
-    <string>--host</string><string>127.0.0.1</string>
-    <string>--port</string><string>8090</string>
-  </array>
-  <key>WorkingDirectory</key><string>/Users/<you>/diffusiongemma</string>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>/tmp/diffusiongemma.out.log</string>
-  <key>StandardErrorPath</key><string>/tmp/diffusiongemma.err.log</string>
-</dict>
-</plist>
-```
-
-```bash
-# 登録して起動
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/jp.co.occ.ted.diffusiongemma.plist
-# 状態（PID が出ていれば起動中）
-launchctl list | grep diffusiongemma
-# 再起動 / 停止して登録解除
-launchctl kickstart -k gui/$(id -u)/jp.co.occ.ted.diffusiongemma
-launchctl bootout gui/$(id -u)/jp.co.occ.ted.diffusiongemma
-# ログ（モデルの読み込み・リクエストごとの所要時間は err 側に出る）
-tail -f /tmp/diffusiongemma.err.log
-```
-
 #### 動作確認と `.env.local`
 
 ```bash
