@@ -93,7 +93,7 @@ export function SummaryButton({ model, empty }: { model: FlowModel; empty: boole
                   概要・改善候補は生成できませんでした（{state.proseError}）。表と図はそのまま使えます。
                 </p>
               )}
-              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-zinc-100 p-3 text-xs dark:bg-white/10">
+              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-zinc-100 p-3 font-mono text-xs dark:bg-white/10">
                 {state.markdown}
               </pre>
               <div className="flex flex-wrap gap-2">
