@@ -10,13 +10,27 @@ type Props = {
   onTopicChange: (topic: "loan" | "app") => void;
   onTogglePlay: () => void;
   onNext: () => void;
+  /** 題材が前提にしている登場人物のうち、まだ図にいないもの */
+  missingActors: string[];
+  /** 足りない登場人物を図に足す */
+  onAddActors: () => void;
 };
 
 /**
  * 開発・デモ用。マイクなしで、台本の文字起こしを Jev に流して図を育てる。
  * 判定は常に Jev で行う（固定の変更をそのまま流す「台本」モードは廃止）。
  */
-export function SamplePanel({ cursor, total, playing, topic, onTopicChange, onTogglePlay, onNext }: Props) {
+export function SamplePanel({
+  cursor,
+  total,
+  playing,
+  topic,
+  onTopicChange,
+  onTogglePlay,
+  onNext,
+  missingActors,
+  onAddActors,
+}: Props) {
   const finished = cursor >= total;
   const btn =
     "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/20 dark:hover:bg-white/10";
@@ -40,6 +54,24 @@ export function SamplePanel({ cursor, total, playing, topic, onTopicChange, onTo
           </select>
         </label>
       </div>
+      {missingActors.length > 0 && (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
+          <p className="font-medium text-amber-900 dark:text-amber-200">
+            図にいない登場人物があります: {missingActors.join("、")}
+          </p>
+          <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+            このまま流すと、既存ステップの重複と判定されて図に入らないことがあります。
+            会議を作るときに関係部署へ入れておくのが本来の手順です。
+          </p>
+          <button
+            type="button"
+            onClick={onAddActors}
+            className="mt-2 rounded-md border border-amber-400 px-3 py-1.5 text-sm hover:bg-amber-100 dark:border-amber-500/60 dark:hover:bg-amber-500/20"
+          >
+            {missingActors.length} 者を図に追加
+          </button>
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onTogglePlay} disabled={finished} className={btn}>
           {playing && !finished ? "❚❚ 一時停止" : "▶ 自動再生"}

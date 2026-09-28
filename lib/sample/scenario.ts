@@ -1,4 +1,4 @@
-import type { ModelOp, NewStep, StepFlags } from "@/lib/model/types";
+import type { ActorKind, ModelOp, NewStep, StepFlags } from "@/lib/model/types";
 
 /**
  * 開発用のサンプル会議。マイクなしで「文字起こし → 図が育つ」を再現するための台本。
@@ -182,6 +182,23 @@ export const SAMPLE_SCENARIO: SampleEntry[] = [
  * 人が付けた目安で、判定器の答えとの一致・不一致を見るためのもの。
  */
 const line = (id: string, kind: SampleEntry["kind"], text: string): SampleEntry => ({ id, text, kind, ops: [] });
+
+/**
+ * 「このアプリの仕組み」の台本が前提にしている登場人物。
+ *
+ * 会議を作るときに関係部署へ入れておかないと、判定器は新しいライフラインを立てられず、
+ * 「サーバーは、gemma に名前を書くよう依頼します」のような行が、名前に関する既存ステップ
+ * （ブラウザ↔サーバー）の**重複**と判定されて図に入らない（実測）。
+ * 足りないときは画面で知らせ、1 クリックで足せるようにしてある（SamplePanel）。
+ */
+export const APP_SCENARIO_ACTORS: { name: string; kind: ActorKind }[] = [
+  { name: "ブラウザ", kind: "system" },
+  { name: "サーバー", kind: "system" },
+  { name: "whisper", kind: "system" },
+  { name: "DiffusionGemma", kind: "system" },
+  { name: "gemma", kind: "system" },
+  { name: "Mermaid", kind: "system" },
+];
 
 export const APP_SCENARIO: SampleEntry[] = [
   line("a01", "chatter", "はい、では録画も回っているので始めましょう。"),
