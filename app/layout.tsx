@@ -1,15 +1,31 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const geistSans = Geist({
+/**
+ * フォントは同梱する（next/font/local）。
+ *
+ * next/font/google は **ビルド時に fonts.googleapis.com へ取りに行く**ため、
+ * 社内プロキシ越しのイメージビルドが断続的に
+ * 「Failed to fetch Geist from Google Fonts」で落ちていた。
+ * ファイルを app/fonts に置けば、ビルドに外部通信が要らなくなる。
+ *
+ * 置いてあるのは Google Fonts が配信している latin サブセットの可変フォントそのもの
+ * （Geist v5 / Geist Mono v6、weight 100〜900 を 1 ファイルで賄う）。
+ * 日本語はもともと Geist に字が無く、従来どおりシステムフォントにフォールバックする。
+ */
+const geistSans = localFont({
+  src: "./fonts/Geist-latin.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "./fonts/GeistMono-latin.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {

@@ -24,10 +24,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # next/font/google が Geist をビルド時に取りに行くので、社内プロキシを渡す。
-      # Docker が ~/.docker/config.json から自動で入れるのは HTTPS_PROXY だけで、
-      # Next.js は HTTP_PROXY も見るため、無いと
-      # 「Failed to fetch Geist from Google Fonts」でビルドが落ちる。
+      # apk（libc6-compat）と npm ci のために社内プロキシを渡す。
+      # Docker が ~/.docker/config.json から自動で入れるのは HTTPS_PROXY だけなので明示する。
+      # フォントはリポジトリに同梱してあるので、ビルド中に fonts.googleapis.com は見に行かない
+      # （app/layout.tsx が next/font/local を使う。検証済み）。
       args:
         HTTP_PROXY: "${BUILD_PROXY:-http://host.docker.internal:3128}"
         HTTPS_PROXY: "${BUILD_PROXY:-http://host.docker.internal:3128}"
