@@ -266,19 +266,20 @@ secure context を要る Web API は、`http://<IP>` では存在せず、呼ぶ
 **`docker compose` が unknown command**
 このマシンはスタンドアロン版。`docker-compose`（ハイフンあり）を使う。
 
-**ビルドが `Failed to fetch Geist from Google Fonts` で落ちる**
-`app/layout.tsx` が `next/font/google` を使っており、ビルド時に fonts.googleapis.com を見に行く。
-Docker が `~/.docker/config.json` から自動で入れるのは `HTTPS_PROXY` だけで `HTTP_PROXY` が無く、
-Next.js は後者も見るため到達できずに落ちる。`docker-compose.yml` の `build.args` で両方渡している。
-中継（`jp.example.ted.docker-proxy-relay`、ホストの :3128）が止まっていると同じ症状になるので確認する:
+**ビルドが依存の取得で落ちる**
+ビルド中に外部へ出るのは `apk add libc6-compat` と `npm ci` の 2 つだけ。
+**フォントは `app/fonts/` に同梱してあるので、fonts.googleapis.com は見に行かない**
+（`app/layout.tsx` が `next/font/local` を使う。フォントのドメインだけ到達不能にしても
+ビルドが通ることを確認済み）。
+
+落ちるときは社内プロキシの中継（`jp.example.ted.docker-proxy-relay`、ホストの :3128）を疑う:
 
 ```bash
 launchctl list | grep docker-proxy-relay
-curl -s -o /dev/null -w "%{http_code}\n" -x http://127.0.0.1:3128 https://fonts.googleapis.com/
+curl -s -o /dev/null -w "%{http_code}\n" -x http://127.0.0.1:3128 https://registry.npmjs.org/
 ```
 
 中継の場所が違う環境では `.env` の `BUILD_PROXY` で上書きする。
-外部に出られない環境で動かすなら、`next/font/local` でフォントを同梱するのが確実。
 
 **判定が遅い / タイムアウトする**
 DiffusionGemma bf16 は初回リクエストでモデル（約 52GB）を読む。2 回目以降は速い。
