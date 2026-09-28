@@ -10,6 +10,17 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /*
+   * 和文等幅。表の桁を揃えたいところだけに使う（業務分掌の Markdown）。
+   *
+   * Geist Mono に和文等幅を「フォールバックとして足す」のでは揃わない。和文は元から
+   * 全角 1.0em で揃っており、ズレているのは欧文側だから（Geist Mono の欧文は 0.6em で、
+   * 和文の半分の 0.5em ではない）。欧文も和文等幅フォントに任せて初めて比が 2.00 になる。
+   * 実測: Geist Mono 欧文 7.2px / 和文 12px = 1.667、BIZ UDGothic 欧文 6px / 和文 12px = 2.00。
+   *
+   * BIZ UDGothic は macOS と Windows 10 (1809+) に同梱。後ろは各 OS の保険。
+   */
+  --font-mono-jp: "BIZ UDGothic", "Osaka-Mono", "MS Gothic", monospace;
   /* 録音中の丸を、心拍のように二拍で鼓動させる（録音ボタンの状態表示用） */
   --animate-heartbeat: heartbeat 1.1s ease-in-out infinite;
 }
