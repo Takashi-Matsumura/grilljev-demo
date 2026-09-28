@@ -121,7 +121,7 @@ function EntryDetail({ entry }: { entry: ConsoleEntry }) {
         </table>
       )}
       {tab === "request" && (
-        <pre className="max-h-96 overflow-auto rounded bg-zinc-100 p-2 text-xs dark:bg-white/10">
+        <pre className="max-h-96 overflow-auto rounded bg-zinc-100 p-2 font-mono text-xs dark:bg-white/10">
           {JSON.stringify(
             { model: x.request.model, state: x.request.state, questions: x.request.questions },
             null,
@@ -130,7 +130,7 @@ function EntryDetail({ entry }: { entry: ConsoleEntry }) {
         </pre>
       )}
       {tab === "response" && (
-        <pre className="max-h-96 overflow-auto rounded bg-zinc-100 p-2 text-xs dark:bg-white/10">
+        <pre className="max-h-96 overflow-auto rounded bg-zinc-100 p-2 font-mono text-xs dark:bg-white/10">
           {JSON.stringify(x.response, null, 2)}
         </pre>
       )}
@@ -169,7 +169,7 @@ function FailureDetail({ debug }: { debug: JevFailureDebug }) {
       </div>
       {tab === "raw" &&
         (debug.rawResponse ? (
-          <pre className="max-h-96 overflow-auto rounded bg-red-50 p-2 text-xs whitespace-pre-wrap dark:bg-red-500/10">
+          <pre className="max-h-96 overflow-auto rounded bg-red-50 p-2 font-mono text-xs whitespace-pre-wrap dark:bg-red-500/10">
             {debug.rawResponse}
           </pre>
         ) : (
@@ -178,7 +178,7 @@ function FailureDetail({ debug }: { debug: JevFailureDebug }) {
           </p>
         ))}
       {tab === "request" && (
-        <pre className="max-h-96 overflow-auto rounded bg-zinc-100 p-2 text-xs dark:bg-white/10">
+        <pre className="max-h-96 overflow-auto rounded bg-zinc-100 p-2 font-mono text-xs dark:bg-white/10">
           {JSON.stringify(
             { model: debug.model, state: debug.state, questions: debug.questions },
             null,
