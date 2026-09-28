@@ -7,7 +7,12 @@ import { modelFromScope } from "@/lib/model/reducer";
 import type { FlowModel } from "@/lib/model/types";
 import type { ArchivedDiagram } from "@/lib/scope/apply";
 import type { SessionSeed } from "@/lib/store/session-types";
-import { APP_SCENARIO, APP_SCENARIO_ACTORS, SAMPLE_SCENARIO } from "@/lib/sample/scenario";
+import {
+  APP_SCENARIO,
+  APP_SCENARIO_ACTORS,
+  SAMPLE_SCENARIO,
+  SAMPLE_SCENARIO_ACTORS,
+} from "@/lib/sample/scenario";
 import { clock, type Line, type LineLabeling } from "@/lib/transcript/line";
 import { autoVocab } from "@/lib/transcript/vocab";
 import { DiagramPane } from "./diagram-pane";
@@ -198,19 +203,22 @@ export function Studio({
   );
 
   const scenario = useMemo(() => (topic === "app" ? APP_SCENARIO : SAMPLE_SCENARIO), [topic]);
+  const scenarioActors = useMemo(
+    () => (topic === "app" ? APP_SCENARIO_ACTORS : SAMPLE_SCENARIO_ACTORS),
+    [topic],
+  );
 
-  // 「このアプリの仕組み」は 6 者が図にいることを前提にした台本。いないまま流すと、
+  // 台本は、前提にしている登場人物が図にいることを想定して書いてある。いないまま流すと、
   // 判定器が新しいライフラインを立てられず、既存ステップの重複と見なして落としてしまう。
   // 名前は表記ゆれを見ずに素で比べる（台本が書いている名前と一致しなければ足りない扱い）。
   const missingActors = useMemo(() => {
-    if (topic !== "app") return [];
     const have = new Set(pipeline.model.actors.map((a) => a.name));
-    return APP_SCENARIO_ACTORS.filter((a) => !have.has(a.name)).map((a) => a.name);
-  }, [topic, pipeline.model.actors]);
+    return scenarioActors.filter((a) => !have.has(a.name)).map((a) => a.name);
+  }, [scenarioActors, pipeline.model.actors]);
 
   const addScenarioActors = useCallback(() => {
     const have = new Set(pipeline.model.actors.map((a) => a.name));
-    const next = APP_SCENARIO_ACTORS.filter((a) => !have.has(a.name));
+    const next = scenarioActors.filter((a) => !have.has(a.name));
     if (next.length === 0) return;
     // id は既存の最大値の続きから振る（reducer は lane と rev だけを自分で決める）
     const used = pipeline.model.actors
@@ -224,7 +232,7 @@ export function Studio({
       }),
       "manual",
     );
-  }, [commit, pipeline.model.actors]);
+  }, [commit, pipeline.model.actors, scenarioActors]);
   const finished = cursor >= scenario.length;
 
   /** 台本を 1 行進める。判定は常に Jev（固定の変更をそのまま流す「台本」モードは廃止した） */
