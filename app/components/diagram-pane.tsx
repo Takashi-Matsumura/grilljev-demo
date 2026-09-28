@@ -79,7 +79,7 @@ export function DiagramPane({
               <DisclosureIcon />
               Mermaid コードを表示
             </summary>
-            <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-zinc-100 p-3 text-xs dark:bg-white/10">
+            <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-zinc-100 p-3 font-mono text-xs dark:bg-white/10">
               {code}
             </pre>
           </details>
