@@ -48,6 +48,50 @@ export function cell(text: string): string {
   return s === "" ? "—" : s;
 }
 
+/**
+ * 表示上の桁数。CJK・かな・全角記号は 2 桁で数える。
+ *
+ * Unicode の East Asian Width で言う Wide(W) と Fullwidth(F) だけを 2 桁にし、
+ * Ambiguous(A) は 1 桁のままにしている。和文等幅（BIZ UDGothic）での実測で、
+ * `—` `–` は 1 桁、`・`「」（）、あ 漢 ー ％ ～ は 2 桁だったため。
+ */
+export function displayWidth(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    const wide =
+      (c >= 0x1100 && c <= 0x115f) || // ハングル字母
+      (c >= 0x2e80 && c <= 0x303e) || // CJK 部首・記号（「」、。など）
+      (c >= 0x3041 && c <= 0x33ff) || // かな・カタカナ・互換
+      (c >= 0x3400 && c <= 0x4dbf) || // 漢字 拡張A
+      (c >= 0x4e00 && c <= 0x9fff) || // 漢字
+      (c >= 0xa000 && c <= 0xa4cf) ||
+      (c >= 0xac00 && c <= 0xd7a3) || // ハングル
+      (c >= 0xf900 && c <= 0xfaff) || // 互換漢字
+      (c >= 0xfe30 && c <= 0xfe6f) || // 互換形・小字形
+      (c >= 0xff00 && c <= 0xff60) || // 全角英数・記号
+      (c >= 0xffe0 && c <= 0xffe6) ||
+      (c >= 0x20000 && c <= 0x3fffd); // 拡張漢字
+    w += wide ? 2 : 1;
+  }
+  return w;
+}
+
+/**
+ * Markdown の表。**セルを桁数で詰めて出す。**
+ *
+ * 詰めないと、和文等幅フォントで見ても `|` が縦に揃わない（元の文字数が違うため）。
+ * 書き出した .md を素のエディタで開いたときにも読みやすくなる。
+ */
+export function table(header: string[], rows: string[][]): string[] {
+  const widths = header.map((h, i) =>
+    Math.max(displayWidth(h), ...rows.map((r) => displayWidth(r[i] ?? ""))),
+  );
+  const pad = (text: string, i: number) => text + " ".repeat(Math.max(0, widths[i] - displayWidth(text)));
+  const row = (cells: string[]) => `| ${cells.map(pad).join(" | ")} |`;
+  return [row(header), `| ${widths.map((w) => "-".repeat(Math.max(3, w))).join(" | ")} |`, ...rows.map(row)];
+}
+
 const mark = (n: number) => n.toFixed(2);
 
 export function buildSummaryMarkdown(
@@ -80,10 +124,14 @@ export function buildSummaryMarkdown(
   if (model.actors.length === 0) {
     lines.push("（関係者はいません）", "");
   } else {
-    lines.push("| 名称 | 種別 | 別名 |", "|---|---|---|");
-    for (const a of [...model.actors].sort((x, y) => x.lane - y.lane)) {
-      lines.push(`| ${cell(a.name)} | ${KIND_LABEL[a.kind]} | ${cell(a.aliases.join("、"))} |`);
-    }
+    lines.push(
+      ...table(
+        ["名称", "種別", "別名"],
+        [...model.actors]
+          .sort((x, y) => x.lane - y.lane)
+          .map((a) => [cell(a.name), KIND_LABEL[a.kind], cell(a.aliases.join("、"))]),
+      ),
+    );
     lines.push("");
   }
 
@@ -92,16 +140,28 @@ export function buildSummaryMarkdown(
   if (steps.length === 0) {
     lines.push("（ステップはまだありません）", "");
   } else {
-    lines.push("| # | 送り手 | 受け手 | 内容 | 種別 | 条件 | 書類・道具 | 確度 |", "|---|---|---|---|---|---|---|---|");
-    steps.forEach((s, i) => {
-      const b = branchOf(s.branchId);
-      const cond = b ? `${b.kind} ${b.condition}` : "";
-      const label = s.label + flagSuffix(s);
-      const certainty = s.status === "provisional" ? `**仮** ${mark(s.confidence)}` : mark(s.confidence);
-      lines.push(
-        `| ${i + 1} | ${cell(nameOf(s.from))} | ${cell(nameOf(s.to))} | ${cell(label)} | ${MESSAGE_LABEL[s.kind]} | ${cell(cond)} | ${cell(s.artifact ?? "")} | ${certainty} |`,
-      );
-    });
+    lines.push(
+      ...table(
+        ["#", "送り手", "受け手", "内容", "種別", "条件", "書類・道具", "確度"],
+        steps.map((s, i) => {
+          const b = branchOf(s.branchId);
+          const cond = b ? `${b.kind} ${b.condition}` : "";
+          const label = s.label + flagSuffix(s);
+          const certainty =
+            s.status === "provisional" ? `**仮** ${mark(s.confidence)}` : mark(s.confidence);
+          return [
+            String(i + 1),
+            cell(nameOf(s.from)),
+            cell(nameOf(s.to)),
+            cell(label),
+            MESSAGE_LABEL[s.kind],
+            cell(cond),
+            cell(s.artifact ?? ""),
+            certainty,
+          ];
+        }),
+      ),
+    );
     lines.push("");
   }
 
@@ -133,14 +193,19 @@ export function buildSummaryMarkdown(
   if (model.issues.length === 0) {
     lines.push("（論点はありません）", "");
   } else {
-    lines.push("| 状態 | 種別 | 論点 | 回答 |", "|---|---|---|---|");
     const order: OpenIssue["status"][] = ["open", "asked", "parked", "answered"];
     const sorted = [...model.issues].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
-    for (const i of sorted) {
-      lines.push(
-        `| ${ISSUE_STATUS[i.status]} | ${ISSUE_KIND[i.kind]} | ${cell(i.prompt?.text ?? i.question)} | ${cell(i.answer ?? "")} |`,
-      );
-    }
+    lines.push(
+      ...table(
+        ["状態", "種別", "論点", "回答"],
+        sorted.map((i) => [
+          ISSUE_STATUS[i.status],
+          ISSUE_KIND[i.kind],
+          cell(i.prompt?.text ?? i.question),
+          cell(i.answer ?? ""),
+        ]),
+      ),
+    );
     lines.push("");
   }
 
