@@ -101,7 +101,7 @@ curl -s -X POST http://127.0.0.1:8050/api/analyze -H 'Content-Type: application/
 
 ## 社内検証環境: IP アドレスで見せる
 
-`.env` で `APP_BIND=0.0.0.0` にすると、`http://<ホストのIP>:8050`（例 `http://172.16.2.222:8050`）で
+`.env` で `APP_BIND=0.0.0.0` にすると、`http://<ホストのIP>:8050`（例 `http://192.0.2.10:8050`）で
 社内の端末から開ける。
 
 ```bash
@@ -113,7 +113,7 @@ docker-compose up -d
 
 | URL | `isSecureContext` | `navigator.mediaDevices` |
 |---|---|---|
-| `http://172.16.2.222:8050/` | `false` | **`undefined`** |
+| `http://192.0.2.10:8050/` | `false` | **`undefined`** |
 | `http://localhost:8050/` | `true` | `object` |
 
 文字起こし以外（開発用サンプルの再生・図の生成・書き出し・業務分掌）は動くので、
@@ -124,7 +124,7 @@ docker-compose up -d
 各端末で 1 回だけ設定する。
 
 1. `chrome://flags/#unsafely-treat-insecure-origin-as-secure` を開く
-2. `http://172.16.2.222:8050` を入力して **Enabled** にする
+2. `http://192.0.2.10:8050` を入力して **Enabled** にする
 3. Chrome を再起動する
 
 これで `isSecureContext` が `true` になり、マイクが使えるようになる（実測で確認）。
@@ -133,7 +133,7 @@ docker-compose up -d
 ### B. IP アドレスに証明書を出す（端末ごとの設定は CA の導入だけ）
 
 Caddy の `tls internal` は IP アドレスにも証明書を出せる。下の HTTPS 公開の手順で
-サイト名をホスト名でなく `https://172.16.2.222` にする。利用者端末には
+サイト名をホスト名でなく `https://192.0.2.10` にする。利用者端末には
 BoX3 Internal CA のルート証明書が要る（次節を参照）。
 
 ## HTTPS で社内公開する
