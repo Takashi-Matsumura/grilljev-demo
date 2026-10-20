@@ -68,7 +68,7 @@ export function DiagramPane({
             <MermaidDiagram code={code} onSvg={(svg, forCode) => setRendered({ svg, code: forCode })} />
           ) : (
             <p className="rounded-md border border-dashed border-black/15 p-4 text-sm text-zinc-500 dark:border-white/20">
-              まだ図がありません。関係部署を設定して会話が始まると、ここに描かれます。
+              まだ図がありません。登場人物が登録されるか、会話の中で出てくると、ここに描かれます。
             </p>
           )}
         </div>

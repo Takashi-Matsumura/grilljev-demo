@@ -1,5 +1,5 @@
 import { isFlowModel } from "../model/guard";
-import type { FlowModel } from "../model/types";
+import type { ActorKind, ActorRole, FlowModel } from "../model/types";
 import type { ArchivedDiagram } from "../scope/apply";
 import type { Line } from "../transcript/line";
 
@@ -8,8 +8,17 @@ import type { Line } from "../transcript/line";
  * 保存は SQLite（`sessions/sessions.db`。lib/store/sessions.ts）。
  */
 
+/** 会議の前に登録する登場人物。並べた順がライフラインの並び（左から）になる。 */
+export type SeedActor = {
+  name: string;
+  kind: Exclude<ActorKind, "unknown">;
+  role?: ActorRole;
+  /** 会議に出席しているか */
+  present: boolean;
+};
+
 /** 開始時の初期設定＝共通認識。「リセット」の戻り先にもなる。 */
-export type SessionSeed = { title: string; departments: string[] };
+export type SessionSeed = { title: string; actors: SeedActor[] };
 
 export type SessionFile = {
   version: 1;
@@ -62,8 +71,9 @@ export function newSlug(now: Date, random: () => string = () => Math.random().to
 
 // ── 入力の検証 ─────────────────────────────────────────────────────
 export const MAX_NAME_CHARS = 60;
-export const MAX_DEPARTMENTS = 20;
-export const MAX_DEPARTMENT_CHARS = 30;
+export const MAX_SEED_ACTORS = 20;
+export const MAX_ACTOR_CHARS = 30;
+export const SEED_ACTOR_KINDS: SeedActor["kind"][] = ["role", "person", "system", "external"];
 export const MAX_ARCHIVES = 50;
 export const MAX_LINES = 2_000;
 
@@ -75,24 +85,42 @@ export function parseName(v: unknown): string | null {
   return s !== "" && s.length <= MAX_NAME_CHARS ? s : null;
 }
 
-/** 初期設定（業務名 + 関係部署）。部署は空白・重複を除く。業務名が空なら null。 */
-export function parseSeed(title: unknown, departments: unknown): SessionSeed | null {
+/**
+ * 初期設定（業務名 + 登場人物）。名前の空白・重複は除き、起点・終点はそれぞれ先頭の 1 人だけ残す。
+ * 業務名が空なら null。`departments` は登場人物を導入する前の保存形式（部署名の配列）で、
+ * `actors` が無いときだけ「出席している部署」として読む。
+ */
+export function parseSeed(title: unknown, actors: unknown, departments?: unknown): SessionSeed | null {
   const t = clean(title);
   if (t === "" || t.length > MAX_NAME_CHARS) return null;
-  const list = Array.isArray(departments) ? departments : [];
+  const list: unknown[] = Array.isArray(actors)
+    ? actors
+    : Array.isArray(departments)
+      ? departments.map((name) => ({ name, kind: "role", present: true }))
+      : [];
   const seen = new Set<string>();
-  const out: string[] = [];
-  for (const d of list) {
-    const s = clean(d);
-    if (s === "" || s.length > MAX_DEPARTMENT_CHARS || seen.has(s)) continue;
-    seen.add(s);
-    out.push(s);
+  const roles = new Set<ActorRole>();
+  const out: SeedActor[] = [];
+  for (const v of list) {
+    if (typeof v !== "object" || v === null) continue;
+    const a = v as Record<string, unknown>;
+    const name = clean(a.name);
+    if (name === "" || name.length > MAX_ACTOR_CHARS || seen.has(name)) continue;
+    seen.add(name);
+    const kind = SEED_ACTOR_KINDS.find((k) => k === a.kind) ?? "role";
+    const role = a.role === "trigger" || a.role === "end" ? a.role : undefined;
+    const actor: SeedActor = { name, kind, present: a.present !== false };
+    if (role && !roles.has(role)) {
+      roles.add(role);
+      actor.role = role;
+    }
+    out.push(actor);
   }
-  return { title: t, departments: out.slice(0, MAX_DEPARTMENTS) };
+  return { title: t, actors: out.slice(0, MAX_SEED_ACTORS) };
 }
 
-/** 「営業、経理, 与信部」のような 1 行の入力を、部署の配列にする。 */
-export function splitDepartments(input: string): string[] {
+/** 「営業、経理, 与信部」のような 1 行の入力を、名前の配列にする（登場人物をまとめて足すとき）。 */
+export function splitNames(input: string): string[] {
   return input.split(/[、,，\n]/).map((s) => s.trim()).filter((s) => s !== "");
 }
 
@@ -137,7 +165,8 @@ export function parseSessionFile(v: unknown): SessionFile | null {
   const f = v as Record<string, unknown>;
   if (f.version !== 1 || !isValidSlug(f.slug)) return null;
   if (typeof f.name !== "string" || typeof f.createdAt !== "string" || typeof f.updatedAt !== "string") return null;
-  const seed = parseSeed((f.seed as Record<string, unknown> | undefined)?.title, (f.seed as Record<string, unknown> | undefined)?.departments);
+  const rawSeed = (f.seed ?? {}) as Record<string, unknown>;
+  const seed = parseSeed(rawSeed.title, rawSeed.actors, rawSeed.departments);
   const patch = parseSessionPatch(f);
   if (!seed || !patch) return null;
   return {

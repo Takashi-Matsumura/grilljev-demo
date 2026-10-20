@@ -10,7 +10,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
   const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
-  const seed = parseSeed(b.title, b.departments);
+  const seed = parseSeed(b.title, b.actors);
   if (!seed) return Response.json({ error: "業務名を入力してください（60 文字以内）" }, { status: 400 });
   const name = parseName(b.name) ?? seed.title;
   const created = await createSession(name, seed);

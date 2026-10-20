@@ -18,6 +18,11 @@ const KIND_LABEL: Record<Actor["kind"], string> = {
   unknown: "不明",
 };
 
+const ROLE_LABEL: Record<NonNullable<Actor["role"]>, string> = {
+  trigger: "起点",
+  end: "終点",
+};
+
 const MESSAGE_LABEL: Record<Step["kind"], string> = {
   sync: "依頼",
   async: "通知",
@@ -126,10 +131,10 @@ export function buildSummaryMarkdown(
   } else {
     lines.push(
       ...table(
-        ["名称", "種別", "別名"],
+        ["名称", "種別", "起点・終点", "別名"],
         [...model.actors]
           .sort((x, y) => x.lane - y.lane)
-          .map((a) => [cell(a.name), KIND_LABEL[a.kind], cell(a.aliases.join("、"))]),
+          .map((a) => [cell(a.name), KIND_LABEL[a.kind], a.role ? ROLE_LABEL[a.role] : "", cell(a.aliases.join("、"))]),
       ),
     );
     lines.push("");

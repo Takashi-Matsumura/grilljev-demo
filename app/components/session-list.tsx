@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { splitDepartments, type SessionMeta } from "@/lib/store/session-types";
+import type { SeedActor, SessionMeta } from "@/lib/store/session-types";
+import { StakeholderEditor, toSeedActors, type StakeholderRow } from "./stakeholder-editor";
 
 const fmt = (iso: string) => new Date(iso).toLocaleString("ja-JP", { hour12: false });
 
@@ -11,7 +12,7 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
   const router = useRouter();
   const [sessions, setSessions] = useState(initial);
   const [title, setTitle] = useState("");
-  const [departments, setDepartments] = useState("");
+  const [stakeholders, setStakeholders] = useState<StakeholderRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -19,14 +20,14 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
   const [editName, setEditName] = useState("");
   const [renaming, setRenaming] = useState(false);
 
-  async function create(t: string, d: string[]) {
+  async function create(t: string, actors: SeedActor[]) {
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: t, departments: d }),
+        body: JSON.stringify({ title: t, actors }),
       });
       const data = (await res.json().catch(() => ({}))) as { slug?: string; error?: string };
       if (!res.ok || !data.slug) throw new Error(data.error ?? "作成に失敗しました");
@@ -78,14 +79,14 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
     "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10";
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-4">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-4">
       <section className="flex flex-col gap-3">
         <h2 className="font-medium">新しい会議を始める</h2>
         <form
           className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start"
           onSubmit={(e) => {
             e.preventDefault();
-            void create(title, splitDepartments(departments));
+            void create(title, toSeedActors(stakeholders));
           }}
         >
           <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -107,15 +108,7 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
                 placeholder="例: 月次請求書発行業務"
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
-              関係部署（「、」または「,」区切り・任意）
-              <input
-                className={input}
-                value={departments}
-                onChange={(e) => setDepartments(e.target.value)}
-                placeholder="例: 営業、経理、部長"
-              />
-            </label>
+            <StakeholderEditor rows={stakeholders} onChange={setStakeholders} />
           </div>
 
           {/* 一番押してほしい操作なので、正方形の大きなボタンにして目立たせる */}

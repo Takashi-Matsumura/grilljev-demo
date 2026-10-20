@@ -1,5 +1,5 @@
 import type { Actor, FlowModel, Step } from "@/lib/model/types";
-import { visibleSteps } from "./mermaid";
+import { actorLabel, visibleSteps } from "./mermaid";
 
 /**
  * シーケンス図の座標計算。純関数。drawio への書き出しが使う（将来の直接描画とも共用できる）。
@@ -81,7 +81,7 @@ export function layoutDiagram(model: FlowModel): Layout {
     const asActor = a.kind === "person" || a.kind === "role";
     const w = asActor ? ACTOR_W : LIFE_W;
     const cx = MARGIN_X + LIFE_W / 2 + i * PITCH;
-    return { id: a.id, name: a.name, kind: a.kind, cx, x: cx - w / 2, w, asActor };
+    return { id: a.id, name: actorLabel(a), kind: a.kind, cx, x: cx - w / 2, w, asActor };
   });
   const cxOf = new Map(actors.map((a) => [a.id, a.cx]));
 

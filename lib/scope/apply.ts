@@ -17,7 +17,8 @@ export function splitModel(prev: FlowModel, title: string, at: string): FlowMode
   return {
     rev: 0,
     scope: { title, purpose: "", trigger: "", frequency: "" },
-    actors: prev.actors.map((a) => ({ ...a, addedAtRev: 0 })),
+    // 起点・終点は業務ごとに違うので引き継がない（出席の有無は会議の顔ぶれなので残す）
+    actors: prev.actors.map((a) => ({ ...a, role: undefined, addedAtRev: 0 })),
     steps: [],
     branches: [],
     issues: [],
