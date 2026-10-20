@@ -1,4 +1,4 @@
-import { extractActors, labelStep } from "@/lib/analysis/label";
+import { extractActors, labelStep, renameStep } from "@/lib/analysis/label";
 import { LlmError } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +56,13 @@ export async function POST(request: Request) {
         need,
       });
       return Response.json(result);
+    }
+
+    if (body.mode === "rename") {
+      if (!isStr(body.utterance, MAX_TEXT) || !isStr(body.currentLabel, MAX_TEXT)) {
+        return Response.json({ error: "入力の形式が正しくありません" }, { status: 400 });
+      }
+      return Response.json(await renameStep({ utterance: body.utterance, currentLabel: body.currentLabel }));
     }
 
     return Response.json({ error: "mode が正しくありません" }, { status: 400 });

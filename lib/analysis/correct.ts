@@ -4,16 +4,16 @@ import { visibleSteps } from "@/lib/render/mermaid";
 import { ACTOR_APPLY, CORRECTION_MIN, CORRECTION_STRONG } from "./thresholds";
 
 /**
- * 音声による図の訂正（「1 番を消して」「2 番の相手は経理です」「2 番と 3 番を入れ替えて」）。
+ * 音声による図の訂正（「1 番を消して」「2 番の相手は経理です」「2 番と 3 番を入れ替えて」「1 番の名前は〇〇です」）。
  *
  * 発話ごとの Jev のリクエストに、訂正用の質問を相乗りさせる（並列評価なので待ち時間はほぼ増えない）。
  * 対象のステップは、図に描かれている番号（autonumber）を付けた選択肢から選ばせる。
- * 文言の書き換え（名前の言い直し）は gemma が要るので扱わない。マウスで直す。
+ * 名前の言い直しは、新しい名前を発言から取り出すのに gemma が要るので、後続処理（followUps）に回す。
  */
 
 const NONE = "__none__";
 
-export type CorrectionAction = "delete" | "change_from" | "change_to" | "swap";
+export type CorrectionAction = "delete" | "change_from" | "change_to" | "swap" | "rename";
 
 const circled = (n: number) => (n >= 1 && n <= 20 ? String.fromCodePoint(0x2460 + n - 1) : `${n}番`);
 
@@ -44,6 +44,7 @@ export function buildCorrectionQuestions(model: FlowModel): Record<string, JevQu
         change_from: "特定のステップを行う人（送り手）が違うと言い、正しい人を述べている（「2番をやるのは総務じゃなくて営業です」）",
         change_to: "特定のステップの相手（受け手）が違うと言い、正しい相手を述べている（「2番の送り先は経理です」）",
         swap: "2 つのステップの順番を入れ替える・前後を直すよう求めている（「2番と3番が逆です」）",
+        rename: "特定のステップの名前（矢印に書かれた文言）を、新しい言い方に直すよう求めている（「1番の名前は請求書の受付です」「2番はPDFを転送するに直して」）",
         [NONE]: "図の既存のステップを直す発言ではない（新しい手順の説明、既存の手順への補足、質問、雑談など）",
       },
     },
@@ -77,6 +78,8 @@ const choice = (a: Answers, key: string): JevChoiceAnswer | null => {
 
 export type Correction = {
   ops: ModelOp[];
+  /** 名前の言い直し。新しい名前は gemma が発言から取り出す */
+  followUps?: { kind: "rename"; stepId: string }[];
   /** 画面に出す 1 行。直せなかったときは、その理由とマウスでの直し方 */
   note: string;
 };
@@ -161,6 +164,13 @@ export function interpretCorrection(
         note: `訂正: ${label}の${role}を「${actor.name}」に直しました`,
       };
     }
+
+    case "rename":
+      return {
+        ops: [],
+        followUps: [{ kind: "rename", stepId: target.id }],
+        note: `訂正: ${label}の名前を、発言の言い方に直します`,
+      };
 
     case "swap": {
       // Jev の答えが対象と同じ・確信不足なら、発話に出てきたもう一方の番号で補う

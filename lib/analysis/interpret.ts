@@ -80,6 +80,11 @@ export type FollowUp =
       flags: StepFlags;
       branchHint: number;
       artifactHint: number;
+    }
+  | {
+      /** 名前の言い直し（音声の訂正）。発言から新しいステップ名を取り出して付け替える */
+      kind: "rename";
+      stepId: string;
     };
 
 export type Interpretation = {
@@ -311,10 +316,12 @@ function interpretUtterance(
   // 訂正（「1 番を消して」など）は、新しい内容を足す解釈より先に扱う。直せなかったら要確認にする
   const correction = interpretCorrection(answers, model, intent, ctx.utterance);
   if (correction) {
+    const followUps = correction.followUps ?? [];
     return {
       ...base,
-      verdict: correction.ops.length > 0 ? "apply" : "confirm",
+      verdict: correction.ops.length > 0 || followUps.length > 0 ? "apply" : "confirm",
       ops: correction.ops,
+      followUps,
       summary: correction.note,
       correction: true,
     };
