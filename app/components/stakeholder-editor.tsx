@@ -152,25 +152,28 @@ export function StakeholderEditor({
                   </option>
                 ))}
               </select>
-              {(["trigger", "end"] as const).map((role) => (
-                <button
-                  key={role}
-                  type="button"
-                  aria-pressed={r.role === role}
-                  title={ROLE_TEXT[role].hint}
-                  className={`${small} ${r.role === role ? roleOn : ""}`}
-                  onClick={() => toggleRole(r.key, role)}
+              {/* 起点・終点・出席はひとまとまり。狭い幅でも、この途中では折り返さない */}
+              <span className="flex shrink-0 items-center gap-1.5">
+                {(["trigger", "end"] as const).map((role) => (
+                  <button
+                    key={role}
+                    type="button"
+                    aria-pressed={r.role === role}
+                    title={ROLE_TEXT[role].hint}
+                    className={`${small} ${r.role === role ? roleOn : ""}`}
+                    onClick={() => toggleRole(r.key, role)}
+                  >
+                    {ROLE_TEXT[role].label}
+                  </button>
+                ))}
+                <label
+                  className="flex items-center gap-1 px-1 text-xs"
+                  title={r.present === undefined ? "出席はまだ未設定です" : "この会議に出席しているか"}
                 >
-                  {ROLE_TEXT[role].label}
-                </button>
-              ))}
-              <label
-                className="flex items-center gap-1 px-1 text-xs"
-                title={r.present === undefined ? "出席はまだ未設定です" : "この会議に出席しているか"}
-              >
-                <PresentCheckbox value={r.present} onChange={(present) => update(r.key, { present })} />
-                出席
-              </label>
+                  <PresentCheckbox value={r.present} onChange={(present) => update(r.key, { present })} />
+                  出席
+                </label>
+              </span>
               <span className="flex gap-1">
                 <button type="button" className={small} aria-label="左へ" disabled={i === 0} onClick={() => move(i, -1)}>
                   ↑

@@ -45,6 +45,8 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    /* スクロールバー・select の選択肢・チェックボックスなど、ブラウザ標準の部品も暗くする */
+    color-scheme: dark;
   }
 }
 
