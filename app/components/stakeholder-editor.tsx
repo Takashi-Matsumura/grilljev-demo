@@ -1,13 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import type { ActorRole } from "@/lib/model/types";
+import type { ActorKind, ActorRole } from "@/lib/model/types";
 import { MAX_ACTOR_CHARS, MAX_SEED_ACTORS, splitNames, type SeedActor } from "@/lib/store/session-types";
 
-/** 編集中の 1 行。key は並べ替え・削除で React の行を取り違えないためだけのもの */
-export type StakeholderRow = SeedActor & { key: string };
+/**
+ * 編集中の 1 行。key は並べ替え・削除で React の行を取り違えないためのもの（会議画面ではアクターの id）。
+ * 会話の中で出てきた人は、種別が "unknown"、出席が未設定（undefined）のことがある。
+ */
+export type StakeholderRow = {
+  key: string;
+  name: string;
+  kind: ActorKind;
+  role?: ActorRole;
+  present?: boolean;
+};
 
-const KIND_OPTIONS: { value: SeedActor["kind"]; label: string }[] = [
+const KIND_OPTIONS: { value: ActorKind; label: string }[] = [
   { value: "role", label: "部署・役職" },
   { value: "person", label: "個人" },
   { value: "system", label: "システム" },
@@ -23,18 +32,40 @@ let seq = 0;
 const newKey = () => `r${++seq}`;
 
 export const toSeedActors = (rows: StakeholderRow[]): SeedActor[] =>
-  rows.map((r) => ({ name: r.name, kind: r.kind, role: r.role, present: r.present }));
+  rows.map((r) => ({
+    name: r.name,
+    kind: r.kind === "unknown" ? "role" : r.kind,
+    role: r.role,
+    present: r.present ?? true,
+  }));
+
+/** 出席が未設定の行は、チェックボックスを「どちらでもない」表示にする */
+function PresentCheckbox({ value, onChange }: { value?: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <input
+      type="checkbox"
+      checked={value === true}
+      ref={(el) => {
+        if (el) el.indeterminate = value === undefined;
+      }}
+      onChange={(e) => onChange(e.target.checked)}
+    />
+  );
+}
 
 /**
- * 会議の前に、業務の登場人物（シーケンス図のライフライン）を並べる。
+ * 会議の前に、業務の登場人物（シーケンス図のライフライン）を並べる。会議画面での手直しにも使う。
  * 自分の作業の前後にいる人を先に置いておくと、会話が「その間をどうつなぐか」に向かう。
  */
 export function StakeholderEditor({
   rows,
   onChange,
+  canRemove = () => true,
 }: {
   rows: StakeholderRow[];
   onChange: (rows: StakeholderRow[]) => void;
+  /** 削除できる行か。会議画面では、図にすでにいる人は消さない（ステップが宙に浮くため） */
+  canRemove?: (row: StakeholderRow) => boolean;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -44,10 +75,11 @@ export function StakeholderEditor({
       .map((n) => n.slice(0, MAX_ACTOR_CHARS))
       .filter((n) => !known.has(n) && (known.add(n), true))
       .map((name): StakeholderRow => ({ key: newKey(), name, kind: "role", present: true }));
-    onChange([...rows, ...added].slice(0, MAX_SEED_ACTORS));
+    // 上限を超えた分は足さない（既存の行は削らない）
+    onChange([...rows, ...added.slice(0, Math.max(0, MAX_SEED_ACTORS - rows.length))]);
     setDraft("");
   };
-  const update = (key: string, patch: Partial<SeedActor>) =>
+  const update = (key: string, patch: Partial<StakeholderRow>) =>
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   // 起点・終点はそれぞれ 1 人だけ。押し直すと外れる
   const toggleRole = (key: string, role: ActorRole) =>
@@ -103,8 +135,9 @@ export function StakeholderEditor({
                 className="rounded-md border border-black/15 bg-transparent px-1.5 py-1.5 text-xs dark:border-white/20"
                 value={r.kind}
                 aria-label="種別"
-                onChange={(e) => update(r.key, { kind: e.target.value as SeedActor["kind"] })}
+                onChange={(e) => update(r.key, { kind: e.target.value as ActorKind })}
               >
+                {r.kind === "unknown" && <option value="unknown">不明</option>}
                 {KIND_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
@@ -123,12 +156,11 @@ export function StakeholderEditor({
                   {ROLE_TEXT[role].label}
                 </button>
               ))}
-              <label className="flex items-center gap-1 px-1 text-xs" title="この会議に出席しているか">
-                <input
-                  type="checkbox"
-                  checked={r.present}
-                  onChange={(e) => update(r.key, { present: e.target.checked })}
-                />
+              <label
+                className="flex items-center gap-1 px-1 text-xs"
+                title={r.present === undefined ? "出席はまだ未設定です" : "この会議に出席しているか"}
+              >
+                <PresentCheckbox value={r.present} onChange={(present) => update(r.key, { present })} />
                 出席
               </label>
               <span className="flex gap-1">
@@ -144,14 +176,16 @@ export function StakeholderEditor({
                 >
                   ↓
                 </button>
-                <button
-                  type="button"
-                  className={small}
-                  aria-label={`${r.name || "この行"}を削除`}
-                  onClick={() => onChange(rows.filter((x) => x.key !== r.key))}
-                >
-                  ×
-                </button>
+                {canRemove(r) && (
+                  <button
+                    type="button"
+                    className={small}
+                    aria-label={`${r.name || "この行"}を削除`}
+                    onClick={() => onChange(rows.filter((x) => x.key !== r.key))}
+                  >
+                    ×
+                  </button>
+                )}
               </span>
             </li>
           ))}
@@ -204,13 +238,13 @@ function LanePreview({ rows }: { rows: StakeholderRow[] }) {
     <div aria-label="図のライフラインの並び" className="overflow-x-auto rounded-md bg-zinc-50 p-3 dark:bg-white/5">
       <div className="flex w-max gap-3">
         {rows.map((r) => (
-          <div key={r.key} className={`flex w-24 flex-col items-center ${r.present ? "" : "opacity-50"}`}>
+          <div key={r.key} className={`flex w-24 flex-col items-center ${r.present === false ? "opacity-50" : ""}`}>
             <span className="w-full truncate rounded border border-black/20 bg-background px-1.5 py-1 text-center text-xs dark:border-white/25">
               {r.name || "（未入力）"}
             </span>
             <span className="h-6 border-l border-dashed border-black/30 dark:border-white/30" />
             <span className="h-4 text-[11px] leading-4 text-zinc-500">
-              {[r.role && ROLE_TEXT[r.role].label, !r.present && "出席なし"].filter(Boolean).join("・")}
+              {[r.role && ROLE_TEXT[r.role].label, r.present === false && "出席なし"].filter(Boolean).join("・")}
             </span>
           </div>
         ))}

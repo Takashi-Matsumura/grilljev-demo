@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { ReadinessItem } from "@/lib/model/attention";
-import type { Actor, FlowModel } from "@/lib/model/types";
+import type { Actor, FlowModel, ModelOp } from "@/lib/model/types";
+import { ActorEditDialog } from "./actor-edit-dialog";
 import type { UpdateSource } from "./diagram-pane";
 import { useFacilitatorAuto } from "./use-facilitator-auto";
 
@@ -93,11 +94,14 @@ export function DiagramMeta({
   model,
   readiness,
   source,
+  onEditActors,
   devMode = false,
 }: {
   model: FlowModel;
   readiness: ReadinessItem[];
   source: UpdateSource;
+  /** 登場人物の手直し（過去の図では渡さない） */
+  onEditActors?: (ops: ModelOp[]) => void;
   devMode?: boolean;
 }) {
   const badge = (devMode ? SOURCE_BADGE_DEV : SOURCE_BADGE_PLAIN)[source];
@@ -162,6 +166,7 @@ export function DiagramMeta({
           <ReadinessChip key={item.key} item={item} />
         ))}
         <ActorChips actors={model.actors} />
+        {onEditActors && <ActorEditDialog model={model} onSave={onEditActors} />}
       </div>
     </div>
   );
