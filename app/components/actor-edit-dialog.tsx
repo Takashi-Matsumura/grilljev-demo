@@ -63,6 +63,7 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
     setOriginalIds(new Set(model.actors.map((a) => a.id)));
     ref.current?.showModal();
   };
+  const empty = model.actors.length === 0;
   const names = rows.map((r) => r.name.trim()).filter((n) => n !== "");
   const duplicate = names.find((n, i) => names.indexOf(n) !== i);
   const save = () => {
@@ -76,13 +77,39 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
 
   return (
     <>
+      {/* 会議中に新しい関係者が分かったときにも押すので、目立つ Aqua のボタンにする。
+          登場人物が 0 人なら、まずここから始めてほしいので、青く脈動させて光の輪で誘う */}
       <button
         type="button"
-        className="shrink-0 rounded px-1.5 py-0.5 text-xs text-zinc-500 underline-offset-2 hover:underline"
+        className={`aqua-button flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-0.5 text-[10px] leading-tight font-medium ${
+          empty ? "aqua-button--beckon" : "aqua-button--clear"
+        }`}
         onClick={open}
-        title="登場人物の名前・種別・起点/終点・出席・並び順を直します"
+        title={
+          empty
+            ? "業務に関わる人・部署・システムを、会話の前に登録します"
+            : "登場人物を追加したり、名前・種別・起点/終点・出席・並び順を直したりします"
+        }
       >
-        登場人物を編集
+        <svg
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <circle cx="9" cy="8" r="3.5" />
+          <path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5" />
+          <path d="M19 8v6M16 11h6" />
+        </svg>
+        <span>
+          登場人物
+          <br />
+          {empty ? "を登録" : "を編集"}
+        </span>
       </button>
       <dialog
         ref={ref}
