@@ -140,3 +140,36 @@ export async function extractActors(input: {
     ms: Math.round(performance.now() - startedAt),
   };
 }
+
+export type StepRenameResult = { label: string; ms: number };
+
+/** 比べるための形。空白・括弧・句読点を除く（「請求書の 受付」と「請求書の受付」を同じに見る） */
+const bare = (s: string) => s.replace(/[\s「」『』"'、。,.，．！!？?]/g, "");
+
+/**
+ * 言い直された新しいステップ名を、発言から取り出す（「1番の名前は請求書の受付です」→「請求書の受付」）。
+ * 取り出した名前が**発言の中にそのまま無ければ採用しない**（gemma の言い換え・作り話を図に入れない）。
+ */
+export async function renameStep(input: { utterance: string; currentLabel: string }): Promise<StepRenameResult> {
+  const startedAt = performance.now();
+  const raw = await chatCompletion(
+    [
+      { role: "system", content: await loadPrompt("rename-step") },
+      {
+        role: "user",
+        content: JSON.stringify({ utterance: input.utterance, current_label: input.currentLabel }),
+      },
+    ],
+    { maxTokens: 100, temperature: 0.1 },
+  );
+  const json = extractJson(raw) as Record<string, unknown> | null;
+  const label = json ? cleanText(json.label, MAX_LABEL_CHARS) : null;
+  if (!label) throw new LlmError("発言から新しい名前を取り出せませんでした", "invalid");
+  if (!bare(input.utterance).includes(bare(label))) {
+    throw new LlmError(`取り出した名前「${label}」が発言に無いため、採用しませんでした`, "invalid");
+  }
+  if (bare(label) === bare(input.currentLabel)) {
+    throw new LlmError("今の名前と同じです", "invalid");
+  }
+  return { label, ms: Math.round(performance.now() - startedAt) };
+}

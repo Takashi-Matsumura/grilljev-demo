@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActorsResult, StepLabelResult } from "@/lib/analysis/label";
+import type { ActorsResult, StepLabelResult, StepRenameResult } from "@/lib/analysis/label";
 import { buildActorStepOps, buildLabelOps, previousBranchOf, type ActorPlan } from "@/lib/analysis/label-ops";
 import type { FollowUp, Interpretation } from "@/lib/analysis/interpret";
 import type { UtteranceState } from "@/lib/analysis/questions";
@@ -40,7 +40,9 @@ type LabelJob = {
   avoid?: string;
 };
 type ActorsJob = { kind: "actors"; doc: number; lineId: string; plan: ActorPlan };
-type FollowJob = LabelJob | ActorsJob;
+/** 音声での名前の言い直し。発言から新しいステップ名を取り出して付け替える */
+type RenameJob = { kind: "rename"; doc: number; lineId: string; utterance: string; stepId: string };
+type FollowJob = LabelJob | ActorsJob | RenameJob;
 
 /** 検証待ち + それが属する行（結果を行に戻して表示するため）と、作り直しに要る手がかり */
 type Pending = { check: PendingCheck; lineId: string; branchHint: number };
@@ -200,6 +202,29 @@ export function usePipeline({
           return;
         }
 
+        if (job.kind === "rename") {
+          const step = modelRef.current.steps.find((s) => s.id === job.stepId && s.status !== "retracted");
+          if (!step) return fail("直そうとしたステップが、すでに図にありません");
+          patchLabeling(job.lineId, { state: "pending", note: "新しい名前を取り出し中", error: undefined });
+          const json = await post<StepRenameResult>({
+            mode: "rename",
+            utterance: job.utterance,
+            currentLabel: step.label,
+          });
+          if (!alive()) return;
+          if (json.error) return fail(`${json.error}（図の番号をクリックすると、手で直せます）`);
+          // 発言の言葉そのもの（サーバで確かめ済み）なので、Jev の検証には回さない
+          commitOps([{ op: "step.update", id: job.stepId, patch: { label: json.label } }], "jev");
+          patchLabeling(job.lineId, {
+            state: "done",
+            label: json.label,
+            ms: json.ms,
+            note: `「${step.label}」→「${json.label}」に直しました`,
+            check: undefined,
+          });
+          return;
+        }
+
         // ── ステップ名（と書類名・分岐）の生成 ──
         const current = modelRef.current;
         const step = current.steps.find((s) => s.id === job.stepId && s.status !== "retracted");
@@ -277,24 +302,24 @@ export function usePipeline({
 
   const followUpsToJobs = useCallback(
     (followUps: FollowUp[], job: AnalysisJob, utteranceId: string, doc: number): FollowJob[] =>
-      followUps.map((fu) =>
-        fu.kind === "label"
-          ? {
-              kind: "label" as const,
+      followUps.map((fu): FollowJob => {
+        switch (fu.kind) {
+          case "label":
+            return {
+              kind: "label",
               doc,
               lineId: job.lineId,
               utterance: job.text,
               stepId: fu.stepId,
               branchHint: fu.branchHint,
               attempts: 1,
-            }
-          : {
-              kind: "actors" as const,
-              doc,
-              lineId: job.lineId,
-              plan: { ...fu, utterance: job.text, utteranceId },
-            },
-      ),
+            };
+          case "rename":
+            return { kind: "rename", doc, lineId: job.lineId, utterance: job.text, stepId: fu.stepId };
+          case "actors":
+            return { kind: "actors", doc, lineId: job.lineId, plan: { ...fu, utterance: job.text, utteranceId } };
+        }
+      }),
     [],
   );
 

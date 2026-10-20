@@ -11,6 +11,7 @@ export type PromptName =
   | "facilitator"
   | "suggest-answer"
   | "suggest-actors"
+  | "rename-step"
   | "scope-shift"
   | "summary";
 
