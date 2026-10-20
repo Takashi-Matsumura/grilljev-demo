@@ -10,6 +10,7 @@ export type PromptName =
   | "extract-actors"
   | "facilitator"
   | "suggest-answer"
+  | "suggest-actors"
   | "scope-shift"
   | "summary";
 
