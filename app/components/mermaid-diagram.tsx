@@ -20,6 +20,32 @@ function loadMermaid(): Promise<MermaidApi> {
 }
 
 const DEBOUNCE_MS = 300;
+
+/** 番号（autonumber）とステップ名を、押せる見た目にする */
+const PICKABLE_CLASS = (on: boolean) =>
+  on
+    ? "[&_.messageText]:cursor-pointer [&_.sequenceNumber]:cursor-pointer [&_.messageText:hover]:fill-sky-600 [&_.messageText:hover]:underline"
+    : "";
+
+/**
+ * クリックした要素から、図の何番目のステップかを割り出す。
+ * 番号（.sequenceNumber）はその数字を、ステップ名（.messageText）は図の中での出現順を使う。
+ * Mermaid はメッセージを図の上から順に描くので、出現順がそのまま autonumber と一致する。
+ */
+function pickStep(target: EventTarget, onPick: (n: number) => void) {
+  if (!(target instanceof Element)) return;
+  const num = target.closest(".sequenceNumber");
+  if (num) {
+    const n = Number(num.textContent?.trim());
+    if (Number.isInteger(n) && n > 0) onPick(n);
+    return;
+  }
+  const text = target.closest(".messageText");
+  const svg = text?.closest("svg");
+  if (!text || !svg) return;
+  const n = [...svg.querySelectorAll(".messageText")].indexOf(text) + 1;
+  if (n > 0) onPick(n);
+}
 let renderSeq = 0;
 
 type Rendered = { for: string; svg: string };
@@ -36,6 +62,7 @@ export function MermaidDiagram({
   zoom,
   fill = false,
   onContainerRef,
+  onPickStep,
 }: {
   code: string;
   /** 指定すると、図の幅を表示領域の zoom 倍にする（全画面表示用。1 = 幅に合わせる） */
@@ -46,6 +73,8 @@ export function MermaidDiagram({
   onSvg?: (svg: string, forCode: string) => void;
   /** スクロールする外枠の DOM 要素を、親に渡す（全画面表示のパン・ズーム操作用） */
   onContainerRef?: (el: HTMLDivElement | null) => void;
+  /** 図の番号・ステップ名をクリックしたら、その番号（1 始まり）を渡す。渡すと押せる見た目になる */
+  onPickStep?: (n: number) => void;
 }) {
   const [rendered, setRendered] = useState<Rendered | null>(null);
   const onSvgRef = useRef(onSvg);
@@ -94,10 +123,11 @@ export function MermaidDiagram({
       >
         {rendered ? (
           <div
-            className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${
+            className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${PICKABLE_CLASS(onPickStep !== undefined)} ${
               zoom === undefined ? "[&_svg]:max-w-full" : "[&_svg]:!w-full [&_svg]:!max-w-none"
             } ${updating ? "opacity-60" : "opacity-100"}`}
             style={zoom === undefined ? undefined : { width: `${zoom * 100}%`, margin: "0 auto" }}
+            onClick={onPickStep ? (e) => pickStep(e.target, onPickStep) : undefined}
             // securityLevel: "strict" の Mermaid が生成した SVG のみを入れる
             dangerouslySetInnerHTML={{ __html: rendered.svg }}
           />

@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { buildAttention } from "@/lib/model/attention";
 import type { FlowModel, ModelOp, OpenIssue } from "@/lib/model/types";
-import { hasDiagram, toMermaid } from "@/lib/render/mermaid";
+import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
 import { DiagramFooter } from "./diagram-footer";
 import { DiagramMeta } from "./diagram-meta";
 import { DisclosureIcon } from "./disclosure-icon";
 import { FullscreenButton } from "./diagram-fullscreen";
 import { FacilitatorOverlay } from "./facilitator-overlay";
 import { MermaidDiagram } from "./mermaid-diagram";
+import { StepEditDialog } from "./step-edit-dialog";
 
 /** 図を最後に更新したのが何か。 */
 export type UpdateSource = "none" | "jev" | "manual";
@@ -26,6 +27,7 @@ export function DiagramPane({
   source,
   onDecideStep,
   onEditActors,
+  onEditSteps,
   facilitator,
   devMode = false,
 }: {
@@ -35,11 +37,16 @@ export function DiagramPane({
   onDecideStep?: (id: string, decision: "approve" | "reject") => void;
   /** 登場人物の手直し（過去の図では渡さない） */
   onEditActors?: (ops: ModelOp[]) => void;
+  /** ステップの手直し（過去の図では渡さない）。渡すと、図の番号をクリックして編集できる */
+  onEditSteps?: (ops: ModelOp[]) => void;
   /** 自動問いかけ ON かつ質問中のときだけ渡す。図の上にフローティングカードで出す */
   facilitator?: FacilitatorOverlayProps | null;
   devMode?: boolean;
 }) {
   const code = useMemo(() => toMermaid(model), [model]);
+  // 図の番号をクリックして開いたステップ
+  const [editingStep, setEditingStep] = useState<string | null>(null);
+  const pickStep = (n: number) => setEditingStep(visibleSteps(model)[n - 1]?.id ?? null);
   const drawable = hasDiagram(model);
   const attention = useMemo(() => buildAttention(model), [model]);
   // .svg の書き出し用。「どのコードの SVG か」を持ち、いまの図と一致するときだけ使う
@@ -74,7 +81,11 @@ export function DiagramPane({
         )}
         <div className="min-h-0 flex-1">
           {drawable ? (
-            <MermaidDiagram code={code} onSvg={(svg, forCode) => setRendered({ svg, code: forCode })} />
+            <MermaidDiagram
+              code={code}
+              onSvg={(svg, forCode) => setRendered({ svg, code: forCode })}
+              onPickStep={onEditSteps ? pickStep : undefined}
+            />
           ) : (
             <p className="rounded-md border border-dashed border-black/15 p-4 text-sm text-zinc-500 dark:border-white/20">
               {onEditActors
@@ -106,6 +117,15 @@ export function DiagramPane({
         onDecideStep={onDecideStep}
         devMode={devMode}
       />
+
+      {onEditSteps && (
+        <StepEditDialog
+          model={model}
+          stepId={editingStep}
+          onClose={() => setEditingStep(null)}
+          onCommit={onEditSteps}
+        />
+      )}
     </section>
   );
 }

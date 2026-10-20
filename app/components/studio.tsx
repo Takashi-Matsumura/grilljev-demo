@@ -314,7 +314,8 @@ export function Studio({
     [commit],
   );
 
-  const onEditActors = useCallback((ops: ModelOp[]) => commit(ops, "manual"), [commit]);
+  /** 登場人物・ステップの手直し（ダイアログでの編集）を図に反映する */
+  const commitManual = useCallback((ops: ModelOp[]) => commit(ops, "manual"), [commit]);
 
   const archived = pipeline.archives.find((a) => a.id === viewId) ?? null;
   const viewing = archived ? archived.model : pipeline.model;
@@ -441,7 +442,8 @@ export function Studio({
             model={viewing}
             source={archived ? "none" : pipeline.source}
             onDecideStep={archived ? undefined : onDecideStep}
-            onEditActors={archived ? undefined : onEditActors}
+            onEditActors={archived ? undefined : commitManual}
+            onEditSteps={archived ? undefined : commitManual}
             facilitator={facilitatorOverlay}
             devMode={devMode}
           />
