@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ActorKind, ActorRole } from "@/lib/model/types";
 import { MAX_ACTOR_CHARS, MAX_SEED_ACTORS, splitNames, type SeedActor } from "@/lib/store/session-types";
 
@@ -27,6 +27,9 @@ const ROLE_TEXT: Record<ActorRole, { label: string; hint: string }> = {
   trigger: { label: "起点", hint: "この業務を始める人（最初の依頼・申込みをする人）" },
   end: { label: "終点", hint: "最終的な成果（書類・データ・結果）を受け取る人" },
 };
+
+/** チップを確定する区切り。Enter と Tab はキー操作で扱う */
+const SEPARATOR = /[、,，\n]/;
 
 let seq = 0;
 const newKey = () => `r${++seq}`;
@@ -76,17 +79,32 @@ export function StakeholderEditor({
   canRemove?: (row: StakeholderRow) => boolean;
 }) {
   const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const add = () => {
+  /** 名前をチップ（登場人物）にする。既出の名前は足さない。上限を超えた分も足さない（既存は削らない） */
+  const add = (text: string) => {
     const known = new Set(rows.map((r) => r.name));
-    const added = splitNames(draft)
+    const added = splitNames(text)
       .map((n) => n.slice(0, MAX_ACTOR_CHARS))
       .filter((n) => !known.has(n) && (known.add(n), true))
       .map((name) => newStakeholderRow(name));
-    // 上限を超えた分は足さない（既存の行は削らない）
-    onChange([...rows, ...added.slice(0, Math.max(0, MAX_SEED_ACTORS - rows.length))]);
+    if (added.length > 0) onChange([...rows, ...added.slice(0, Math.max(0, MAX_SEED_ACTORS - rows.length))]);
+  };
+  /**
+   * 入力中の文字に区切り（「、」「,」改行）が入ったら、そこまでをチップにする。貼り付けも同じ。
+   * 区切りの後ろ（打ちかけの名前）は入力欄に残す。日本語の変換中は触らない（変換が壊れる）。
+   */
+  const takeText = (value: string) => {
+    const parts = value.split(SEPARATOR);
+    const rest = parts.pop() ?? "";
+    if (parts.length > 0) add(parts.join("、"));
+    setDraft(rest);
+  };
+  const commitDraft = () => {
+    add(draft);
     setDraft("");
   };
+  const remove = (key: string) => onChange(rows.filter((x) => x.key !== key));
   const update = (key: string, patch: Partial<StakeholderRow>) =>
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   // 起点・終点はそれぞれ 1 人だけ。押し直すと外れる
@@ -124,6 +142,68 @@ export function StakeholderEditor({
         </p>
       </div>
 
+      {/* 名前を打って Enter（または「、」）でチップにする。チップがそのまま登場人物になる */}
+      <div
+        className="flex min-h-10 cursor-text flex-wrap items-center gap-1.5 rounded-lg border border-black/15 px-2 py-1.5 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-600/20 dark:border-white/20 dark:focus-within:border-sky-400"
+        onClick={() => inputRef.current?.focus()}
+      >
+        {rows.map((r) => (
+          <span
+            key={r.key}
+            className="flex max-w-full items-center gap-1 rounded-md border border-black/10 bg-zinc-50 py-0.5 pr-1 pl-2 text-sm dark:border-white/15 dark:bg-white/10"
+            title={canRemove(r) ? undefined : "図にすでにいるため、削除できません"}
+          >
+            <span className="truncate">{r.name || "（未入力）"}</span>
+            {canRemove(r) ? (
+              <button
+                type="button"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-black/10 hover:text-zinc-800 dark:hover:bg-white/15 dark:hover:text-zinc-100"
+                aria-label={`${r.name || "この人"}を削除`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(r.key);
+                }}
+              >
+                ×
+              </button>
+            ) : (
+              <span className="w-1" />
+            )}
+          </span>
+        ))}
+        {rows.length < MAX_SEED_ACTORS ? (
+          <input
+            ref={inputRef}
+            className="min-w-[10rem] flex-1 bg-transparent px-1 py-0.5 text-sm outline-none placeholder:text-zinc-400"
+            value={draft}
+            aria-label="登場人物の名前"
+            onChange={(e) => {
+              if ((e.nativeEvent as InputEvent).isComposing) setDraft(e.target.value);
+              else takeText(e.target.value);
+            }}
+            onCompositionEnd={(e) => takeText(e.currentTarget.value)}
+            onBlur={commitDraft}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
+              // Enter でフォーム全体（会議の開始）が送信されないようにする
+              if (e.key === "Enter" || (e.key === "Tab" && draft.trim() !== "")) {
+                e.preventDefault();
+                commitDraft();
+              } else if (e.key === "Backspace" && draft === "") {
+                const last = rows[rows.length - 1];
+                if (last && canRemove(last)) remove(last.key);
+              }
+            }}
+            placeholder={rows.length === 0 ? "名前を入力して Enter（例: 顧客）" : "さらに追加…"}
+          />
+        ) : (
+          <span className="px-1 text-xs text-zinc-500">上限（{MAX_SEED_ACTORS} 人）に達しました</span>
+        )}
+      </div>
+
+      {rows.length > 0 && (
+        <p className="text-xs text-zinc-500">種別・起点/終点・出席・並び順は、ここで設定します。</p>
+      )}
       {rows.length > 0 && (
         <ol className="flex flex-col gap-1.5">
           {rows.map((r, i) => (
@@ -187,46 +267,10 @@ export function StakeholderEditor({
                 >
                   ↓
                 </button>
-                {canRemove(r) && (
-                  <button
-                    type="button"
-                    className={small}
-                    aria-label={`${r.name || "この行"}を削除`}
-                    onClick={() => onChange(rows.filter((x) => x.key !== r.key))}
-                  >
-                    ×
-                  </button>
-                )}
               </span>
             </li>
           ))}
         </ol>
-      )}
-
-      {rows.length < MAX_SEED_ACTORS && (
-        <div className="flex gap-2">
-          <input
-            className={input}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter でフォーム全体（会議の開始）が送信されないようにする
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                add();
-              }
-            }}
-            placeholder="例: 顧客、営業、経理、会計システム（「、」区切りでまとめて追加）"
-          />
-          <button
-            type="button"
-            className="shrink-0 rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
-            disabled={splitNames(draft).length === 0}
-            onClick={add}
-          >
-            追加
-          </button>
-        </div>
       )}
 
       {rows.length > 0 && (!hasTrigger || !hasEnd) && (
