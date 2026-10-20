@@ -1,10 +1,11 @@
 "use client";
 
 import type { Attention } from "@/lib/model/attention";
-import type { FlowModel } from "@/lib/model/types";
+import type { FlowModel, ModelOp } from "@/lib/model/types";
 import { AttentionPanel } from "./attention-panel";
 import { DisclosureIcon } from "./disclosure-icon";
 import { ExportButtons } from "./export-buttons";
+import { RetractedSteps } from "./retracted-steps";
 import { SummaryButton } from "./summary-dialog";
 
 const ATTENTION_BADGE = "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300";
@@ -20,6 +21,7 @@ export function DiagramFooter({
   svg,
   empty,
   onDecideStep,
+  onEditSteps,
   devMode = false,
 }: {
   model: FlowModel;
@@ -28,6 +30,8 @@ export function DiagramFooter({
   svg: string | null;
   empty: boolean;
   onDecideStep?: (id: string, decision: "approve" | "reject") => void;
+  /** 削除したステップを元に戻す（過去の図では渡さない） */
+  onEditSteps?: (ops: ModelOp[]) => void;
   devMode?: boolean;
 }) {
   return (
@@ -50,6 +54,7 @@ export function DiagramFooter({
       ) : (
         <span className="text-sm text-zinc-500 dark:text-zinc-400">要対応 0</span>
       )}
+      {onEditSteps && <RetractedSteps model={model} onCommit={onEditSteps} />}
       <SummaryButton model={model} empty={empty} />
       <ExportButtons model={model} mermaidCode={mermaidCode} svg={svg} empty={empty} />
     </div>

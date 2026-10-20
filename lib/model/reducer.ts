@@ -1,5 +1,5 @@
 import type { SessionSeed } from "../store/session-types";
-import type { Actor, FlowModel, ModelOp, Scope } from "./types";
+import type { Actor, FlowModel, ModelOp, Scope, Step } from "./types";
 
 /**
  * 質問（issue.ask）したあと、答えないまま業務の発話が続いたら、この回数で保留にする。
@@ -119,11 +119,22 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
     }
 
     case "step.retract": {
-      if (!m.steps.some((s) => s.id === op.id)) return null;
+      const target = m.steps.find((s) => s.id === op.id);
+      if (!target || target.status === "retracted") return null;
+      const retractedFrom = target.status;
       return {
         ...m,
-        steps: m.steps.map((s) => (s.id === op.id ? { ...s, status: "retracted" } : s)),
+        steps: m.steps.map((s): Step => (s.id === op.id ? { ...s, status: "retracted", retractedFrom } : s)),
       };
+    }
+
+    case "step.restore": {
+      const target = m.steps.find((s) => s.id === op.id);
+      if (!target || target.status !== "retracted") return null;
+      // 取り消す前の状態が分からない（この仕組みより前に取り消した）ものは、仮として戻す
+      const restored: Step = { ...target, status: target.retractedFrom ?? "provisional" };
+      delete restored.retractedFrom;
+      return { ...m, steps: m.steps.map((s) => (s.id === op.id ? restored : s)) };
     }
 
     case "branch.add": {
