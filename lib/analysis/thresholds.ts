@@ -47,3 +47,8 @@ export const noulConfidence = (p: number): number => Math.abs(p - 0.5) * 2;
 
 /** ステップ名の暫定文（gemma が入るまで）の最大文字数 */
 export const FALLBACK_LABEL_CHARS = 32;
+
+/** 音声の訂正: 対象のステップ・入れ替えの相手・「どう直すか」の確信がこれ未満なら、図を変えない */
+export const CORRECTION_MIN = 0.6;
+/** intent が「訂正」でなくても、「どう直すか」がこれ以上の確信なら訂正として扱う */
+export const CORRECTION_STRONG = 0.8;

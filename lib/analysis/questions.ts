@@ -1,5 +1,7 @@
 import type { JevQuestion } from "@/lib/jev";
 import type { FlowModel } from "@/lib/model/types";
+import { visibleSteps } from "@/lib/render/mermaid";
+import { buildCorrectionQuestions } from "./correct";
 import { MAX_CHECKS_PER_REQUEST, type PendingCheck } from "./verify";
 
 /** choice の特別な選択肢。定義した id 以外は返ってこないので、これで「該当なし」を表す。 */
@@ -38,7 +40,8 @@ export type UtteranceState = {
   utterance: string;
   scope: { title: string; purpose: string };
   known_actors: { id: string; name: string; aliases: string[] }[];
-  recent_steps: { id: string; from: string; to: string; label: string }[];
+  /** no は図の番号（autonumber）。「1 番を消して」のような訂正を、図と同じ番号で照らし合わせるため */
+  recent_steps: { no: number; id: string; from: string; to: string; label: string }[];
   open_issues: { id: string; question: string }[];
   recent_utterances: string[];
 };
@@ -66,12 +69,9 @@ export function buildUtteranceState(
     utterance,
     scope: { title: model.scope.title, purpose: model.scope.purpose },
     known_actors: model.actors.map((a) => ({ id: a.id, name: a.name, aliases: a.aliases })),
-    recent_steps: activeSteps(model).map((s) => ({
-      id: s.id,
-      from: nameOf(s.from),
-      to: nameOf(s.to),
-      label: s.label,
-    })),
+    recent_steps: visibleSteps(model)
+      .map((s, i) => ({ no: i + 1, id: s.id, from: nameOf(s.from), to: nameOf(s.to), label: s.label }))
+      .slice(-MAX_STEP_OPTIONS),
     open_issues: openIssues(model).map((i) => ({ id: i.id, question: issueText(i) })),
     recent_utterances: recent.slice(-MAX_RECENT_UTTERANCES),
   };
@@ -121,7 +121,8 @@ export function buildUtteranceQuestions(
         describe_condition: "「〜の場合は」「〜なら」といった条件による手順の違いを述べている",
         describe_actor: "登場人物・部署・システムそのものを説明・紹介している",
         describe_scope: "この業務全体の目的・対象範囲・きっかけ・頻度を述べている",
-        correct_previous: "すでに図に描かれている内容を、訂正・否定している",
+        correct_previous:
+          "すでに図に描かれている内容を、訂正・否定・削除・入れ替えするよう求めている（「1番を消して」「〜ではなく〜です」「2番と3番が逆」など）",
         answer_question: "ファシリテーターの問い（未解決の論点）に答えている",
         ask_question: "参加者が質問している（答えではない）",
         meta: "会議の進め方の相談など、業務内容そのものではない",
@@ -242,6 +243,9 @@ export function buildUtteranceQuestions(
       ],
     },
   };
+
+  // 音声での訂正（「1 番を消して」など）。図の番号つきでステップを選ばせる
+  Object.assign(questions, buildCorrectionQuestions(model));
 
   // 既存のステップが無ければ「どれと同じか」は聞けない（選択肢が「該当なし」1 つになる）
   const steps = activeSteps(model);

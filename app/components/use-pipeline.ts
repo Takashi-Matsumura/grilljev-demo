@@ -409,6 +409,7 @@ export function usePipeline({
             chatter: interpretation.chatter,
             summary: interpretation.summary,
             match,
+            ...(interpretation.correction ? { correction: true as const } : {}),
           },
         });
         pushEntry({
