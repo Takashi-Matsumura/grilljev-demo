@@ -31,6 +31,14 @@ const ROLE_TEXT: Record<ActorRole, { label: string; hint: string }> = {
 let seq = 0;
 const newKey = () => `r${++seq}`;
 
+/** 新しく足す 1 行（手入力・候補の採用で共通） */
+export const newStakeholderRow = (name: string, kind: ActorKind = "role"): StakeholderRow => ({
+  key: newKey(),
+  name,
+  kind,
+  present: true,
+});
+
 export const toSeedActors = (rows: StakeholderRow[]): SeedActor[] =>
   rows.map((r) => ({
     name: r.name,
@@ -74,7 +82,7 @@ export function StakeholderEditor({
     const added = splitNames(draft)
       .map((n) => n.slice(0, MAX_ACTOR_CHARS))
       .filter((n) => !known.has(n) && (known.add(n), true))
-      .map((name): StakeholderRow => ({ key: newKey(), name, kind: "role", present: true }));
+      .map((name) => newStakeholderRow(name));
     // 上限を超えた分は足さない（既存の行は削らない）
     onChange([...rows, ...added.slice(0, Math.max(0, MAX_SEED_ACTORS - rows.length))]);
     setDraft("");

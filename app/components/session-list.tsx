@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { SeedActor, SessionMeta } from "@/lib/store/session-types";
+import { ActorSuggestions } from "./actor-suggestions";
 import { StakeholderEditor, toSeedActors, type StakeholderRow } from "./stakeholder-editor";
 
 const fmt = (iso: string) => new Date(iso).toLocaleString("ja-JP", { hour12: false });
@@ -109,6 +110,7 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
               />
             </label>
             <StakeholderEditor rows={stakeholders} onChange={setStakeholders} />
+            <ActorSuggestions title={title} rows={stakeholders} onChange={setStakeholders} />
           </div>
 
           {/* 一番押してほしい操作なので、正方形の大きなボタンにして目立たせる */}
