@@ -61,6 +61,45 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
       };
     }
 
+    case "actor.update": {
+      const target = m.actors.find((a) => a.id === op.id);
+      if (!target) return null;
+      const { name: rawName, role, ...rest } = op.patch;
+      const name = rawName?.replace(/\s+/g, " ").trim();
+      // 空の名前・他の人と同じ名前への改名は無視する（名前で人を見分けているため）
+      const renamed =
+        name !== undefined && name !== "" && name !== target.name && !m.actors.some((a) => a.name === name);
+      const next: Actor = { ...target, ...rest };
+      if (renamed) {
+        next.name = name;
+        next.aliases = [...new Set([...target.aliases, target.name])].filter((n) => n !== name);
+      }
+      if (role === null) delete next.role;
+      else if (role !== undefined) next.role = role;
+      return {
+        ...m,
+        actors: m.actors.map((a) => {
+          if (a.id === target.id) return next;
+          // 起点・終点はそれぞれ 1 人だけ。付け替えたら前の人からは外す
+          if (role && a.role === role) {
+            const without = { ...a };
+            delete without.role;
+            return without;
+          }
+          return a;
+        }),
+      };
+    }
+
+    case "actor.reorder": {
+      const byLane = [...m.actors].sort((a, b) => a.lane - b.lane);
+      const known = new Set(byLane.map((a) => a.id));
+      const head = [...new Set(op.ids)].filter((id) => known.has(id));
+      const order = [...head, ...byLane.map((a) => a.id).filter((id) => !head.includes(id))];
+      const laneOf = new Map(order.map((id, i) => [id, i]));
+      return { ...m, actors: m.actors.map((a) => ({ ...a, lane: laneOf.get(a.id) ?? a.lane })) };
+    }
+
     case "step.add": {
       const s = op.step;
       if (m.steps.some((x) => x.id === s.id)) return null;

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { buildAttention } from "@/lib/model/attention";
-import type { FlowModel, OpenIssue } from "@/lib/model/types";
+import type { FlowModel, ModelOp, OpenIssue } from "@/lib/model/types";
 import { hasDiagram, toMermaid } from "@/lib/render/mermaid";
 import { DiagramFooter } from "./diagram-footer";
 import { DiagramMeta } from "./diagram-meta";
@@ -25,6 +25,7 @@ export function DiagramPane({
   model,
   source,
   onDecideStep,
+  onEditActors,
   facilitator,
   devMode = false,
 }: {
@@ -32,6 +33,8 @@ export function DiagramPane({
   source: UpdateSource;
   /** 仮のステップの承認・却下（過去の図では渡さない） */
   onDecideStep?: (id: string, decision: "approve" | "reject") => void;
+  /** 登場人物の手直し（過去の図では渡さない） */
+  onEditActors?: (ops: ModelOp[]) => void;
   /** 自動問いかけ ON かつ質問中のときだけ渡す。図の上にフローティングカードで出す */
   facilitator?: FacilitatorOverlayProps | null;
   devMode?: boolean;
@@ -45,7 +48,13 @@ export function DiagramPane({
 
   return (
     <section aria-label="業務フロー図" className="flex min-h-0 flex-1 flex-col">
-      <DiagramMeta model={model} readiness={attention.readiness} source={source} devMode={devMode} />
+      <DiagramMeta
+        model={model}
+        readiness={attention.readiness}
+        source={source}
+        onEditActors={onEditActors}
+        devMode={devMode}
+      />
 
       {/* 中段（可変・単独スクロール）: 図だけがここでスクロールする */}
       <div className="relative flex min-h-[20rem] flex-1 flex-col p-4 lg:min-h-0">

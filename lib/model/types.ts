@@ -123,6 +123,14 @@ export type ModelOp =
   | { op: "actor.add"; actor: NewActor }
   /** 表記ゆれの統合。from のステップを into へ付け替え、from の名前を into の aliases へ足す */
   | { op: "actor.merge"; from: ActorId; into: ActorId }
+  /** 会議画面での手直し。改名した元の名前は aliases に残す。role は null で外す（起点・終点は各 1 人） */
+  | {
+      op: "actor.update";
+      id: ActorId;
+      patch: { name?: string; kind?: ActorKind; role?: ActorRole | null; present?: boolean };
+    }
+  /** ライフラインの並び替え。ids の順に lane を振り直す（ids に無い人は、元の順で後ろに続ける） */
+  | { op: "actor.reorder"; ids: ActorId[] }
   | { op: "step.add"; step: NewStep }
   | { op: "step.update"; id: StepId; patch: Partial<Omit<Step, "id" | "addedAtRev">> }
   /** 削除ではなく取り消し。履歴に残す */

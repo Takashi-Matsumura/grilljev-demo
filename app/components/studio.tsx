@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Interpretation } from "@/lib/analysis/interpret";
 import type { JevBackend } from "@/lib/jev-backend";
 import { modelFromSeed } from "@/lib/model/reducer";
-import type { FlowModel } from "@/lib/model/types";
+import type { FlowModel, ModelOp } from "@/lib/model/types";
 import type { ArchivedDiagram } from "@/lib/scope/apply";
 import type { SessionSeed } from "@/lib/store/session-types";
 import {
@@ -314,6 +314,8 @@ export function Studio({
     [commit],
   );
 
+  const onEditActors = useCallback((ops: ModelOp[]) => commit(ops, "manual"), [commit]);
+
   const archived = pipeline.archives.find((a) => a.id === viewId) ?? null;
   const viewing = archived ? archived.model : pipeline.model;
 
@@ -439,6 +441,7 @@ export function Studio({
             model={viewing}
             source={archived ? "none" : pipeline.source}
             onDecideStep={archived ? undefined : onDecideStep}
+            onEditActors={archived ? undefined : onEditActors}
             facilitator={facilitatorOverlay}
             devMode={devMode}
           />
