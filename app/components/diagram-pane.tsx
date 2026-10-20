@@ -10,6 +10,7 @@ import { DisclosureIcon } from "./disclosure-icon";
 import { FullscreenButton } from "./diagram-fullscreen";
 import { FacilitatorOverlay } from "./facilitator-overlay";
 import { MermaidDiagram } from "./mermaid-diagram";
+import { RetractNotice } from "./retracted-steps";
 import { StepEditDialog } from "./step-edit-dialog";
 
 /** 図を最後に更新したのが何か。 */
@@ -74,6 +75,7 @@ export function DiagramPane({
             devMode={devMode}
           />
         )}
+        {onEditSteps && <RetractNotice model={model} onCommit={onEditSteps} />}
         {drawable && (
           <div className="absolute right-6 top-6 z-10">
             <FullscreenButton title={model.scope.title} code={code} disabled={!drawable} compact />
@@ -115,6 +117,7 @@ export function DiagramPane({
         svg={svgForExport}
         empty={!drawable}
         onDecideStep={onDecideStep}
+        onEditSteps={onEditSteps}
         devMode={devMode}
       />
 

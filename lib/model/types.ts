@@ -57,6 +57,8 @@ export type Step = {
   flags: StepFlags;
   sourceUtteranceIds: string[];
   addedAtRev: number;
+  /** 取り消す前の状態。元に戻すとき（step.restore）に使う */
+  retractedFrom?: Exclude<StepStatus, "retracted">;
 };
 
 export type Branch = {
@@ -135,6 +137,8 @@ export type ModelOp =
   | { op: "step.update"; id: StepId; patch: Partial<Omit<Step, "id" | "addedAtRev">> }
   /** 削除ではなく取り消し。履歴に残す */
   | { op: "step.retract"; id: StepId }
+  /** 取り消したステップを元に戻す。状態は取り消す前に戻し、並び順（order）はそのまま */
+  | { op: "step.restore"; id: StepId }
   | { op: "branch.add"; branch: Branch }
   | { op: "issue.add"; issue: NewIssue }
   /** ファシリテーターが問いを出した。文言と推奨回答を持たせ、質問済みにする */
