@@ -11,6 +11,8 @@ export type LineAnalysis =
       summary: string;
       /** サンプルの Jev モードで、台本の想定と一致したか */
       match?: "match" | "mismatch";
+      /** 図の訂正として扱った発言か */
+      correction?: true;
     }
   | { state: "error"; error: string };
 

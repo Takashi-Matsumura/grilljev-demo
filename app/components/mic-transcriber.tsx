@@ -70,6 +70,11 @@ const VERDICT_TEXT = {
   unchanged: "業務 · 図は変更なし",
 } as const;
 
+const CORRECTION_TEXT = {
+  apply: "訂正 · 図を修正",
+  confirm: "訂正 · 要確認",
+} as const;
+
 function AnalysisView({ analysis, devMode }: { analysis: LineAnalysis; devMode: boolean }) {
   if (analysis.state === "pending") {
     return <span className="ml-2 text-xs text-zinc-400">⋯ Jev で判定中</span>;
@@ -91,10 +96,12 @@ function AnalysisView({ analysis, devMode }: { analysis: LineAnalysis; devMode: 
         : analysis.verdict === "confirm"
           ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
           : "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300";
+  // 訂正は、何をどう直したか（または直せなかった理由）が分からないと困るので、説明を常に出す
+  const correction = analysis.correction === true;
   return (
     <>
       <span className={`ml-2 rounded px-1.5 py-0.5 text-xs ${cls}`} title={analysis.summary}>
-        {VERDICT_TEXT[analysis.verdict]}
+        {correction ? CORRECTION_TEXT[analysis.verdict === "apply" ? "apply" : "confirm"] : VERDICT_TEXT[analysis.verdict]}
         {devMode && ` ${strength.toFixed(2)}`}
       </span>
       {devMode && analysis.match === "match" && (
@@ -103,7 +110,7 @@ function AnalysisView({ analysis, devMode }: { analysis: LineAnalysis; devMode: 
       {devMode && analysis.match === "mismatch" && (
         <span className="ml-2 text-xs font-medium text-red-600 dark:text-red-400">台本と不一致</span>
       )}
-      {devMode && <span className="block pl-1 text-xs text-zinc-500">{analysis.summary}</span>}
+      {(devMode || correction) && <span className="block pl-1 text-xs text-zinc-500">{analysis.summary}</span>}
     </>
   );
 }

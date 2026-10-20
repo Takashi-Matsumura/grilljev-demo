@@ -40,6 +40,7 @@ import {
   qFaithful,
   qReadable,
 } from "./questions";
+import { interpretCorrection } from "./correct";
 import { checkKey, type CheckResult, type PendingCheck } from "./verify";
 
 /**
@@ -97,6 +98,8 @@ export type Interpretation = {
   followUps: FollowUp[];
   /** 前の発話で gemma が作った文言の検証結果 */
   checks: CheckResult[];
+  /** 図の訂正（「1 番を消して」など）として扱った発言か。画面では、何を直したかを常に見せる */
+  correction?: true;
 };
 
 type Answers = Record<string, JevAnswer | undefined>;
@@ -302,12 +305,25 @@ function interpretUtterance(
     };
   }
 
+  const intent =
+    intentAnswer && intentAnswer.confidence >= INTENT_MIN ? intentAnswer.choice : "other";
+
+  // 訂正（「1 番を消して」など）は、新しい内容を足す解釈より先に扱う。直せなかったら要確認にする
+  const correction = interpretCorrection(answers, model, intent, ctx.utterance);
+  if (correction) {
+    return {
+      ...base,
+      verdict: correction.ops.length > 0 ? "apply" : "confirm",
+      ops: correction.ops,
+      summary: correction.note,
+      correction: true,
+    };
+  }
+
   const ops: ModelOp[] = [];
   const notes: string[] = [];
   const followUps = base.followUps;
   let verdict: Verdict = "unchanged";
-  const intent =
-    intentAnswer && intentAnswer.confidence >= INTENT_MIN ? intentAnswer.choice : "other";
 
   // 1 回の解釈の中で採番が衝突しないよう、追加した id を覚えておく
   const stepIds = model.steps.map((s) => s.id);
@@ -455,7 +471,8 @@ function interpretUtterance(
       notes.push("登場人物の説明です");
       break;
     case "correct_previous":
-      notes.push("訂正の発言です（図の訂正は次の段階）");
+      // 訂正として扱えるものは interpretCorrection が先に返している
+      notes.push("訂正の発言です");
       break;
     case "ask_question":
       notes.push("質問です。図には反映しません");
