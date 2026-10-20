@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ReadinessItem } from "@/lib/model/attention";
-import type { FlowModel } from "@/lib/model/types";
+import type { Actor, FlowModel } from "@/lib/model/types";
 import type { UpdateSource } from "./diagram-pane";
 import { useFacilitatorAuto } from "./use-facilitator-auto";
 
@@ -31,6 +31,8 @@ const SOURCE_BADGE_PLAIN: Record<UpdateSource, { text: string; cls: string }> = 
   manual: { text: "更新あり", cls: SOURCE_BADGE_DEV.manual.cls },
 };
 
+const ACTOR_CHIP = "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300";
+
 const READINESS_BADGE = {
   filled: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
   missing: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
@@ -46,6 +48,39 @@ function ReadinessChip({ item }: { item: ReadinessItem }) {
       {item.label}
       {!filled && "未"}
     </span>
+  );
+}
+
+/**
+ * 会議の前に登録した登場人物の要点。起点・終点と、会議に出席していない登場人物を出す。
+ * 出席していない人の作業は会話からは推測しかできないので、図を読むときの注意として常に見せる。
+ */
+function ActorChips({ actors }: { actors: Actor[] }) {
+  const ordered = [...actors].sort((a, b) => a.lane - b.lane);
+  const trigger = ordered.find((a) => a.role === "trigger");
+  const end = ordered.find((a) => a.role === "end");
+  const absent = ordered.filter((a) => a.present === false);
+  return (
+    <>
+      {trigger && (
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${ACTOR_CHIP}`} title="この業務を始める登場人物">
+          起点: {trigger.name}
+        </span>
+      )}
+      {end && (
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${ACTOR_CHIP}`} title="最終的な成果を受け取る登場人物">
+          終点: {end.name}
+        </span>
+      )}
+      {absent.length > 0 && (
+        <span
+          className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${READINESS_BADGE.missing}`}
+          title="会議に出席していない登場人物です。この人の作業は、会話からの推測なので確認が必要です"
+        >
+          出席なし: {absent.map((a) => a.name).join("、")}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -126,6 +161,7 @@ export function DiagramMeta({
         {readiness.map((item) => (
           <ReadinessChip key={item.key} item={item} />
         ))}
+        <ActorChips actors={model.actors} />
       </div>
     </div>
   );

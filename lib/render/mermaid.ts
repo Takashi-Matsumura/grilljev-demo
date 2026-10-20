@@ -42,6 +42,13 @@ export function flagSuffix(step: Step): string {
   return marks.join("");
 }
 
+/** 起点・終点の登場人物は、ライフラインの名前の末尾に印を付ける。Mermaid と drawio で共通。 */
+export function actorLabel(actor: Actor): string {
+  if (actor.role === "trigger") return `${actor.name}［起点］`;
+  if (actor.role === "end") return `${actor.name}［終点］`;
+  return actor.name;
+}
+
 function arrowFor(step: Step): string {
   // 未確認は点線で描き、確信がないものを確信ありげに見せない
   if (step.status === "provisional") return "-->>";
@@ -76,7 +83,7 @@ export function toMermaid(model: FlowModel): string {
   const lines: string[] = ["sequenceDiagram", "  autonumber"];
 
   for (const actor of [...model.actors].sort((a, b) => a.lane - b.lane)) {
-    lines.push(`  ${participantKeyword(actor)} ${safeId(actor.id)} as ${esc(actor.name)}`);
+    lines.push(`  ${participantKeyword(actor)} ${safeId(actor.id)} as ${esc(actorLabel(actor))}`);
   }
 
   const branchById = new Map(model.branches.map((b) => [b.id, b]));

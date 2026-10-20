@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Interpretation } from "@/lib/analysis/interpret";
 import type { JevBackend } from "@/lib/jev-backend";
-import { modelFromScope } from "@/lib/model/reducer";
+import { modelFromSeed } from "@/lib/model/reducer";
 import type { FlowModel } from "@/lib/model/types";
 import type { ArchivedDiagram } from "@/lib/scope/apply";
 import type { SessionSeed } from "@/lib/store/session-types";
@@ -74,7 +74,7 @@ export function Studio({
   const [lines, setLines] = useState<Line[]>(session.lines);
   // やり直し（リセット）で戻る先は、会議を始めたときの初期設定
   const initialModel = useCallback(
-    () => modelFromScope(session.seed.title, [...session.seed.departments], new Date().toISOString()),
+    () => modelFromSeed(session.seed, new Date().toISOString()),
     [session.seed],
   );
   const [cursor, setCursor] = useState(0);

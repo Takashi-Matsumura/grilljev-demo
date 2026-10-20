@@ -1,3 +1,4 @@
+import type { SessionSeed } from "../store/session-types";
 import type { Actor, FlowModel, ModelOp, Scope } from "./types";
 
 /**
@@ -47,7 +48,11 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
         ...m,
         actors: m.actors
           .filter((a) => a.id !== from.id)
-          .map((a) => (a.id === into.id ? { ...a, aliases } : a)),
+          .map((a) =>
+            a.id === into.id
+              ? { ...a, aliases, role: a.role ?? from.role, present: a.present ?? from.present }
+              : a,
+          ),
         steps: m.steps.map((s) => ({
           ...s,
           from: s.from === from.id ? into.id : s.from,
@@ -155,18 +160,19 @@ export function emptyModel(scope: Partial<Scope>, at: string): FlowModel {
   };
 }
 
-/** 初期設定（業務名 + 関係部署）から開始時のモデルを作る。部署は role のアクターになる。 */
-export function modelFromScope(title: string, departments: string[], at: string): FlowModel {
-  const names = departments.map((d) => d.trim()).filter((d) => d !== "");
-  const actors: Actor[] = names.map((name, i) => ({
+/** 初期設定（業務名 + 登場人物）から開始時のモデルを作る。登場人物は並べた順にライフラインになる。 */
+export function modelFromSeed(seed: SessionSeed, at: string): FlowModel {
+  const actors: Actor[] = seed.actors.map((s, i) => ({
     id: `A${i + 1}`,
-    name,
-    kind: "role",
+    name: s.name,
+    kind: s.kind,
     aliases: [],
     lane: i,
     addedAtRev: 0,
+    ...(s.role ? { role: s.role } : {}),
+    present: s.present,
   }));
-  return { ...emptyModel({ title }, at), actors };
+  return { ...emptyModel({ title: seed.title }, at), actors };
 }
 
 /** 末尾に足すときの order。中間に挿すときは前後の中点を自分で計算すること。 */

@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { modelFromScope } from "../model/reducer";
+import { modelFromSeed } from "../model/reducer";
 import {
   isValidSlug,
   newSlug,
@@ -96,7 +96,7 @@ export async function createSession(name: string, seed: SessionSeed): Promise<Se
       createdAt: at,
       updatedAt: at,
       seed,
-      model: modelFromScope(seed.title, seed.departments, at),
+      model: modelFromSeed(seed, at),
       archives: [],
       lines: [],
     };

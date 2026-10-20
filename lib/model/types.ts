@@ -11,6 +11,9 @@ export type StepId = string; // "S12"
 
 export type ActorKind = "person" | "role" | "system" | "external" | "unknown";
 
+/** trigger=業務を始める人 / end=最終的な成果を受け取る人。会議の前に決めて、会話の方向を作る */
+export type ActorRole = "trigger" | "end";
+
 export type Actor = {
   id: ActorId;
   name: string;
@@ -20,6 +23,9 @@ export type Actor = {
   /** ライフラインの並び順（左から） */
   lane: number;
   addedAtRev: number;
+  role?: ActorRole;
+  /** 会議に出席しているか。false の登場人物の作業は、会話からは推測しかできない（未確認として扱う） */
+  present?: boolean;
 };
 
 /** sync=依頼して返事を待つ / async=投げっぱなし / reply=返答 / self=自分の中で完結 */
