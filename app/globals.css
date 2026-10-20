@@ -62,3 +62,152 @@ body {
   font-family: var(--font-sans), "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic",
     Meiryo, system-ui, sans-serif;
 }
+
+/*
+ * Mac OS X の Aqua 風ボタン（丸型）。一番押してほしい操作だけに使う（会議を始める・録音）。
+ * 青いジェルの上に、上半分の白いハイライト（::before）と下からの照り返し（::after）を重ねる。
+ * 押すと沈み込んで暗くなり、離すと少しゆっくり戻る（押下は速く、戻りは遅く）。
+ * 中身（アイコン・文字）は光沢の上に出す。
+ */
+.aqua-button {
+  --aqua-top: #5aa7f5;
+  --aqua-mid: #1f6fd8;
+  --aqua-bottom: #6ec3ff;
+  --aqua-edge: #0f4ea8;
+  --aqua-glow: 31 111 216;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1px solid var(--aqua-edge);
+  color: #fff;
+  text-shadow: 0 -1px 0 rgb(0 0 0 / 0.25);
+  background: linear-gradient(
+    to bottom,
+    var(--aqua-top) 0%,
+    var(--aqua-mid) 50%,
+    var(--aqua-mid) 62%,
+    var(--aqua-bottom) 100%
+  );
+  box-shadow:
+    0 2px 4px rgb(0 0 0 / 0.25),
+    0 6px 14px rgb(var(--aqua-glow) / 0.35),
+    inset 0 -2px 6px rgb(255 255 255 / 0.35),
+    inset 0 2px 3px rgb(0 0 0 / 0.2);
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1.4),
+    box-shadow 220ms ease-out,
+    filter 220ms ease-out;
+}
+
+/* 上半分の光沢。楕円の白いグラデーションを、ふちから少し内側に置く */
+.aqua-button::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 3%;
+  left: 12%;
+  width: 76%;
+  height: 48%;
+  border-radius: 50% / 45% 45% 55% 55%;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.12));
+  pointer-events: none;
+  transition: opacity 220ms ease-out;
+}
+
+/* 下からの照り返し */
+.aqua-button::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 45% 8% -10% 8%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 100%, rgb(200 240 255 / 0.75), transparent 70%);
+  pointer-events: none;
+  transition: opacity 220ms ease-out;
+}
+
+.aqua-button:hover:not(:disabled) {
+  filter: brightness(1.06) saturate(1.05);
+}
+
+/* 押し込み。素早く沈み、内側に影を落とし、光沢を弱める */
+.aqua-button:active:not(:disabled) {
+  transform: translateY(2px) scale(0.94);
+  filter: brightness(0.82) saturate(1.1);
+  box-shadow:
+    0 1px 1px rgb(0 0 0 / 0.3),
+    inset 0 3px 8px rgb(0 0 0 / 0.45),
+    inset 0 -1px 3px rgb(255 255 255 / 0.25);
+  transition-duration: 60ms;
+}
+
+.aqua-button:active:not(:disabled)::before {
+  opacity: 0.55;
+  transition-duration: 60ms;
+}
+
+.aqua-button:active:not(:disabled)::after {
+  opacity: 0.35;
+  transition-duration: 60ms;
+}
+
+.aqua-button:focus-visible {
+  outline: 3px solid rgb(var(--aqua-glow) / 0.55);
+  outline-offset: 3px;
+}
+
+/* 録音中（止めるボタン）は赤いジェル */
+.aqua-button--red {
+  --aqua-top: #ff7a73;
+  --aqua-mid: #d9271e;
+  --aqua-bottom: #ff9c8a;
+  --aqua-edge: #9c1610;
+  --aqua-glow: 217 39 30;
+}
+
+/* 押せないときはグラファイト（灰色のジェル）。光沢は残して、色だけ抜く */
+.aqua-button:disabled {
+  --aqua-top: #c9cdd3;
+  --aqua-mid: #9aa1ab;
+  --aqua-bottom: #d6dbe1;
+  --aqua-edge: #7d838c;
+  --aqua-glow: 120 126 135;
+  /* 白文字は明るい灰色の上で読めないので、Aqua の無効表示と同じく濃い灰色の文字にする */
+  color: rgb(55 60 68 / 0.75);
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.45);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.2),
+    inset 0 -2px 6px rgb(255 255 255 / 0.3);
+  cursor: default;
+}
+
+/* 既定のボタンの脈動（Aqua の「Return で押されるボタン」がゆっくり明滅する動き） */
+.aqua-button--pulse:not(:disabled) {
+  animation: aqua-pulse 1.6s ease-in-out infinite;
+}
+
+.aqua-button--pulse:active:not(:disabled) {
+  animation: none;
+}
+
+@keyframes aqua-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.14) saturate(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aqua-button,
+  .aqua-button::before,
+  .aqua-button::after {
+    transition: none;
+  }
+  .aqua-button--pulse:not(:disabled) {
+    animation: none;
+  }
+}

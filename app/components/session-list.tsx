@@ -113,11 +113,11 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
             <ActorSuggestions title={title} rows={stakeholders} onChange={setStakeholders} />
           </div>
 
-          {/* 一番押してほしい操作なので、正方形の大きなボタンにして目立たせる */}
+          {/* 一番押してほしい操作なので、大きな丸い Aqua ボタンにして目立たせる（押せるときは脈動する） */}
           <button
             type="submit"
             disabled={busy || title.trim() === ""}
-            className="group flex h-32 w-32 shrink-0 flex-col items-center justify-center gap-2 self-center rounded-2xl bg-foreground text-background shadow-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-lg active:translate-y-0 active:scale-95 disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none sm:self-start"
+            className="aqua-button aqua-button--pulse group flex h-32 w-32 shrink-0 flex-col items-center justify-center gap-2 self-center sm:self-start"
           >
             <svg
               viewBox="0 0 24 24"
