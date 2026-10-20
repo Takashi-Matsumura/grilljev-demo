@@ -4,6 +4,7 @@ import { loadPrompt } from "@/lib/prompts";
 import type { FlowModel, IssueKind } from "@/lib/model/types";
 import type { Candidate } from "./pick";
 import { purposeMissing } from "./purpose";
+import { stakeholderGap, stakeholderViews } from "./stakeholders";
 
 /**
  * gemma に「問いの候補」を書かせる。server 専用。
@@ -44,7 +45,7 @@ export async function generateCandidates(
   const input = {
     scope: { title: model.scope.title, purpose: model.scope.purpose },
     purpose_missing: purposeMissing(model),
-    actors: model.actors.map((a) => a.name),
+    actors: stakeholderViews(model),
     steps: model.steps
       .filter((s) => s.status !== "retracted")
       .sort((a, b) => a.order - b.order)
@@ -97,6 +98,13 @@ export async function generateCandidates(
     });
   }
 
+  // 図につながっていない登場人物（起点・終点が先）がいれば、そこをつなぐ問いを必ず候補に入れる。
+  // gemma がその人に触れた問いを書いていれば、そちらを使う。一度出した問いは繰り返さない
+  const gap = stakeholderGap(model);
+  if (gap && !banned.has(gap.text) && !out.some((c) => (c.kind === "handoff" || c.kind === "who") && c.text.includes(gap.actor.name))) {
+    out.unshift({ kind: "handoff", text: gap.text, suggested: "", issueId: null });
+  }
+
   // 存在意義が未確定なら、目的を問う候補を必ず先頭に置く
   if (purposeMissing(model) && !out.some((c) => c.kind === "purpose")) {
     out.unshift(PURPOSE_QUESTION);
@@ -120,6 +128,9 @@ export async function suggestAnswer(
 ): Promise<{ suggested: string; ms: number }> {
   const startedAt = performance.now();
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
+  // つながりの切れ目を問う問いは、その人がまだ図にいないことが前提。推測の材料が無く、
+  // 書かせると作り話になる（実測で、会話に無いやり取りを推奨回答にした）ので、生成しない
+  if (question === stakeholderGap(model)?.text) return { suggested: "", ms: 0 };
   try {
     const raw = await chatCompletion(
       [
@@ -129,6 +140,7 @@ export async function suggestAnswer(
           content: JSON.stringify({
             question,
             scope: { title: model.scope.title, purpose: model.scope.purpose },
+            absent_actors: model.actors.filter((a) => a.present === false).map((a) => a.name),
             steps: model.steps
               .filter((s) => s.status !== "retracted")
               .sort((a, b) => a.order - b.order)

@@ -1,5 +1,6 @@
 import type { JevAnswer, JevChoiceAnswer, JevNoulAnswer, JevQuestion } from "@/lib/jev";
 import type { FlowModel, IssueKind } from "@/lib/model/types";
+import { stakeholderLine, stakeholderViews } from "./stakeholders";
 
 /**
  * 問いの選別。gemma が書いた候補のうち「いま出すべき 1 問」を Jev に選ばせる。
@@ -33,6 +34,8 @@ export type PickState = {
   /** 最後の発言から何秒経ったか。議論が続いているか（割り込んでよいか）の判断材料。不明なら null */
   seconds_since_last_utterance: number | null;
   recent_utterances: string[];
+  /** 登場人物。会議の前に登録した人も含む。起点・終点・出席なし・図にまだ出ていない、を括弧で添える */
+  actors: string[];
   recent_steps: string[];
   open_issues: string[];
   candidates: { id: string; text: string }[];
@@ -49,6 +52,7 @@ export function buildPickState(
     scope: { title: model.scope.title, purpose: model.scope.purpose },
     seconds_since_last_utterance: silenceSec === null ? null : Math.round(silenceSec),
     recent_utterances: recent.slice(-6),
+    actors: stakeholderViews(model).map(stakeholderLine),
     recent_steps: model.steps
       .filter((s) => s.status !== "retracted")
       .sort((a, b) => a.order - b.order)
@@ -79,7 +83,7 @@ export function buildPickQuestions(candidates: Candidate[]): Record<string, JevQ
     pick: {
       type: "choice",
       instructions:
-        "会議を前に進めるために、今まさに出すべき問いはどれか。図の空白を埋め、かつ参加者がその場で答えられるものを選ぶ",
+        "会議を前に進めるために、今まさに出すべき問いはどれか。図の空白を埋め、かつ参加者がその場で答えられるものを選ぶ。state の actors で「図にまだ出ていない」登場人物（特に起点・終点）を図につなぐ問いは、業務フローの切れ目を埋めるので優先する",
       criteria: Object.fromEntries(candidates.map((c) => [c.id, c.text])),
     },
   };
@@ -88,7 +92,7 @@ export function buildPickQuestions(candidates: Candidate[]): Record<string, JevQ
       type: "noul",
       instructions: `この問い「${c.text}」は、実際に会話や図に出てきた内容に基づいているか`,
       criteria: {
-        true: "会話や図に出てきた人・ステップ・言葉を踏まえている",
+        true: "会話や図に出てきた人・ステップ・言葉を踏まえている。state の actors にいる登場人物は、会議の前に登録された関係者なので、会話にまだ出ていなくても根拠ありとみなす",
         false: "会話に出ていない事柄を前提にしている。話を作っている",
       },
     };
