@@ -127,47 +127,50 @@ export function DiagramMeta({
   const showBadge = devMode || flash;
 
   return (
-    <div className="flex shrink-0 flex-col gap-2 border-b border-black/10 px-4 py-2 dark:border-white/15">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <div className="flex min-w-0 flex-1 items-baseline gap-3">
-          <h2 className="shrink-0 font-medium" title={`対象業務: ${model.scope.title || "（未設定）"}`}>
-            業務フロー図
-          </h2>
-          {facilitatorAuto && (
-            <span
-              className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-800 dark:bg-violet-500/20 dark:text-violet-300"
-              title="自動問いかけが ON です。問いが出ると、この図の上に浮かせて出します"
+    <div className="flex shrink-0 items-center gap-3 border-b border-black/10 px-4 py-2 dark:border-white/15">
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <div className="flex min-w-0 flex-1 items-baseline gap-3">
+            <h2 className="shrink-0 font-medium" title={`対象業務: ${model.scope.title || "（未設定）"}`}>
+              業務フロー図
+            </h2>
+            {facilitatorAuto && (
+              <span
+                className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-800 dark:bg-violet-500/20 dark:text-violet-300"
+                title="自動問いかけが ON です。問いが出ると、この図の上に浮かせて出します"
+              >
+                ファシリテーター
+              </span>
+            )}
+            <p
+              className="min-w-0 flex-1 truncate text-sm text-zinc-500 dark:text-zinc-400"
+              title={model.scope.purpose || "目的はまだ確定していません"}
             >
-              ファシリテーター
+              目的: {model.scope.purpose || <span className="text-zinc-400">（未確定）</span>}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {devMode && <span className="text-xs tabular-nums text-zinc-400">rev.{model.rev}</span>}
+            <span
+              role="status"
+              aria-hidden={!showBadge}
+              className={`rounded px-2 py-0.5 text-xs transition-opacity ${badge.cls} ${
+                showBadge ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              {badge.text}
             </span>
-          )}
-          <p
-            className="min-w-0 flex-1 truncate text-sm text-zinc-500 dark:text-zinc-400"
-            title={model.scope.purpose || "目的はまだ確定していません"}
-          >
-            目的: {model.scope.purpose || <span className="text-zinc-400">（未確定）</span>}
-          </p>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {devMode && <span className="text-xs tabular-nums text-zinc-400">rev.{model.rev}</span>}
-          <span
-            role="status"
-            aria-hidden={!showBadge}
-            className={`rounded px-2 py-0.5 text-xs transition-opacity ${badge.cls} ${
-              showBadge ? "opacity-100" : "opacity-0"
-            }`}
-          >
-            {badge.text}
-          </span>
+        <div aria-label="共通認識の充足度" className="flex flex-wrap items-center gap-1.5">
+          {readiness.map((item) => (
+            <ReadinessChip key={item.key} item={item} />
+          ))}
+          <ActorChips actors={model.actors} />
         </div>
       </div>
-      <div aria-label="共通認識の充足度" className="flex flex-wrap items-center gap-1.5">
-        {readiness.map((item) => (
-          <ReadinessChip key={item.key} item={item} />
-        ))}
-        <ActorChips actors={model.actors} />
-        {onEditActors && <ActorEditDialog model={model} onSave={onEditActors} />}
-      </div>
+      {/* 登場人物の編集は、バッジ（状態の表示）とは別物の「操作」なので、右端に丸いボタンで置く */}
+      {onEditActors && <ActorEditDialog model={model} onSave={onEditActors} />}
     </div>
   );
 }

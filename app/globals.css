@@ -201,13 +201,54 @@ body {
   }
 }
 
+/*
+ * 白いジェル（Aqua の通常のボタン）。青い「既定のボタン」と見分けるための、控えめな方。
+ * 文字は暗い色、光沢と照り返しはそのまま。
+ */
+.aqua-button--clear {
+  --aqua-top: #ffffff;
+  --aqua-mid: #e4e9f0;
+  --aqua-bottom: #fbfdff;
+  --aqua-edge: #98a1ad;
+  --aqua-glow: 110 122 138;
+  color: #1f2937;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.7);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.18),
+    inset 0 -2px 4px rgb(255 255 255 / 0.6),
+    inset 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+/* 「まずここを押して」の誘導。脈動に加えて、光の輪をボタンの外へ広げては消す */
+.aqua-button--beckon:not(:disabled) {
+  animation:
+    aqua-pulse 1.6s ease-in-out infinite,
+    aqua-beckon 1.6s ease-out infinite;
+}
+
+.aqua-button--beckon:active:not(:disabled) {
+  animation: none;
+}
+
+@keyframes aqua-beckon {
+  0% {
+    outline: 2px solid rgb(var(--aqua-glow) / 0.7);
+    outline-offset: 0;
+  }
+  100% {
+    outline: 2px solid rgb(var(--aqua-glow) / 0);
+    outline-offset: 10px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aqua-button,
   .aqua-button::before,
   .aqua-button::after {
     transition: none;
   }
-  .aqua-button--pulse:not(:disabled) {
+  .aqua-button--pulse:not(:disabled),
+  .aqua-button--beckon:not(:disabled) {
     animation: none;
   }
 }
