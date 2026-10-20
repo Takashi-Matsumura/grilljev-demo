@@ -254,15 +254,15 @@ export function MicTranscriber({
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3 p-4">
       <div className="flex items-start gap-4">
-        {/* 左: 一番押す操作なので、正方形の大きなボタンにして目立たせる（トップページの
-            「会議を始める」ボタンと同じ作法）。真下に、ボタンの状態と直結するマイク音量・状態文字を置く */}
+        {/* 左: 一番押す操作なので、大きな丸い Aqua ボタンにして目立たせる（トップページの
+            「会議を始める」ボタンと同じ作法。録音中は赤）。真下に、ボタンの状態と直結するマイク音量・状態文字を置く */}
         <div className="flex shrink-0 flex-col items-center gap-2">
           <button
             type="button"
             onClick={recording ? recorder.stop : () => void recorder.start()}
             disabled={recorder.state === "starting"}
-            className={`group flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-2xl shadow-sm transition-all duration-150 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-lg active:translate-y-0 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none ${
-              recording ? "bg-red-600 text-white hover:bg-red-700" : "bg-foreground text-background"
+            className={`aqua-button group flex h-20 w-20 flex-col items-center justify-center gap-1 ${
+              recording ? "aqua-button--red" : ""
             }`}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
