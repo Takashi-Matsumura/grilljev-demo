@@ -121,8 +121,8 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
           >
             <svg
               viewBox="0 0 24 24"
-              width="30"
-              height="30"
+              width="44"
+              height="44"
               fill="currentColor"
               aria-hidden
               className="transition-transform duration-150 ease-out group-hover:translate-x-0.5"
