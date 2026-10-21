@@ -101,6 +101,11 @@ export type OpenIssue = {
   ignored?: number;
   answer?: string;
   raisedAtRev: number;
+  /**
+   * 所属を尋ねる問い（「田中さんはどの部署の方ですか？」）のとき、その個人の列の id。
+   * 答えに部署の名前が 1 つだけ出てきたら、その部署にたたむ（actor.fold）
+   */
+  foldActorId?: ActorId;
 };
 
 /** 対象業務＝参加者の共通認識。会話の中で変わりうる */

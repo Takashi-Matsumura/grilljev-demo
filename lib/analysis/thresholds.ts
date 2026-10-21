@@ -52,3 +52,6 @@ export const FALLBACK_LABEL_CHARS = 32;
 export const CORRECTION_MIN = 0.6;
 /** intent が「訂正」でなくても、「どう直すか」がこれ以上の確信なら訂正として扱う */
 export const CORRECTION_STRONG = 0.8;
+
+/** 担当者: 「どのステップの担当を言っているか」の確信がこれ未満なら、担当者を入れない */
+export const ASSIGNEE_MIN = 0.7;

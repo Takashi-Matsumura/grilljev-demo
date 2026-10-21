@@ -1,5 +1,6 @@
 import type { ExtractedActor, StepEditResult, StepLabelResult } from "@/lib/analysis/label";
 import type { Actor, Branch, FlowModel, ModelOp, Step } from "@/lib/model/types";
+import { canHaveMembers, memberOf } from "./assignee";
 import { fallbackLabel, nextId, type FollowUp } from "./interpret";
 import {
   ACTOR_APPLY,
@@ -81,6 +82,10 @@ export type ActorStepResult = {
   stepId: string;
   /** 新しく作ったアクター。次の Jev リクエストで「既存の言い換えではないか」を検証する */
   created: { id: string; name: string }[];
+  /** 個人を列にせず、部署の担当者にした（{ 名前, 部署 }） */
+  assigned: { name: string; into: string }[];
+  /** 所属が分からず列にした個人。所属を尋ねる問いを足した */
+  asked: string[];
 };
 
 /**
@@ -95,6 +100,11 @@ export function buildActorStepOps(
 ): ActorStepResult | null {
   const ops: ModelOp[] = [];
   const created: { id: string; name: string }[] = [];
+  const assigned: ActorStepResult["assigned"] = [];
+  const asked: string[] = [];
+  let assignee: string | undefined;
+  /** 部署に加えるメンバー（同じ部署に 2 人足すときも 1 回の update にまとめる） */
+  const addMembers = new Map<string, string[]>();
   const pool: Pick<Actor, "id" | "name" | "aliases">[] = model.actors.map((a) => ({
     id: a.id,
     name: a.name,
@@ -109,16 +119,32 @@ export function buildActorStepOps(
       (a) => norm(a.name) === norm(found.name) || a.aliases.some((x) => norm(x) === norm(found.name)),
     );
     if (existing) return existing.id;
+    // 個人は列にしない: メンバーとして登録済みか、発言に所属が出ていれば、その部署の担当者にする
+    if (found.kind === "person") {
+      const dept =
+        memberOf(model, found.name) ??
+        model.actors.find((a) => a.name === found.affiliation && canHaveMembers(a) && a.kind !== "unknown");
+      if (dept) {
+        if (side === "from") assignee = found.name;
+        if (!dept.members?.includes(found.name)) {
+          addMembers.set(dept.id, [...(addMembers.get(dept.id) ?? dept.members ?? []), found.name]);
+        }
+        assigned.push({ name: found.name, into: dept.name });
+        return dept.id;
+      }
+    }
     const id = nextId("A", pool.map((a) => a.id));
     pool.push({ id, name: found.name, aliases: [] });
     created.push({ id, name: found.name });
     ops.push({ op: "actor.add", actor: { id, name: found.name, kind: found.kind, aliases: [] } });
+    if (found.kind === "person") asked.push(id);
     return id;
   };
 
   const fromId = resolve("from");
   const toId = resolve("to");
   if (!fromId || !toId) return null;
+  for (const [id, members] of addMembers) ops.push({ op: "actor.update", id, patch: { members } });
   // 参照するアクターが消えていたら足さない（reducer も弾くが、ここで明示する）
   if (!pool.some((a) => a.id === fromId) || !pool.some((a) => a.id === toId)) return null;
 
@@ -144,9 +170,35 @@ export function buildActorStepOps(
       status: provisional ? "provisional" : "confirmed",
       flags: plan.flags,
       sourceUtteranceIds: [plan.utteranceId],
+      ...(assignee ? { assignee } : {}),
     },
   });
-  return { ops, stepId, created };
+
+  // 所属が分からない個人は、いったん列にして、所属を尋ねる（答えに部署名が出たら、その部署にたたむ）
+  const issueIds = model.issues.map((i) => i.id);
+  for (const actorId of asked) {
+    const name = pool.find((a) => a.id === actorId)?.name ?? "";
+    const id = nextId("I", issueIds);
+    issueIds.push(id);
+    ops.push({
+      op: "issue.add",
+      issue: {
+        id,
+        question: `「${name}」さんは、どの部署・チームの方ですか？`,
+        kind: "who",
+        relatedStepIds: [stepId],
+        status: "open",
+        foldActorId: actorId,
+      },
+    });
+  }
+  return {
+    ops,
+    stepId,
+    created,
+    assigned,
+    asked: asked.map((id) => pool.find((a) => a.id === id)?.name ?? id),
+  };
 }
 
 export type EditPlan = {

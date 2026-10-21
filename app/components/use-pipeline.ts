@@ -212,6 +212,8 @@ export function usePipeline({
           if (!built) return fail("登場人物の名前を特定できなかったため、図に追加しませんでした");
           commitOps(built.ops, "jev");
           for (const c of built.created) {
+            // 所属を尋ねている個人は、部署の言い換えとして統合させない（部署の別名ではなく、メンバーになる人）
+            if (built.asked.includes(c.name)) continue;
             addPending({
               check: { kind: "actor", actorId: c.id, name: c.name },
               lineId: job.lineId,
@@ -219,9 +221,14 @@ export function usePipeline({
             });
           }
           const names = built.created.map((c) => c.name).join("・");
+          const notes = [
+            ...built.assigned.map((x) => `「${x.name}」を${x.into}の担当者に`),
+            ...(names ? [`登場人物「${names}」を追加`] : []),
+            ...(built.asked.length > 0 ? ["所属を問いに追加"] : []),
+          ];
           patchLabeling(job.lineId, {
             state: "pending",
-            note: names ? `登場人物「${names}」を追加。ステップ名を生成中` : "ステップ名を生成中",
+            note: [...notes, "ステップ名を生成中"].join("。"),
           });
           enqueue({
             kind: "label",

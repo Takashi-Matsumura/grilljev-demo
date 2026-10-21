@@ -37,7 +37,12 @@ export type StepLabelResult = {
   ms: number;
 };
 
-export type ExtractedActor = { name: string; kind: ActorKind };
+export type ExtractedActor = {
+  name: string;
+  kind: ActorKind;
+  /** 個人のとき、発言に出てきた所属（既知の登場人物の名前）。分からなければ無い */
+  affiliation?: string;
+};
 export type ActorsResult = {
   from: ExtractedActor | null;
   to: ExtractedActor | null;
@@ -101,13 +106,15 @@ export async function labelStep(input: StepLabelInput): Promise<StepLabelResult>
   };
 }
 
-function toActor(value: unknown): ExtractedActor | null {
+function toActor(value: unknown, knownActors: string[]): ExtractedActor | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
   const name = cleanText(v.name, MAX_NAME_CHARS)?.replace(/(さん|様|氏)$/, "") ?? null;
   if (!name) return null;
   const kind = (ACTOR_KINDS as unknown[]).includes(v.kind) ? (v.kind as ActorKind) : "role";
-  return { name, kind };
+  // 所属は既知の登場人物の名前だけ（gemma が作った部署名は使わない）
+  const affiliation = kind === "person" ? cleanText(v.affiliation, MAX_NAME_CHARS) : null;
+  return affiliation && knownActors.includes(affiliation) ? { name, kind, affiliation } : { name, kind };
 }
 
 export async function extractActors(input: {
@@ -135,8 +142,8 @@ export async function extractActors(input: {
   const json = extractJson(raw) as Record<string, unknown> | null;
   if (!json) throw new LlmError(`登場人物を取り出せませんでした: ${raw.slice(0, 120)}`, "invalid");
   return {
-    from: input.need.includes("from") ? toActor(json.from) : null,
-    to: input.need.includes("to") ? toActor(json.to) : null,
+    from: input.need.includes("from") ? toActor(json.from, input.knownActors) : null,
+    to: input.need.includes("to") ? toActor(json.to, input.knownActors) : null,
     ms: Math.round(performance.now() - startedAt),
   };
 }
