@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { moveStepOps } from "@/lib/model/move";
 import type { FlowModel, ModelOp } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
@@ -18,6 +18,7 @@ export function StepPanel({
   onClose,
   onCommit,
   onFocus,
+  children,
 }: {
   model: FlowModel;
   /** 開いているステップ。図に無ければ何も出さない */
@@ -26,6 +27,8 @@ export function StepPanel({
   onCommit: (ops: ModelOp[]) => void;
   /** 渡すと「声で直す」を出す。このステップを、番号を言わずに音声で直す対象にする */
   onFocus?: (stepId: string) => void;
+  /** 確定チェックと順番の間に足す欄（/editor の分岐の操作など） */
+  children?: ReactNode;
 }) {
   const steps = visibleSteps(model);
   const index = steps.findIndex((s) => s.id === stepId);
@@ -190,6 +193,8 @@ export function StepPanel({
         />
         確定にする（外すと仮のステップ＝点線）
       </label>
+
+      {children}
 
       <div className="flex flex-col gap-2 border-t border-black/10 pt-3 dark:border-white/15">
         <div className="flex items-center gap-2">
