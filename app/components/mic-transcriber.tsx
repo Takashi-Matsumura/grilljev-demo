@@ -140,6 +140,12 @@ type Props = {
   devMode?: boolean;
   /** 図から自動で集めた語彙ヒント（対象業務名・登場人物名・書類/システム名）。会議が進むほど育つ */
   autoVocab?: string;
+  /**
+   * 文字起こしの行を全部見せるか。false なら細い列（録音の操作と直近の 1 行だけ）にする。
+   * 閉じても録音・文字起こし・判定はそのまま続く（見た目だけを切り替える）
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function MicTranscriber({
@@ -152,6 +158,8 @@ export function MicTranscriber({
   paused = false,
   devMode = false,
   autoVocab = "",
+  open = true,
+  onOpenChange,
 }: Props) {
   const [jevBackend] = useJevBackend(initialJevBackend);
   /** 利用者が手で足す分だけを持つ。自動の語彙とは送信時に合成し、自動側の増減で消えたりしない */
@@ -258,73 +266,133 @@ export function MicTranscriber({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [lines]);
+  }, [lines, open]);
 
   const recording = recorder.state === "recording";
+
+  // 一番押す操作なので、大きな丸い Aqua ボタンにして目立たせる（トップページの
+  // 「会議を始める」ボタンと同じ作法。録音中は赤）。真下に、ボタンの状態と直結するマイク音量・状態文字を置く
+  const recordControl = (
+    <div className="flex shrink-0 flex-col items-center gap-2">
+      <button
+        type="button"
+        onClick={recording ? recorder.stop : () => void recorder.start()}
+        disabled={recorder.state === "starting"}
+        className={`aqua-button group flex h-20 w-20 flex-col items-center justify-center gap-1 ${
+          recording ? "aqua-button--red" : ""
+        }`}
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+          {/* 録音中は、この丸が心拍のように鼓動する（transform-box を fill-box にして、
+              丸自身の中心を基準に拡大縮小させる） */}
+          <circle
+            cx="12"
+            cy="12"
+            r="7"
+            fill="currentColor"
+            className={recording ? "origin-center animate-heartbeat [transform-box:fill-box]" : ""}
+          />
+        </svg>
+        <span className="text-xs font-medium">
+          {recorder.state === "starting" ? "準備中…" : recording ? "停止" : "録音開始"}
+        </span>
+      </button>
+
+      <div
+        className="h-2 w-20 overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
+        role="meter"
+        aria-label="マイクの音量"
+        aria-valuemin={0}
+        aria-valuemax={1}
+        aria-valuenow={recording ? recorder.level : 0}
+      >
+        <div
+          className={`h-full transition-[width] duration-75 ${
+            recorder.speaking ? "bg-emerald-500" : "bg-zinc-400"
+          }`}
+          style={{ width: `${Math.round((recording ? recorder.level : 0) * 100)}%` }}
+        />
+      </div>
+
+      <span className="text-center text-xs text-zinc-500">
+        {recording
+          ? paused
+            ? "読み上げ中（一時停止）"
+            : recorder.speaking
+              ? "発話を検出"
+              : "待機中"
+          : "停止中"}
+        {devMode && recorder.sampleRate ? ` · ${recorder.sampleRate / 1000}kHz` : ""}
+      </span>
+    </div>
+  );
+
+  const jevToggle = (
+    <ToggleSwitch
+      checked={jevEnabled}
+      onChange={onJevEnabledChange}
+      label="Jev"
+      title={
+        jevBackend === "local"
+          ? "ON の間、確定した文字起こしを 1 行ごとにローカル判定器（Jev の代わり）で判定します。外部には送りません"
+          : "ON の間、確定した文字起こしを 1 行ごとに Jev（外部 API・課金）へ送って判定します"
+      }
+    />
+  );
+
+  const openButton = onOpenChange && (
+    <button
+      type="button"
+      className="rounded-md border border-black/15 shrink-0 whitespace-nowrap px-2 py-1 text-xs hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+      onClick={() => onOpenChange(!open)}
+    >
+      {open ? "たたむ" : "文字起こしを開く"}
+    </button>
+  );
+
+  if (!open) {
+    // 細い列: 録音の操作と、直近の 1 行（何と判定され、図がどう変わったか）だけ
+    const latest = [...lines].reverse().find((l) => l.status === "done" || l.status === "transcribing");
+    return (
+      <section
+        aria-label="文字起こし（たたんだ表示）"
+        className="flex min-h-0 flex-1 flex-col items-center gap-3 p-3 max-lg:flex-row max-lg:items-start"
+      >
+        {recordControl}
+        <div className="flex w-full min-w-0 flex-col gap-2 max-lg:flex-1">
+          <div className="flex items-center justify-center max-lg:justify-start">{jevToggle}</div>
+          {recorder.error && (
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+              {recorder.error}
+            </p>
+          )}
+          {latest && (
+            <div className="rounded-md border border-black/10 p-2 text-xs dark:border-white/15" aria-live="polite">
+              <span className="tabular-nums text-zinc-500">{latest.at}</span>
+              <p className="line-clamp-4 break-words text-sm">
+                {latest.status === "transcribing" ? "⋯ 文字起こし中" : latest.text}
+              </p>
+              {latest.analysis && <AnalysisView analysis={latest.analysis} devMode={false} />}
+              {latest.labeling && <LabelingView labeling={latest.labeling} devMode={false} />}
+            </div>
+          )}
+          <div className="flex justify-center max-lg:justify-start">{openButton}</div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3 p-4">
       <div className="flex items-start gap-4">
-        {/* 左: 一番押す操作なので、大きな丸い Aqua ボタンにして目立たせる（トップページの
-            「会議を始める」ボタンと同じ作法。録音中は赤）。真下に、ボタンの状態と直結するマイク音量・状態文字を置く */}
-        <div className="flex shrink-0 flex-col items-center gap-2">
-          <button
-            type="button"
-            onClick={recording ? recorder.stop : () => void recorder.start()}
-            disabled={recorder.state === "starting"}
-            className={`aqua-button group flex h-20 w-20 flex-col items-center justify-center gap-1 ${
-              recording ? "aqua-button--red" : ""
-            }`}
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-              {/* 録音中は、この丸が心拍のように鼓動する（transform-box を fill-box にして、
-                  丸自身の中心を基準に拡大縮小させる） */}
-              <circle
-                cx="12"
-                cy="12"
-                r="7"
-                fill="currentColor"
-                className={recording ? "origin-center animate-heartbeat [transform-box:fill-box]" : ""}
-              />
-            </svg>
-            <span className="text-xs font-medium">
-              {recorder.state === "starting" ? "準備中…" : recording ? "停止" : "録音開始"}
-            </span>
-          </button>
-
-          <div
-            className="h-2 w-20 overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
-            role="meter"
-            aria-label="マイクの音量"
-            aria-valuemin={0}
-            aria-valuemax={1}
-            aria-valuenow={recording ? recorder.level : 0}
-          >
-            <div
-              className={`h-full transition-[width] duration-75 ${
-                recorder.speaking ? "bg-emerald-500" : "bg-zinc-400"
-              }`}
-              style={{ width: `${Math.round((recording ? recorder.level : 0) * 100)}%` }}
-            />
-          </div>
-
-          <span className="text-center text-xs text-zinc-500">
-            {recording
-              ? paused
-                ? "読み上げ中（一時停止）"
-                : recorder.speaking
-                  ? "発話を検出"
-                  : "待機中"
-              : "停止中"}
-            {devMode && recorder.sampleRate ? ` · ${recorder.sampleRate / 1000}kHz` : ""}
-          </span>
-        </div>
+        {recordControl}
 
         {/* 右: 見出し・Jevトグルと、追加の語彙ヒント */}
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
-              <h2 className="font-medium">文字起こし</h2>
+              <h2 className="whitespace-nowrap font-medium">文字起こし</h2>
+              {openButton}
               <span
                 className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600 dark:bg-white/10 dark:text-zinc-300"
                 title="音声認識にはローカルの whisper.cpp（Whisper）を使っています。音声は外に出ません"
@@ -332,16 +400,7 @@ export function MicTranscriber({
                 Whisper
               </span>
             </div>
-            <ToggleSwitch
-              checked={jevEnabled}
-              onChange={onJevEnabledChange}
-              label="Jev"
-              title={
-                jevBackend === "local"
-                  ? "ON の間、確定した文字起こしを 1 行ごとにローカル判定器（Jev の代わり）で判定します。外部には送りません"
-                  : "ON の間、確定した文字起こしを 1 行ごとに Jev（外部 API・課金）へ送って判定します"
-              }
-            />
+            {jevToggle}
           </div>
 
           <label className="flex flex-col gap-1 text-sm">

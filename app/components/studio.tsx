@@ -27,6 +27,7 @@ import { useDevMode } from "./use-dev-mode";
 import { useFacilitator } from "./use-facilitator";
 import { useFacilitatorAuto } from "./use-facilitator-auto";
 import { useLeftWidth } from "./use-left-width";
+import { useTranscriptOpen } from "./use-transcript-open";
 import { usePipeline, type AnalysisJob } from "./use-pipeline";
 import { useScopeShift } from "./use-scope-shift";
 import { newId } from "@/lib/id";
@@ -55,6 +56,8 @@ const SAVE_LABEL: Record<SaveStatus, { text: string; cls: string }> = {
 const MAIN_CLASS = "flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:overflow-hidden";
 
 const DIVIDER_PX = 6;
+/** 文字起こしをたたんだときの左カラムの幅（録音ボタンと直近の 1 行だけ） */
+const LEFT_COMPACT_PX = 200;
 const LEFT_MIN_PX = 280;
 /** 右側（開発者モードなら Jev コンソール分も込みで）に必ず残す幅 */
 const REST_MIN_PX = 320;
@@ -92,6 +95,7 @@ export function Studio({
 
   // ── 左カラム（文字起こし）の幅をドラッグで調整 ──
   const [leftWidth, setLeftWidth] = useLeftWidth();
+  const [transcriptOpen, setTranscriptOpen] = useTranscriptOpen();
   const mainRef = useRef<HTMLElement>(null);
   const leftPaneRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -126,9 +130,14 @@ export function Studio({
     };
   }, [dragging, setLeftWidth]);
 
-  // 既定（ドラッグで変えていない）は 3:7。会議中に一番見たいのは図なので、図の列を広く取る
-  const gridTemplateColumns = `${leftWidth === null ? `minmax(${LEFT_MIN_PX}px,3fr)` : `${leftWidth}px`} ${DIVIDER_PX}px minmax(0,${
-    leftWidth === null ? 7 : 1
+  // たたんでいれば細い固定幅。開いていて、ドラッグで変えていなければ 3:7（会議中に一番見たいのは図）
+  const leftColumn = !transcriptOpen
+    ? `${LEFT_COMPACT_PX}px`
+    : leftWidth === null
+      ? `minmax(${LEFT_MIN_PX}px,3fr)`
+      : `${leftWidth}px`;
+  const gridTemplateColumns = `${leftColumn} ${DIVIDER_PX}px minmax(0,${
+    transcriptOpen && leftWidth === null ? 7 : 1
   }fr)${
     devMode ? " auto" : ""
   }`;
@@ -387,7 +396,9 @@ export function Studio({
       <main ref={mainRef} className={MAIN_CLASS} style={{ gridTemplateColumns }}>
         <div
           ref={leftPaneRef}
-          className="flex min-h-[28rem] flex-col border-b border-black/10 lg:min-h-0 lg:border-b-0 dark:border-white/15"
+          className={`flex flex-col border-b border-black/10 lg:min-h-0 lg:border-b-0 dark:border-white/15 ${
+            transcriptOpen ? "min-h-[28rem]" : ""
+          }`}
         >
           <MicTranscriber
             lines={lines}
@@ -398,8 +409,10 @@ export function Studio({
             jevBackend={jevBackend}
             devMode={devMode}
             autoVocab={autoVocabText}
+            open={transcriptOpen}
+            onOpenChange={setTranscriptOpen}
           />
-          {devMode && (
+          {devMode && transcriptOpen && (
             <SamplePanel
               cursor={cursor}
               total={scenario.length}
@@ -422,10 +435,15 @@ export function Studio({
           aria-orientation="vertical"
           aria-label="左右のペインの境界"
           title="ドラッグして幅を調整（ダブルクリックで既定に戻す）"
-          onMouseDown={onDividerMouseDown}
-          onDoubleClick={() => setLeftWidth(null)}
-          className={`hidden shrink-0 cursor-col-resize border-x border-black/10 lg:block dark:border-white/15 ${
-            dragging ? "bg-black/10 dark:bg-white/15" : "hover:bg-black/5 dark:hover:bg-white/10"
+          // たたんでいる間は幅が固定なので、ドラッグで変えられない（境界線だけ残す）
+          onMouseDown={transcriptOpen ? onDividerMouseDown : undefined}
+          onDoubleClick={transcriptOpen ? () => setLeftWidth(null) : undefined}
+          className={`hidden shrink-0 border-x border-black/10 lg:block dark:border-white/15 ${
+            !transcriptOpen
+              ? ""
+              : dragging
+                ? "cursor-col-resize bg-black/10 dark:bg-white/15"
+                : "cursor-col-resize hover:bg-black/5 dark:hover:bg-white/10"
           }`}
         />
         <div className="flex min-h-[28rem] flex-col lg:min-h-0 lg:overflow-hidden">
