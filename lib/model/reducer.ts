@@ -97,8 +97,19 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
 
     case "actor.remove": {
       if (!m.actors.some((a) => a.id === op.id)) return null;
-      if (m.steps.some((s) => s.from === op.id || s.to === op.id)) return null;
-      return { ...m, actors: m.actors.filter((a) => a.id !== op.id) };
+      const linked = (s: Step) => s.from === op.id || s.to === op.id;
+      if (m.steps.some((s) => linked(s) && s.status !== "retracted")) return null;
+      return {
+        ...m,
+        actors: m.actors.filter((a) => a.id !== op.id),
+        steps: m.steps.filter((s) => !linked(s)),
+        // 消したステップを指す論点の関連は外す（論点そのものは残す）
+        issues: m.issues.map((i) =>
+          i.relatedStepIds.some((id) => m.steps.some((s) => s.id === id && linked(s)))
+            ? { ...i, relatedStepIds: i.relatedStepIds.filter((id) => !m.steps.some((s) => s.id === id && linked(s))) }
+            : i,
+        ),
+      };
     }
 
     case "actor.update": {
