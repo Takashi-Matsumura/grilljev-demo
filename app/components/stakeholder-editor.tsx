@@ -2,7 +2,13 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import type { ActorKind, ActorRole } from "@/lib/model/types";
-import { MAX_ACTOR_CHARS, MAX_SEED_ACTORS, splitNames, type SeedActor } from "@/lib/store/session-types";
+import {
+  MAX_ACTOR_CHARS,
+  MAX_MEMBERS,
+  MAX_SEED_ACTORS,
+  splitNames,
+  type SeedActor,
+} from "@/lib/store/session-types";
 import { ToggleSwitch } from "./toggle-switch";
 
 /**
@@ -15,7 +21,12 @@ export type StakeholderRow = {
   kind: ActorKind;
   role?: ActorRole;
   present?: boolean;
+  /** 部署の中の人（担当者の候補）。個人は列にせず、ここに書く */
+  members?: string[];
 };
+
+/** メンバーを書ける種別。個人・システムは、それ自体が 1 人（1 つ）なので持たない */
+const hasMembers = (kind: ActorKind) => kind === "role" || kind === "external" || kind === "unknown";
 
 const KIND_OPTIONS: { value: Exclude<ActorKind, "unknown">; label: string; short: string }[] = [
   { value: "role", label: "部署・役職", short: "部署" },
@@ -49,7 +60,14 @@ export const toSeedActors = (rows: StakeholderRow[]): SeedActor[] =>
     kind: r.kind === "unknown" ? "role" : r.kind,
     role: r.role,
     present: r.present ?? true,
+    ...(r.members && r.members.length > 0 ? { members: r.members } : {}),
   }));
+
+/** 「田中、佐藤」→ ["田中", "佐藤"]。空・重複・長すぎる名前は除く */
+const parseMembers = (text: string): string[] =>
+  [...new Set(splitNames(text).map((n) => n.replace(/(さん|様|氏)$/, "").slice(0, MAX_ACTOR_CHARS)))]
+    .filter((n) => n !== "")
+    .slice(0, MAX_MEMBERS);
 
 /** 種別のアイコン（カードの名前の前に出す） */
 function KindIcon({ kind }: { kind: ActorKind }) {
@@ -114,18 +132,26 @@ export function StakeholderEditor({
   rows,
   onChange,
   canRemove = () => true,
+  onFold,
   footer,
 }: {
   rows: StakeholderRow[];
   onChange: (rows: StakeholderRow[]) => void;
   /** 削除できる行か。会議画面では、図にすでにいる人は消さない（ステップが宙に浮くため） */
   canRemove?: (row: StakeholderRow) => boolean;
+  /**
+   * 個人の列を部署にたたむ（会議画面だけ）。渡すと、個人のカードに「部署に入れる」を出す。
+   * その人のステップは部署から出るようになり、担当者がその人になる
+   */
+  onFold?: (fromKey: string, intoKey: string) => void;
   /** レーンの下端に置くもの（開始画面の AI 候補） */
   footer?: ReactNode;
 }) {
   const [draft, setDraft] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  // メンバーの書きかけ（「、」で区切った 1 行）。カードを切り替えたら、そのカードの今のメンバーから書き直す
+  const [membersDraft, setMembersDraft] = useState<{ key: string; text: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   /** 名前を登場人物にする。既出の名前は足さない。上限を超えた分も足さない（既存は削らない） */
@@ -175,6 +201,15 @@ export function StakeholderEditor({
   };
 
   const current = rows.find((r) => r.key === selected);
+  const membersText =
+    current && membersDraft?.key === current.key ? membersDraft.text : (current?.members ?? []).join("、");
+  const commitMembers = () => {
+    if (!current || membersDraft?.key !== current.key) return;
+    update(current.key, { members: parseMembers(membersDraft.text) });
+    setMembersDraft(null);
+  };
+  // たたみ先の候補: 部署・社外（メンバーを持てる人）
+  const foldTargets = current ? rows.filter((r) => r.key !== current.key && (r.kind === "role" || r.kind === "external")) : [];
   const currentIndex = current ? rows.indexOf(current) : -1;
   const trigger = rows.find((r) => r.role === "trigger");
   const end = rows.find((r) => r.role === "end");
@@ -346,6 +381,50 @@ export function StakeholderEditor({
                 </div>
               </div>
             </div>
+            {hasMembers(current.kind) && (
+              <label className="flex flex-col gap-1 text-xs text-zinc-500">
+                メンバー（担当者の候補。「、」区切り）
+                <input
+                  className="rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm text-foreground dark:border-white/20"
+                  value={membersText}
+                  placeholder="例: 田中、佐藤"
+                  onChange={(e) => setMembersDraft({ key: current.key, text: e.target.value })}
+                  onBlur={commitMembers}
+                  onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing) return;
+                    // Enter でフォーム全体（会議の開始）が送信されないようにする
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitMembers();
+                    }
+                  }}
+                />
+              </label>
+            )}
+            {onFold && current.kind === "person" && foldTargets.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md bg-sky-50 px-3 py-2 text-xs dark:bg-sky-500/10">
+                <span className="text-zinc-600 dark:text-zinc-300">
+                  個人は列にせず、部署のメンバーにするのがおすすめです
+                </span>
+                <select
+                  className={select}
+                  value=""
+                  aria-label={`${current.name}を入れる部署`}
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    onFold(current.key, e.target.value);
+                    setSelected(null);
+                  }}
+                >
+                  <option value="">部署に入れる…</option>
+                  {foldTargets.map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2 border-t border-black/5 pt-3 dark:border-white/10">
               <ToggleSwitch
                 checked={current.present === true}

@@ -26,6 +26,11 @@ export type Actor = {
   role?: ActorRole;
   /** 会議に出席しているか。false の登場人物の作業は、会話からは推測しかできない（未確認として扱う） */
   present?: boolean;
+  /**
+   * 部署の中の人（「田中」「佐藤」）。個人はライフラインにせず、ここに持つ。
+   * 列を役割で並べておくと、人が替わっても図が古くならず、同じ役割の仕事が 2 つの列に分かれない
+   */
+  members?: string[];
 };
 
 /** sync=依頼して返事を待つ / async=投げっぱなし / reply=返答 / self=自分の中で完結 */
@@ -48,6 +53,8 @@ export type Step = {
   kind: MessageKind;
   /** 書類・システムなど。図では付箋になる */
   artifact?: string;
+  /** このステップを実際にやる人（送り手の部署のメンバー）。図では既定で出さない */
+  assignee?: string;
   branchId: string | null;
   /** 実数。「あ、その前に」の中間挿入を整数の振り直し無しで行うため */
   order: number;
@@ -129,8 +136,13 @@ export type ModelOp =
   | {
       op: "actor.update";
       id: ActorId;
-      patch: { name?: string; kind?: ActorKind; role?: ActorRole | null; present?: boolean };
+      patch: { name?: string; kind?: ActorKind; role?: ActorRole | null; present?: boolean; members?: string[] };
     }
+  /**
+   * 個人の列を部署にたたむ（「田中」→ 経理部のメンバー）。from が送り手のステップは into から出て、
+   * 担当者が from の名前になる。from が受け手のステップは into が受ける。from の列は消える
+   */
+  | { op: "actor.fold"; from: ActorId; into: ActorId }
   /** ライフラインの並び替え。ids の順に lane を振り直す（ids に無い人は、元の順で後ろに続ける） */
   | { op: "actor.reorder"; ids: ActorId[] }
   | { op: "step.add"; step: NewStep }

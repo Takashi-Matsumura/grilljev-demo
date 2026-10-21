@@ -19,7 +19,8 @@ export function autoVocab(model: FlowModel, maxChars: number = MAX_VOCAB_CHARS):
   const terms: string[] = [];
   if (model.scope.title) terms.push(model.scope.title);
   for (const a of model.actors) {
-    terms.push(a.name, ...a.aliases);
+    // メンバー（担当者の名前）も、会話で呼ばれるので聞き取らせたい
+    terms.push(a.name, ...a.aliases, ...(a.members ?? []));
   }
   for (const s of model.steps) {
     if (s.artifact) terms.push(s.artifact);

@@ -33,6 +33,7 @@ export function StepPanel({
   // 名前の書きかけ。別のステップに切り替わる・外から名前が変わったら、今の名前から書き直す
   const [draft, setDraft] = useState<{ for: string; label: string } | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [assigneeDraft, setAssigneeDraft] = useState<{ for: string; text: string } | null>(null);
   if (!step) return null;
 
   const label = draft?.for === `${step.id}:${step.label}` ? draft.label : step.label;
@@ -44,6 +45,30 @@ export function StepPanel({
     if (next !== "" && next !== step.label) update({ label: next });
   };
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
+  const sender = model.actors.find((a) => a.id === step.from);
+  // 担当者を書けるのは、送り手が部署・社外のとき（個人・システムは、それ自体が担当）
+  const canAssign = sender !== undefined && sender.kind !== "person" && sender.kind !== "system";
+  const assigneeKey = `${step.id}:${step.assignee ?? ""}`;
+  const assignee = assigneeDraft?.for === assigneeKey ? assigneeDraft.text : (step.assignee ?? "");
+  /** 担当者を確定する。部署のメンバーにいない名前なら、メンバーにも加える（次から候補に出る） */
+  const commitAssignee = () => {
+    setAssigneeDraft(null);
+    if (!sender) return;
+    const next = assignee.replace(/\s+/g, " ").trim().replace(/(さん|様|氏)$/, "");
+    if (next === (step.assignee ?? "")) return;
+    const ops: ModelOp[] = [{ op: "step.update", id: step.id, patch: { assignee: next === "" ? undefined : next } }];
+    const members = sender.members ?? [];
+    if (next !== "" && !members.includes(next)) {
+      ops.push({ op: "actor.update", id: sender.id, patch: { members: [...members, next] } });
+    }
+    onCommit(ops);
+  };
+  /** 送り手を変えたら、新しい送り手のメンバーでない担当者は外す（別の部署の人が担当にならないように） */
+  const changeSender = (id: string) => {
+    const members = model.actors.find((a) => a.id === id)?.members ?? [];
+    const keep = step.assignee !== undefined && members.includes(step.assignee);
+    update(keep ? { from: id } : { from: id, assignee: undefined });
+  };
   const actors = [...model.actors].sort((a, b) => a.lane - b.lane);
 
   const btn =
@@ -95,7 +120,11 @@ export function StepPanel({
       {(["from", "to"] as const).map((side) => (
         <label key={side} className="flex flex-col gap-1">
           {side === "from" ? "送り手（誰が）" : "受け手（誰に）"}
-          <select className={field} value={step[side]} onChange={(e) => update({ [side]: e.target.value })}>
+          <select
+            className={field}
+            value={step[side]}
+            onChange={(e) => (side === "from" ? changeSender(e.target.value) : update({ to: e.target.value }))}
+          >
             {actors.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -104,6 +133,28 @@ export function StepPanel({
           </select>
         </label>
       ))}
+
+      {canAssign && (
+        <label className="flex flex-col gap-1">
+          担当者（{sender.name}の中で、実際にやる人）
+          <input
+            className={field}
+            value={assignee}
+            list={`members-${sender.id}`}
+            placeholder="未設定"
+            onChange={(e) => setAssigneeDraft({ for: assigneeKey, text: e.target.value })}
+            onBlur={commitAssignee}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) commitAssignee();
+            }}
+          />
+          <datalist id={`members-${sender.id}`}>
+            {(sender.members ?? []).map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </label>
+      )}
 
       <label className="flex items-center gap-2">
         <input

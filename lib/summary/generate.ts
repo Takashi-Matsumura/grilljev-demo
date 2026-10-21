@@ -15,11 +15,12 @@ export async function generateProse(model: FlowModel): Promise<{ prose: SummaryP
   const input = {
     title: model.scope.title,
     purpose: model.scope.purpose,
-    actors: model.actors.map((a) => a.name),
+    actors: model.actors.map((a) => (a.members?.length ? `${a.name}（メンバー: ${a.members.join("、")}）` : a.name)),
     steps: visibleSteps(model)
       .slice(0, 60)
       .map((s) => ({
         step: `${nameOf(s.from)} → ${nameOf(s.to)}: ${s.label}`,
+        ...(s.assignee ? { assignee: s.assignee } : {}),
         flags: Object.keys(s.flags),
         provisional: s.status === "provisional",
       })),
