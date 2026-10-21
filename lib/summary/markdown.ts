@@ -131,10 +131,16 @@ export function buildSummaryMarkdown(
   } else {
     lines.push(
       ...table(
-        ["名称", "種別", "起点・終点", "別名"],
+        ["名称", "種別", "起点・終点", "メンバー", "別名"],
         [...model.actors]
           .sort((x, y) => x.lane - y.lane)
-          .map((a) => [cell(a.name), KIND_LABEL[a.kind], a.role ? ROLE_LABEL[a.role] : "", cell(a.aliases.join("、"))]),
+          .map((a) => [
+            cell(a.name),
+            KIND_LABEL[a.kind],
+            a.role ? ROLE_LABEL[a.role] : "",
+            cell((a.members ?? []).join("、")),
+            cell(a.aliases.join("、")),
+          ]),
       ),
     );
     lines.push("");
@@ -147,7 +153,7 @@ export function buildSummaryMarkdown(
   } else {
     lines.push(
       ...table(
-        ["#", "送り手", "受け手", "内容", "種別", "条件", "書類・道具", "確度"],
+        ["#", "送り手", "担当", "受け手", "内容", "種別", "条件", "書類・道具", "確度"],
         steps.map((s, i) => {
           const b = branchOf(s.branchId);
           const cond = b ? `${b.kind} ${b.condition}` : "";
@@ -157,6 +163,7 @@ export function buildSummaryMarkdown(
           return [
             String(i + 1),
             cell(nameOf(s.from)),
+            cell(s.assignee ?? ""),
             cell(nameOf(s.to)),
             cell(label),
             MESSAGE_LABEL[s.kind],

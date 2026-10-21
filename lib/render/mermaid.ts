@@ -79,7 +79,12 @@ export function hasDiagram(model: FlowModel): boolean {
   return model.actors.length > 0;
 }
 
-export function toMermaid(model: FlowModel): string {
+export type MermaidOptions = {
+  /** ステップ名の後ろに担当者を付ける（「フローを入力する（田中）」）。画面の表示用。既定は付けない */
+  assignees?: boolean;
+};
+
+export function toMermaid(model: FlowModel, options: MermaidOptions = {}): string {
   const lines: string[] = ["sequenceDiagram", "  autonumber"];
 
   for (const actor of [...model.actors].sort((a, b) => a.lane - b.lane)) {
@@ -109,7 +114,10 @@ export function toMermaid(model: FlowModel): string {
     const from = safeId(step.from);
     const to = safeId(step.to);
     const label =
-      esc(step.label) + flagSuffix(step) + (step.status === "provisional" ? "（仮）" : "");
+      esc(step.label) +
+      (options.assignees && step.assignee ? `（${esc(step.assignee)}）` : "") +
+      flagSuffix(step) +
+      (step.status === "provisional" ? "（仮）" : "");
     lines.push(`${indent}${from}${arrowFor(step)}${to}: ${label}`);
 
     if (step.artifact) {

@@ -50,7 +50,15 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
           .filter((a) => a.id !== from.id)
           .map((a) =>
             a.id === into.id
-              ? { ...a, aliases, role: a.role ?? from.role, present: a.present ?? from.present }
+              ? {
+                  ...a,
+                  aliases,
+                  role: a.role ?? from.role,
+                  present: a.present ?? from.present,
+                  ...(into.members || from.members
+                    ? { members: [...new Set([...(into.members ?? []), ...(from.members ?? [])])] }
+                    : {}),
+                }
               : a,
           ),
         steps: m.steps.map((s) => ({
@@ -58,6 +66,32 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
           from: s.from === from.id ? into.id : s.from,
           to: s.to === from.id ? into.id : s.to,
         })),
+      };
+    }
+
+    case "actor.fold": {
+      if (op.from === op.into) return null;
+      const from = m.actors.find((a) => a.id === op.from);
+      const into = m.actors.find((a) => a.id === op.into);
+      if (!from || !into) return null;
+      const members = [...new Set([...(into.members ?? []), from.name])];
+      return {
+        ...m,
+        actors: m.actors
+          .filter((a) => a.id !== from.id)
+          .map((a) => (a.id === into.id ? { ...a, members, role: a.role ?? from.role } : a)),
+        steps: m.steps.map((s) => {
+          if (s.from !== from.id && s.to !== from.id) return s;
+          const next: Step = {
+            ...s,
+            from: s.from === from.id ? into.id : s.from,
+            to: s.to === from.id ? into.id : s.to,
+          };
+          if (s.from === from.id) next.assignee = from.name;
+          // 「経理部 → 田中」は、たたむと経理部の中で完結する作業になる
+          if (next.from === next.to) next.kind = "self";
+          return next;
+        }),
       };
     }
 
@@ -221,6 +255,7 @@ export function modelFromSeed(seed: SessionSeed, at: string): FlowModel {
     addedAtRev: 0,
     ...(s.role ? { role: s.role } : {}),
     present: s.present,
+    ...(s.members && s.members.length > 0 ? { members: s.members } : {}),
   }));
   return { ...emptyModel({ title: seed.title }, at), actors };
 }

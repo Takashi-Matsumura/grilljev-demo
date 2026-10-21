@@ -7,15 +7,25 @@ import { StakeholderEditor, type StakeholderRow } from "./stakeholder-editor";
 const toRows = (model: FlowModel): StakeholderRow[] =>
   [...model.actors]
     .sort((a, b) => a.lane - b.lane)
-    .map((a) => ({ key: a.id, name: a.name, kind: a.kind, role: a.role, present: a.present }));
+    .map((a) => ({ key: a.id, name: a.name, kind: a.kind, role: a.role, present: a.present, members: a.members }));
+
+const sameList = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** 「部署に入れる」で、個人の列を部署にたたむ予約。保存するまで図は変えない */
+export type Fold = { from: string; into: string };
 
 /**
  * 編集結果を ops にする。比べる相手は**保存する瞬間の最新モデル**（ダイアログを開いている間にも、
  * 会話の判定で図は育つ）。変わった項目だけを送り、開いている間に消えた（統合された）人は飛ばす。
  */
-export function editOps(model: FlowModel, rows: StakeholderRow[]): ModelOp[] {
+export function editOps(model: FlowModel, rows: StakeholderRow[], folds: Fold[] = []): ModelOp[] {
   const byId = new Map(model.actors.map((a) => [a.id, a]));
   const ops: ModelOp[] = [];
+
+  // たたむのを先に。たたみ先のメンバーには、下の actor.update で（たたんだ人も含めた）全員を書く
+  for (const f of folds) {
+    if (byId.has(f.from) && byId.has(f.into)) ops.push({ op: "actor.fold", from: f.from, into: f.into });
+  }
 
   for (const r of rows) {
     const a = byId.get(r.key);
@@ -26,6 +36,7 @@ export function editOps(model: FlowModel, rows: StakeholderRow[]): ModelOp[] {
     if (r.kind !== a.kind) patch.kind = r.kind;
     if (r.role !== a.role) patch.role = r.role ?? null;
     if (r.present !== undefined && r.present !== a.present) patch.present = r.present;
+    if (!sameList(r.members, a.members)) patch.members = r.members ?? [];
     if (Object.keys(patch).length > 0) ops.push({ op: "actor.update", id: a.id, patch });
   }
 
@@ -41,12 +52,17 @@ export function editOps(model: FlowModel, rows: StakeholderRow[]): ModelOp[] {
     const actor: Omit<Actor, "lane" | "addedAtRev"> = { id, name: r.name.trim(), kind: r.kind, aliases: [] };
     if (r.role) actor.role = r.role;
     if (r.present !== undefined) actor.present = r.present;
+    if (r.members && r.members.length > 0) actor.members = r.members;
     ops.push({ op: "actor.add", actor });
   }
 
   const newIds = new Set(idOf.values());
   const ids = rows.map((r) => idOf.get(r.key) ?? r.key).filter((id) => byId.has(id) || newIds.has(id));
-  const current = [...model.actors].sort((a, b) => a.lane - b.lane).map((a) => a.id);
+  const folded = new Set(folds.map((f) => f.from));
+  const current = [...model.actors]
+    .sort((a, b) => a.lane - b.lane)
+    .map((a) => a.id)
+    .filter((id) => !folded.has(id));
   const changed = newIds.size > 0 || ids.some((id, i) => current[i] !== id);
   if (changed) ops.push({ op: "actor.reorder", ids });
   return ops;
@@ -57,17 +73,19 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
   const ref = useRef<HTMLDialogElement>(null);
   const [rows, setRows] = useState<StakeholderRow[]>([]);
   const [originalIds, setOriginalIds] = useState<Set<string>>(new Set());
+  const [folds, setFolds] = useState<Fold[]>([]);
 
   const open = () => {
     setRows(toRows(model));
     setOriginalIds(new Set(model.actors.map((a) => a.id)));
+    setFolds([]);
     ref.current?.showModal();
   };
   const empty = model.actors.length === 0;
   const names = rows.map((r) => r.name.trim()).filter((n) => n !== "");
   const duplicate = names.find((n, i) => names.indexOf(n) !== i);
   const save = () => {
-    const ops = editOps(model, rows);
+    const ops = editOps(model, rows, folds);
     if (ops.length > 0) onSave(ops);
     ref.current?.close();
   };
@@ -117,7 +135,37 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
         className="m-auto w-[min(48rem,92vw)] rounded-lg border border-black/15 bg-white p-4 text-inherit backdrop:bg-black/40 dark:border-white/20 dark:bg-zinc-900"
       >
         <div className="flex flex-col gap-3">
-          <StakeholderEditor rows={rows} onChange={setRows} canRemove={(r) => !originalIds.has(r.key)} />
+          <StakeholderEditor
+            rows={rows}
+            onChange={setRows}
+            canRemove={(r) => !originalIds.has(r.key)}
+            // 図にいる個人だけ（ダイアログで足したばかりの人は、たたむステップが無いので消せばよい）
+            onFold={(fromKey, intoKey) => {
+              const from = rows.find((r) => r.key === fromKey);
+              if (!from || !originalIds.has(fromKey) || !originalIds.has(intoKey)) return;
+              setFolds([...folds, { from: fromKey, into: intoKey }]);
+              setRows(
+                rows
+                  .filter((r) => r.key !== fromKey)
+                  .map((r) =>
+                    r.key === intoKey ? { ...r, members: [...new Set([...(r.members ?? []), from.name])] } : r,
+                  ),
+              );
+            }}
+          />
+          {folds.length > 0 && (
+            <p className="text-xs text-sky-700 dark:text-sky-300">
+              保存すると、
+              {folds
+                .map((f) => {
+                  const a = model.actors.find((x) => x.id === f.from)?.name;
+                  const b = model.actors.find((x) => x.id === f.into)?.name;
+                  return `「${a}」を${b}のメンバーに`;
+                })
+                .join("、")}
+              します（その人のステップは部署から出て、担当者がその人になります）。
+            </p>
+          )}
           <p className="text-xs text-zinc-500">
             図にすでにいる人は削除できません（ステップがつながっているため）。改名すると、元の名前は別名として残ります。
           </p>

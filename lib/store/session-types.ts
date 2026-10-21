@@ -15,6 +15,8 @@ export type SeedActor = {
   role?: ActorRole;
   /** 会議に出席しているか */
   present: boolean;
+  /** 部署の中の人（担当者の候補） */
+  members?: string[];
 };
 
 /** 開始時の初期設定＝共通認識。「リセット」の戻り先にもなる。 */
@@ -73,6 +75,7 @@ export function newSlug(now: Date, random: () => string = () => Math.random().to
 export const MAX_NAME_CHARS = 60;
 export const MAX_SEED_ACTORS = 20;
 export const MAX_ACTOR_CHARS = 30;
+export const MAX_MEMBERS = 20;
 export const SEED_ACTOR_KINDS: SeedActor["kind"][] = ["role", "person", "system", "external"];
 export const MAX_ARCHIVES = 50;
 export const MAX_LINES = 2_000;
@@ -110,6 +113,10 @@ export function parseSeed(title: unknown, actors: unknown, departments?: unknown
     const kind = SEED_ACTOR_KINDS.find((k) => k === a.kind) ?? "role";
     const role = a.role === "trigger" || a.role === "end" ? a.role : undefined;
     const actor: SeedActor = { name, kind, present: a.present !== false };
+    const members = Array.isArray(a.members)
+      ? [...new Set(a.members.map(clean).filter((n) => n !== "" && n.length <= MAX_ACTOR_CHARS))].slice(0, MAX_MEMBERS)
+      : [];
+    if (members.length > 0) actor.members = members;
     if (role && !roles.has(role)) {
       roles.add(role);
       actor.role = role;

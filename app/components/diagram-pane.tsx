@@ -51,7 +51,15 @@ export function DiagramPane({
   onFocusStep?: (id: string | null) => void;
   devMode?: boolean;
 }) {
+  // 書き出し（.mmd・.drawio）と開発者向けの表示は、担当者を付けないコード
   const code = useMemo(() => toMermaid(model), [model]);
+  const [showAssignees, setShowAssignees] = useState(false);
+  const hasAssignees = model.steps.some((s) => s.status !== "retracted" && s.assignee);
+  // 画面に描く図（.svg はこちらを書き出す＝画面に描画された図そのもの）
+  const displayCode = useMemo(
+    () => (showAssignees ? toMermaid(model, { assignees: true }) : code),
+    [code, model, showAssignees],
+  );
   // 図の番号をクリックして開いたステップ
   const [editingStep, setEditingStep] = useState<string | null>(null);
   const pickStep = (n: number) => setEditingStep(visibleSteps(model)[n - 1]?.id ?? null);
@@ -73,7 +81,7 @@ export function DiagramPane({
   // .svg の書き出し用。「どのコードの SVG か」を持ち、いまの図と一致するときだけ使う
   const [zoom, setZoom] = useState(1);
   const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
-  const svgForExport = rendered && rendered.code === code ? rendered.svg : null;
+  const svgForExport = rendered && rendered.code === displayCode ? rendered.svg : null;
 
   return (
     <section aria-label="業務フロー図" className="flex min-h-0 flex-1 flex-col">
@@ -127,13 +135,23 @@ export function DiagramPane({
           {drawable && (
             <div className="mb-1 flex shrink-0 items-center justify-end gap-1">
               <ZoomControls zoom={zoom} onZoom={setZoom} />
-              <FullscreenButton title={model.scope.title} code={code} disabled={!drawable} compact />
+              {hasAssignees && (
+                <label className="mr-2 flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={showAssignees}
+                    onChange={(e) => setShowAssignees(e.target.checked)}
+                  />
+                  担当者を表示
+                </label>
+              )}
+              <FullscreenButton title={model.scope.title} code={displayCode} disabled={!drawable} compact />
             </div>
           )}
           <div className="min-h-0 flex-1">
             {drawable ? (
               <MermaidDiagram
-                code={code}
+                code={displayCode}
                 onSvg={(svg, forCode) => setRendered({ svg, code: forCode })}
                 onPickStep={onEditSteps ? pickStep : undefined}
                 onMoveStep={onEditSteps ? moveStep : undefined}
