@@ -109,8 +109,11 @@ export function SessionList({ initial }: { initial: SessionMeta[] }) {
                 placeholder="例: 月次請求書発行業務"
               />
             </label>
-            <StakeholderEditor rows={stakeholders} onChange={setStakeholders} />
-            <ActorSuggestions title={title} rows={stakeholders} onChange={setStakeholders} />
+            <StakeholderEditor
+              rows={stakeholders}
+              onChange={setStakeholders}
+              footer={<ActorSuggestions title={title} rows={stakeholders} onChange={setStakeholders} />}
+            />
           </div>
 
           {/* 一番押してほしい操作なので、大きな丸い Aqua ボタンにして目立たせる（押せるときは脈動する） */}
