@@ -121,13 +121,20 @@ export async function chatCompletion(
           if (!line.startsWith("data: ")) continue;
           const data = line.slice(6).trim();
           if (data === "" || data === "[DONE]") continue;
+          let json: { choices?: { delta?: { content?: string } }[]; error?: { message?: string } };
           try {
-            const json = JSON.parse(data) as { choices?: { delta?: { content?: string } }[] };
-            const token = json.choices?.[0]?.delta?.content;
-            if (token) content += token;
+            json = JSON.parse(data);
           } catch {
             // 壊れたチャンクは無視する
+            continue;
           }
+          // ストリーム開始後の失敗は HTTP 200 のまま error イベントで届く（例: Compute error.）。
+          // 読み飛ばすと空の本文を返してしまい、呼び出し側で原因不明のパース失敗に化ける。
+          if (json.error) {
+            throw new LlmError(`llama-server がエラーを返しました: ${json.error.message ?? "不明なエラー"}`, "http");
+          }
+          const token = json.choices?.[0]?.delta?.content;
+          if (token) content += token;
         }
       }
     } catch (e) {
