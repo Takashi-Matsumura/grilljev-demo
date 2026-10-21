@@ -51,7 +51,7 @@ export type Step = {
   to: ActorId;
   label: string;
   kind: MessageKind;
-  /** 書類・システムなど。図では付箋になる */
+  /** 受け渡す書類・データ・ファイル。図では付箋（帯）になる。システム・道具は入れない（登場人物かステップ名で表す） */
   artifact?: string;
   /** このステップを実際にやる人（送り手の部署のメンバー）。図では既定で出さない */
   assignee?: string;

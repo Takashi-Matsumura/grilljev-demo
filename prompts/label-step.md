@@ -17,9 +17,14 @@
 - 送り手・受け手の名前は入れない（線がすでに示している）。
 - 名詞だけで終わらせない（「与信照会」ではなく「与信照会をかける」）。
 
-# artifact（書類・システム名）
+# artifact（受け渡すもの）
 
-発言に具体的な書類・データ・システム・画面の名前があれば、その名前だけ。無ければ null。
+この矢印に乗って**受け渡される**書類・データ・ファイルの名前（請求書 / 請求データ / Excelのファイル）が
+発言にあれば、その名前だけ。無ければ null。
+
+- システム・ツール・画面（会計システム / 基幹システム / Excel そのもの）は artifact にしない。
+  システムは図の登場人物（列）か、ステップ名の中で表す（「会計システムで確認する」）。
+- 送り手・受け手の名前は artifact にしない。
 
 # branch（場合分け）
 
@@ -50,7 +55,10 @@
 出力: `{"label":"与信照会をかける","artifact":null,"branch":null}`
 
 入力: `{"utterance":"経理が基幹システムに請求データを登録します。","from":"経理","to":"基幹システム","message_kind":"sync","branch_hint":false,"previous_branch":null}`
-出力: `{"label":"請求データを登録する","artifact":"基幹システム","branch":null}`
+出力: `{"label":"請求データを登録する","artifact":"請求データ","branch":null}`
+
+入力: `{"utterance":"経理部は、会計システムで入金を確認してから、顧客に連絡します。","from":"経理部","to":"顧客","message_kind":"sync","branch_hint":false,"previous_branch":null}`
+出力: `{"label":"入金を確認して連絡する","artifact":null,"branch":null}`
 
 入力: `{"utterance":"与信がOKなら、営業が顧客に見積を提示します。","from":"営業","to":"顧客","message_kind":"sync","branch_hint":true,"previous_branch":null}`
 出力: `{"label":"見積を提示する","artifact":null,"branch":{"condition":"与信OK","relation":"new","kind":"alt"}}`

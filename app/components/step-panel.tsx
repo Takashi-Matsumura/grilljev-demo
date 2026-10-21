@@ -34,6 +34,7 @@ export function StepPanel({
   const [draft, setDraft] = useState<{ for: string; label: string } | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [assigneeDraft, setAssigneeDraft] = useState<{ for: string; text: string } | null>(null);
+  const [artifactDraft, setArtifactDraft] = useState<{ for: string; text: string } | null>(null);
   if (!step) return null;
 
   const label = draft?.for === `${step.id}:${step.label}` ? draft.label : step.label;
@@ -62,6 +63,14 @@ export function StepPanel({
       ops.push({ op: "actor.update", id: sender.id, patch: { members: [...members, next] } });
     }
     onCommit(ops);
+  };
+  // 渡すもの（図の帯）。空にすると帯を外す。手で書いたものは、登場人物の名前でもそのまま使う
+  const artifactKey = `${step.id}:${step.artifact ?? ""}`;
+  const artifact = artifactDraft?.for === artifactKey ? artifactDraft.text : (step.artifact ?? "");
+  const commitArtifact = () => {
+    setArtifactDraft(null);
+    const next = artifact.replace(/\s+/g, " ").trim();
+    if (next !== (step.artifact ?? "")) update({ artifact: next === "" ? undefined : next });
   };
   /** 送り手を変えたら、新しい送り手のメンバーでない担当者は外す（別の部署の人が担当にならないように） */
   const changeSender = (id: string) => {
@@ -133,6 +142,20 @@ export function StepPanel({
           </select>
         </label>
       ))}
+
+      <label className="flex flex-col gap-1">
+        渡すもの（図の帯）
+        <input
+          className={field}
+          value={artifact}
+          placeholder="なし（書類・データ・ファイル）"
+          onChange={(e) => setArtifactDraft({ for: artifactKey, text: e.target.value })}
+          onBlur={commitArtifact}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) commitArtifact();
+          }}
+        />
+      </label>
 
       {canAssign && (
         <label className="flex flex-col gap-1">
