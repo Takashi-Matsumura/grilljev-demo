@@ -153,7 +153,7 @@ export function buildSummaryMarkdown(
   } else {
     lines.push(
       ...table(
-        ["#", "送り手", "担当", "受け手", "内容", "種別", "条件", "書類・道具", "確度"],
+        ["#", "送り手", "担当", "受け手", "内容", "種別", "条件", "渡すもの", "確度"],
         steps.map((s, i) => {
           const b = branchOf(s.branchId);
           const cond = b ? `${b.kind} ${b.condition}` : "";

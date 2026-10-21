@@ -18,6 +18,15 @@ import {
 /** 表記ゆれの比較用。空白と大文字小文字を無視する。 */
 const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
 
+/**
+ * 帯（受け渡すもの）にしてよい名前か。登場人物（会計システム・経理部など）の名前・別名は帯にしない
+ * （gemma が「会計システム」を帯に付けることがあった。システムは列かステップ名で表す）。
+ */
+export function isArtifactName(model: FlowModel, name: string): boolean {
+  const n = norm(name);
+  return !model.actors.some((a) => [a.name, ...a.aliases].some((x) => norm(x) === n));
+}
+
 function sortedVisible(model: FlowModel): Step[] {
   return model.steps
     .filter((s) => s.status !== "retracted")
@@ -43,7 +52,7 @@ export function buildLabelOps(
   if (!step) return []; // 取り消された・消えた
   const ops: ModelOp[] = [];
   const patch: Partial<Step> = { label: res.label };
-  if (res.artifact && !step.artifact) patch.artifact = res.artifact;
+  if (res.artifact && !step.artifact && isArtifactName(model, res.artifact)) patch.artifact = res.artifact;
 
   if (res.branch && step.branchId === null) {
     const previous = previousBranchOf(model, stepId);
@@ -245,7 +254,7 @@ export function buildEditOps(
       notes.push(`${side === "from" ? "行う側" : "相手"}を「${name}」に`);
     }
   }
-  if (update.artifact !== undefined) {
+  if (update.artifact !== undefined && (update.artifact === null || isArtifactName(model, update.artifact))) {
     patch.artifact = update.artifact ?? undefined;
     notes.push(update.artifact ? `渡すものを「${update.artifact}」に` : "渡すものを無しに");
   }
@@ -281,7 +290,7 @@ export function buildEditOps(
           to,
           label: x.label,
           kind: from === to ? "self" : "sync",
-          ...(x.artifact ? { artifact: x.artifact } : {}),
+          ...(x.artifact && isArtifactName(model, x.artifact) ? { artifact: x.artifact } : {}),
           branchId: step.branchId,
           order: lo + ((hi - lo) * (i + 1)) / (adds.length + 1),
           confidence: 1,

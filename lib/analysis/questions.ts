@@ -181,10 +181,10 @@ export function buildUtteranceQuestions(
     },
     artifact_present: {
       type: "noul",
-      instructions: "この発話に、具体的な書類・データ・システム・画面の名前が出てくるか",
+      instructions: "この発話に、受け渡される具体的な書類・データ・ファイルの名前が出てくるか",
       criteria: {
-        true: "「請求書」「基幹システム」「Excel の台帳」など、具体的な成果物や道具の名前がある",
-        false: "そうした具体名は出てこない",
+        true: "「請求書」「請求データ」「Excel の台帳」など、誰かから誰かへ渡る成果物の名前がある",
+        false: "そうした具体名は出てこない（システムや道具の名前だけの場合も含む）",
       },
     },
 

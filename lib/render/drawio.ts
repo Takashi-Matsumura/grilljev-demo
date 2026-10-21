@@ -141,7 +141,7 @@ export function toDrawio(model: FlowModel, at: string = new Date().toISOString()
     }
   }
 
-  // ── 付箋（書類・システム名）──
+  // ── 付箋（受け渡す書類・データ）──
   for (const note of lay.notes) {
     text(note.text, note.x, note.y, note.w, note.h,
       "shape=note;whiteSpace=wrap;html=1;size=12;fillColor=#FFF9C4;align=left;verticalAlign=top;fontSize=11;");
