@@ -1,0 +1,181 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import type { DiagramMeta } from "@/lib/store/diagram-types";
+
+const fmt = (iso: string) => new Date(iso).toLocaleString("ja-JP", { hour12: false });
+
+/** 新しい図の作成フォームと、保存済みの図の一覧（削除は 2 段階）。 */
+export function DiagramList({ initial }: { initial: DiagramMeta[] }) {
+  const router = useRouter();
+  const [diagrams, setDiagrams] = useState(initial);
+  const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [renaming, setRenaming] = useState(false);
+
+  async function create(name: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/diagrams", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { slug?: string; error?: string };
+      if (!res.ok || !data.slug) throw new Error(data.error ?? "作成に失敗しました");
+      router.push(`/editor/${data.slug}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "作成に失敗しました");
+      setBusy(false);
+    }
+  }
+
+  async function remove(slug: string) {
+    setConfirming(null);
+    const res = await fetch(`/api/diagrams/${slug}`, { method: "DELETE" });
+    if (res.ok || res.status === 404) setDiagrams((d) => d.filter((x) => x.slug !== slug));
+    else setError("削除に失敗しました");
+  }
+
+  function startEdit(slug: string, name: string) {
+    setConfirming(null);
+    setError(null);
+    setEditingSlug(slug);
+    setEditName(name);
+  }
+
+  async function saveRename(slug: string) {
+    setRenaming(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/diagrams/${slug}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: editName }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { name?: string; error?: string };
+      if (!res.ok || !data.name) throw new Error(data.error ?? "名前の変更に失敗しました");
+      const name = data.name;
+      setDiagrams((prev) => prev.map((x) => (x.slug === slug ? { ...x, name } : x)));
+      setEditingSlug(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "名前の変更に失敗しました");
+    } finally {
+      setRenaming(false);
+    }
+  }
+
+  const input =
+    "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
+  const btn =
+    "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10";
+
+  return (
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-4">
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium">新しい図を描く</h2>
+        <form
+          className="flex flex-col gap-2 sm:flex-row sm:items-end"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void create(title);
+          }}
+        >
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+            業務名
+            <input
+              className={input}
+              value={title}
+              maxLength={60}
+              required
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="例: 月次請求書発行業務"
+            />
+          </label>
+          <button type="submit" className={btn} disabled={busy || title.trim() === ""}>
+            作成して開く
+          </button>
+        </form>
+        {error && (
+          <p role="alert" className="text-sm text-amber-600 dark:text-amber-400">
+            {error}
+          </p>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium">保存済みの図（{diagrams.length}）</h2>
+        {diagrams.length === 0 ? (
+          <p className="text-sm text-zinc-500">まだありません。</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {diagrams.map((d) => (
+              <li key={d.slug} className="flex items-center gap-3 rounded-md border border-black/10 p-3 dark:border-white/15">
+                {editingSlug === d.slug ? (
+                  <div className="min-w-0 flex-1">
+                    <input
+                      autoFocus
+                      className={input}
+                      value={editName}
+                      maxLength={60}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) void saveRename(d.slug);
+                        if (e.key === "Escape") setEditingSlug(null);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <a href={`/editor/${d.slug}`} className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{d.name}</span>
+                    <span className="block text-xs text-zinc-500">
+                      更新 {fmt(d.updatedAt)} ／ 登場人物 {d.actors}・ステップ {d.steps}
+                    </span>
+                  </a>
+                )}
+                {editingSlug === d.slug ? (
+                  <span className="flex shrink-0 gap-2">
+                    <button
+                      className={btn}
+                      disabled={renaming || editName.trim() === ""}
+                      onClick={() => void saveRename(d.slug)}
+                    >
+                      保存
+                    </button>
+                    <button className={btn} disabled={renaming} onClick={() => setEditingSlug(null)}>
+                      やめる
+                    </button>
+                  </span>
+                ) : confirming === d.slug ? (
+                  <span className="flex shrink-0 gap-2">
+                    <button className={btn} onClick={() => void remove(d.slug)}>
+                      削除する
+                    </button>
+                    <button className={btn} onClick={() => setConfirming(null)}>
+                      やめる
+                    </button>
+                  </span>
+                ) : (
+                  <span className="flex shrink-0 gap-2">
+                    <button className={btn} onClick={() => startEdit(d.slug, d.name)}>
+                      名前を変更
+                    </button>
+                    <button className={btn} onClick={() => setConfirming(d.slug)}>
+                      削除
+                    </button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

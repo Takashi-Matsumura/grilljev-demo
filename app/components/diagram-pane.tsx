@@ -210,7 +210,7 @@ export function DiagramPane({
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
 /** 図の拡大縮小。既定は「幅に合わせる」（100%）。列が狭いときは拡大して、横にスクロールして見る */
-function ZoomControls({ zoom, onZoom }: { zoom: number; onZoom: (z: number) => void }) {
+export function ZoomControls({ zoom, onZoom }: { zoom: number; onZoom: (z: number) => void }) {
   const i = ZOOM_STEPS.indexOf(zoom);
   const btn =
     "flex h-8 min-w-8 items-center justify-center rounded-md border border-black/15 bg-background px-1.5 text-sm hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10";
