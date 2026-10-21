@@ -445,6 +445,8 @@ export function Studio({
             onEditActors={archived ? undefined : commitManual}
             onEditSteps={archived ? undefined : commitManual}
             facilitator={facilitatorOverlay}
+            focusStepId={archived ? null : pipeline.focusStepId}
+            onFocusStep={archived ? undefined : pipeline.setFocus}
             devMode={devMode}
           />
         </div>

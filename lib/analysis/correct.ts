@@ -9,11 +9,26 @@ import { ACTOR_APPLY, CORRECTION_MIN, CORRECTION_STRONG } from "./thresholds";
  * 発話ごとの Jev のリクエストに、訂正用の質問を相乗りさせる（並列評価なので待ち時間はほぼ増えない）。
  * 対象のステップは、図に描かれている番号（autonumber）を付けた選択肢から選ばせる。
  * 名前の言い直しは、新しい名前を発言から取り出すのに gemma が要るので、後続処理（followUps）に回す。
+ *
+ * 上の決まった直し方に当てはまらないもの（渡すものを変える・前後に手順を足す・複数の直しを一度に言う）は
+ * 「手直し」（edit）として、発言とそのステップを gemma に渡し、直す内容を決めさせる（後続処理）。
+ *
+ * 「いま直しているステップ」（focus）: 訂正で指したステップを覚えておき、番号を言わない続きの発言も
+ * そのステップへの訂正として扱う。「4番について」で指すだけもでき、「OK」「以上です」で終える。
+ * whisper が 1 つの話を途中で区切っても、番号を言い直さずに続けられる。
  */
 
 const NONE = "__none__";
 
-export type CorrectionAction = "delete" | "change_from" | "change_to" | "swap" | "rename";
+export type CorrectionAction =
+  | "delete"
+  | "change_from"
+  | "change_to"
+  | "swap"
+  | "rename"
+  | "edit"
+  | "focus"
+  | "release";
 
 const circled = (n: number) => (n >= 1 && n <= 20 ? String.fromCodePoint(0x2460 + n - 1) : `${n}番`);
 
@@ -28,12 +43,26 @@ function stepOptions(model: FlowModel): Record<string, string> {
   );
 }
 
+/** いま直しているステップ。消えた・見えないものは無いものとして扱う */
+export function focusedStep(model: FlowModel, focusId: string | null | undefined): Step | null {
+  if (!focusId) return null;
+  return visibleSteps(model).find((s) => s.id === focusId) ?? null;
+}
+
 /** 訂正用の質問。ステップが 1 つも無ければ、直す対象が無いので聞かない */
-export function buildCorrectionQuestions(model: FlowModel): Record<string, JevQuestion> {
+export function buildCorrectionQuestions(
+  model: FlowModel,
+  focusId?: string | null,
+): Record<string, JevQuestion> {
   const steps = stepOptions(model);
   if (Object.keys(steps).length === 0) return {};
+  const focus = focusedStep(model, focusId);
+  const focusNo = focus ? visibleSteps(model).indexOf(focus) + 1 : 0;
   const numbering =
-    "図のステップには上から 1, 2, 3… と番号が振ってある。発話の「1番」「一番」「最初の」「いちばん上の」は 1 番、「2番」「二番目」は 2 番を指す";
+    "図のステップには上から 1, 2, 3… と番号が振ってある。発話の「1番」「一番」「最初の」「いちばん上の」は 1 番、「2番」「二番目」は 2 番を指す" +
+    (focus
+      ? `。いまは ${focusNo} 番「${focus.label}」を直している最中で、番号を言わずに「そこ」「それ」「この手順」と言ったり、番号なしで直し方や前後に入る手順を話したりしたときは、${focusNo} 番を指す`
+      : "");
 
   return {
     correction_action: {
@@ -45,6 +74,14 @@ export function buildCorrectionQuestions(model: FlowModel): Record<string, JevQu
         change_to: "特定のステップの相手（受け手）が違うと言い、正しい相手を述べている（「2番の送り先は経理です」）",
         swap: "2 つのステップの順番を入れ替える・前後を直すよう求めている（「2番と3番が逆です」）",
         rename: "特定のステップの名前（矢印に書かれた文言）を、新しい言い方に直すよう求めている（「1番の名前は請求書の受付です」「2番はPDFを転送するに直して」）",
+        edit: "特定のステップを直すよう求めているが、上のどれにも当てはまらない、または複数の直しを一度に言っている（渡す書類・ファイルを変える、そのステップの前や後に別の手順が入ると言う、やり方を言い直す など。「4番で渡すのは請求書じゃなくてExcelのファイルです」「4番の前に、総務部がExcelに作り直す作業が入ります」）",
+        focus: "特定のステップを指して、これから直すと言っているが、まだ直し方は言っていない（「4番について」「4番を直したいです」「4番のところですが」）",
+        ...(focus
+          ? {
+              release:
+                "いま直しているステップの話を終えると言っている（「OK」「以上です」「それで大丈夫です」「そこはそれでいいです」）",
+            }
+          : {}),
         [NONE]: "図の既存のステップを直す発言ではない（新しい手順の説明、既存の手順への補足、質問、雑談など）",
       },
     },
@@ -78,8 +115,10 @@ const choice = (a: Answers, key: string): JevChoiceAnswer | null => {
 
 export type Correction = {
   ops: ModelOp[];
-  /** 名前の言い直し。新しい名前は gemma が発言から取り出す */
-  followUps?: { kind: "rename"; stepId: string }[];
+  /** 名前の言い直し・手直し。新しい名前や直す内容は gemma が発言から決める */
+  followUps?: { kind: "rename" | "edit"; stepId: string }[];
+  /** いま直しているステップを、この id に切り替える。null で終える。undefined なら変えない */
+  focus?: string | null;
   /** 画面に出す 1 行。直せなかったときは、その理由とマウスでの直し方 */
   note: string;
 };
@@ -108,6 +147,18 @@ export function numbersIn(utterance: string): number[] {
 }
 
 /**
+ * 手直しを終える発言か（「OK」「以上です」）。短い相づちは雑談に見えやすい
+ * （実測: 「OK、以上です」が雑談 0.58 で落ちた）ので、雑談の判定より先に見る。
+ */
+export function interpretRelease(answers: Answers, model: FlowModel, focusId?: string | null): Correction | null {
+  const focus = focusedStep(model, focusId);
+  const action = choice(answers, "correction_action");
+  if (!focus || action?.choice !== "release" || action.confidence < CORRECTION_MIN) return null;
+  const no = visibleSteps(model).indexOf(focus) + 1;
+  return { ops: [], focus: null, note: `${circled(no)}「${focus.label}」の手直しを終えました` };
+}
+
+/**
  * 訂正の回答 → 図の変更。訂正の発言でなければ null（通常の解釈に進む）。
  *
  * 訂正と見なすのは、intent が「訂正」のとき、または訂正の質問が強い確信で「直す」と答えたとき
@@ -119,33 +170,67 @@ export function interpretCorrection(
   model: FlowModel,
   intent: string,
   utterance: string,
+  focusId?: string | null,
 ): Correction | null {
+  const steps = visibleSteps(model);
+  const numberOf = (s: Step) => steps.indexOf(s) + 1;
+  const labelOf = (s: Step) => `${circled(numberOf(s))}「${s.label}」`;
+  const focus = focusedStep(model, focusId);
+
   const action = choice(answers, "correction_action");
   const acting =
     action !== null &&
     action.choice !== NONE &&
     (action.confidence >= CORRECTION_STRONG || (intent === "correct_previous" && action.confidence >= CORRECTION_MIN));
   if (!acting) {
-    return intent === "correct_previous"
-      ? { ops: [], note: `訂正の発言ですが、どう直すかを特定できませんでした${UNRESOLVED}` }
-      : null;
+    if (intent !== "correct_previous") return null;
+    // 直しているステップがあれば、直し方が決まった種類に当てはまらなくても gemma に任せる
+    // （whisper が区切った話の切れ端でも、前の発言とつなげて読ませる）
+    return focus
+      ? {
+          ops: [],
+          followUps: [{ kind: "edit", stepId: focus.id }],
+          focus: focus.id,
+          note: `訂正: ${labelOf(focus)}を、発言に合わせて直します`,
+        }
+      : { ops: [], note: `訂正の発言ですが、どう直すかを特定できませんでした${UNRESOLVED}` };
   }
 
-  const steps = visibleSteps(model);
-  const numberOf = (s: Step) => steps.indexOf(s) + 1;
+  const kind = action.choice as CorrectionAction;
+  if (kind === "release") {
+    return focus
+      ? { ops: [], focus: null, note: `${labelOf(focus)}の手直しを終えました` }
+      : { ops: [], note: "直しているステップはありません" };
+  }
+
   const pick = (key: string): Step | null => {
     const c = choice(answers, key);
     if (!c || c.choice === NONE || c.confidence < CORRECTION_MIN) return null;
     return steps.find((s) => s.id === c.choice) ?? null;
   };
-  const target = pick("correction_target");
+  // 番号を言わない続きの発言は、いま直しているステップを指す
+  const target = pick("correction_target") ?? focus;
   if (!target) return { ops: [], note: `訂正の発言ですが、どのステップかを特定できませんでした${UNRESOLVED}` };
-  const label = `${circled(numberOf(target))}「${target.label}」`;
-  const kind = action.choice as CorrectionAction;
+  const label = labelOf(target);
+  // 直したステップを「いま直しているステップ」にする（続けて番号なしで直せる）。消したら終える
+  const done = (c: Correction): Correction => ({ ...c, focus: kind === "delete" ? null : target.id });
 
   switch (kind) {
+    case "focus":
+      return done({
+        ops: [],
+        note: `${label}を直します。番号を言わずに直し方を話してください（終わったら「OK」）`,
+      });
+
+    case "edit":
+      return done({
+        ops: [],
+        followUps: [{ kind: "edit", stepId: target.id }],
+        note: `訂正: ${label}を、発言に合わせて直します`,
+      });
+
     case "delete":
-      return { ops: [{ op: "step.retract", id: target.id }], note: `訂正: ${label}を消しました` };
+      return done({ ops: [{ op: "step.retract", id: target.id }], note: `訂正: ${label}を消しました` });
 
     case "change_from":
     case "change_to": {
@@ -157,20 +242,20 @@ export function interpretCorrection(
       const side = kind === "change_from" ? "from" : "to";
       const role = side === "from" ? "行う側" : "相手";
       if (!actor || actor.id === target[side]) {
-        return { ops: [], note: `訂正の発言ですが、${label}の正しい${role}を特定できませんでした${UNRESOLVED}` };
+        return done({ ops: [], note: `訂正の発言ですが、${label}の正しい${role}を特定できませんでした${UNRESOLVED}` });
       }
-      return {
+      return done({
         ops: [{ op: "step.update", id: target.id, patch: { [side]: actor.id } }],
         note: `訂正: ${label}の${role}を「${actor.name}」に直しました`,
-      };
+      });
     }
 
     case "rename":
-      return {
+      return done({
         ops: [],
         followUps: [{ kind: "rename", stepId: target.id }],
         note: `訂正: ${label}の名前を、発言の言い方に直します`,
-      };
+      });
 
     case "swap": {
       // Jev の答えが対象と同じ・確信不足なら、発話に出てきたもう一方の番号で補う
@@ -180,15 +265,15 @@ export function interpretCorrection(
         .find((s) => s !== undefined && s.id !== target.id);
       const other = picked && picked.id !== target.id ? picked : (spoken ?? null);
       if (!other || other.id === target.id) {
-        return { ops: [], note: `訂正の発言ですが、${label}と入れ替える相手を特定できませんでした${UNRESOLVED}` };
+        return done({ ops: [], note: `訂正の発言ですが、${label}と入れ替える相手を特定できませんでした${UNRESOLVED}` });
       }
-      return {
+      return done({
         ops: [
           { op: "step.update", id: target.id, patch: { order: other.order } },
           { op: "step.update", id: other.id, patch: { order: target.order } },
         ],
         note: `訂正: ${label}と${circled(numberOf(other))}「${other.label}」の順番を入れ替えました`,
-      };
+      });
     }
 
     default:

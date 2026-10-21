@@ -1,4 +1,4 @@
-import type { ExtractedActor, StepLabelResult } from "@/lib/analysis/label";
+import type { ExtractedActor, StepEditResult, StepLabelResult } from "@/lib/analysis/label";
 import type { Actor, Branch, FlowModel, ModelOp, Step } from "@/lib/model/types";
 import { fallbackLabel, nextId, type FollowUp } from "./interpret";
 import {
@@ -147,4 +147,101 @@ export function buildActorStepOps(
     },
   });
   return { ops, stepId, created };
+}
+
+export type EditPlan = {
+  ops: ModelOp[];
+  /** 名前が新しくなった・新しく足したステップ。次の Jev リクエストで発言に忠実かを検証する */
+  labeled: { stepId: string; label: string }[];
+  /** 画面に出す 1 行 */
+  note: string;
+};
+
+/**
+ * 手直し（gemma の結果）→ ModelOp。名前は gemma が返した登場人物名を、最新モデルの id に引き直す。
+ * 前後に足すステップは、対象と隣のステップの order の間に入れる（order は実数）。分岐は対象と同じにする。
+ * 対象が消えていれば null。
+ */
+export function buildEditOps(
+  model: FlowModel,
+  stepId: string,
+  res: Pick<StepEditResult, "update" | "inserts">,
+  utteranceId: string,
+): EditPlan | null {
+  const steps = sortedVisible(model);
+  const index = steps.findIndex((s) => s.id === stepId);
+  const step = steps[index];
+  if (!step) return null;
+  const idOf = (name: string) => model.actors.find((a) => a.name === name)?.id;
+
+  const ops: ModelOp[] = [];
+  const labeled: EditPlan["labeled"] = [];
+  const notes: string[] = [];
+
+  const patch: Partial<Step> = {};
+  const { update } = res;
+  if (update.label) {
+    patch.label = update.label;
+    labeled.push({ stepId, label: update.label });
+    notes.push(`名前を「${update.label}」に`);
+  }
+  for (const side of ["from", "to"] as const) {
+    const name = update[side];
+    const id = name ? idOf(name) : undefined;
+    if (name && id && id !== step[side]) {
+      patch[side] = id;
+      notes.push(`${side === "from" ? "行う側" : "相手"}を「${name}」に`);
+    }
+  }
+  if (update.artifact !== undefined) {
+    patch.artifact = update.artifact ?? undefined;
+    notes.push(update.artifact ? `渡すものを「${update.artifact}」に` : "渡すものを無しに");
+  }
+  if (patch.from !== undefined || patch.to !== undefined) {
+    const from = patch.from ?? step.from;
+    const to = patch.to ?? step.to;
+    if (from === to) patch.kind = "self";
+    else if (step.kind === "self") patch.kind = "sync";
+  }
+  // 人が声で直したものなので、仮のステップも確定にする
+  if (Object.keys(patch).length > 0) {
+    ops.push({ op: "step.update", id: stepId, patch: { ...patch, status: "confirmed", confidence: 1 } });
+  }
+
+  const ids = model.steps.map((s) => s.id);
+  for (const position of ["before", "after"] as const) {
+    const adds = res.inserts.filter((x) => x.position === position);
+    if (adds.length === 0) continue;
+    const neighbor = steps[position === "before" ? index - 1 : index + 1];
+    const lo = position === "before" ? (neighbor?.order ?? step.order - 1) : step.order;
+    const hi = position === "before" ? step.order : (neighbor?.order ?? step.order + 1);
+    adds.forEach((x, i) => {
+      const from = idOf(x.from);
+      const to = idOf(x.to);
+      if (!from || !to) return;
+      const id = nextId("S", ids);
+      ids.push(id);
+      ops.push({
+        op: "step.add",
+        step: {
+          id,
+          from,
+          to,
+          label: x.label,
+          kind: from === to ? "self" : "sync",
+          ...(x.artifact ? { artifact: x.artifact } : {}),
+          branchId: step.branchId,
+          order: lo + ((hi - lo) * (i + 1)) / (adds.length + 1),
+          confidence: 1,
+          status: "confirmed",
+          flags: {},
+          sourceUtteranceIds: [utteranceId],
+        },
+      });
+      labeled.push({ stepId: id, label: x.label });
+      notes.push(`${position === "before" ? "前" : "後"}に「${x.label}」を追加`);
+    });
+  }
+
+  return { ops, labeled, note: notes.join("、") };
 }

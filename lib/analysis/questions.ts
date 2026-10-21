@@ -87,6 +87,8 @@ export function buildUtteranceState(
 export function buildUtteranceQuestions(
   model: FlowModel,
   checks: PendingCheck[] = [],
+  /** いま直しているステップ。訂正の質問で、番号を言わない発言の対象にする */
+  focusStepId: string | null = null,
 ): Record<string, JevQuestion> {
   const title = model.scope.title || "（未設定）";
 
@@ -245,7 +247,7 @@ export function buildUtteranceQuestions(
   };
 
   // 音声での訂正（「1 番を消して」など）。図の番号つきでステップを選ばせる
-  Object.assign(questions, buildCorrectionQuestions(model));
+  Object.assign(questions, buildCorrectionQuestions(model, focusStepId));
 
   // 既存のステップが無ければ「どれと同じか」は聞けない（選択肢が「該当なし」1 つになる）
   const steps = activeSteps(model);
