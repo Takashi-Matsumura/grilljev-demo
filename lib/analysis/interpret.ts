@@ -40,6 +40,7 @@ import {
   qFaithful,
   qReadable,
 } from "./questions";
+import { assigneeForNewStep, foldByAnswer, interpretAssignee } from "./assignee";
 import { interpretCorrection, interpretRelease } from "./correct";
 import { checkKey, type CheckResult, type PendingCheck } from "./verify";
 
@@ -457,6 +458,7 @@ function interpretUtterance(
       const id = nextId("S", stepIds);
       const order = model.steps.reduce((m, s) => Math.max(m, s.order), 0) + 1;
       targetStepId = id;
+      const assignee = assigneeForNewStep(model, fromId, ctx.utterance);
       ops.push({
         op: "step.add",
         step: {
@@ -471,9 +473,11 @@ function interpretUtterance(
           status: provisional ? "provisional" : "confirmed",
           flags,
           sourceUtteranceIds: [ctx.utteranceId],
+          ...(assignee ? { assignee } : {}),
         },
       });
       followUps.push({ kind: "label", stepId: id, branchHint, artifactHint });
+      if (assignee) notes.push(`担当者は「${assignee}」`);
       verdict = provisional ? "confirm" : "apply";
       notes.push(
         provisional
@@ -546,6 +550,16 @@ function interpretUtterance(
     }
   }
 
+  // 既存のステップの担当者を述べた発話（「6番は田中さんがやっています」）。新しく足したステップ・
+  // 新しい登場人物として gemma に回したもの（その中で担当者を扱う）は除く
+  const addsStep = (targetStepId !== null && !dupId) || followUps.some((f) => f.kind === "actors");
+  const assigned = addsStep ? null : interpretAssignee(answers, model, ctx.utterance);
+  if (assigned) {
+    ops.push(...assigned.ops);
+    if (verdict === "unchanged" || verdict === "confirm") verdict = "apply";
+    notes.push(assigned.note);
+  }
+
   // どの意図でも、未解決の論点への答えなら解決済みにする
   const ans = choice(answers, "answers_issue");
   if (
@@ -557,6 +571,14 @@ function interpretUtterance(
     ops.push({ op: "issue.resolve", id: ans.choice, answer: ctx.utterance });
     // 目的の問い（存在意義）への答えなら、対象業務の目的としても記録する
     const answered = model.issues.find((x) => x.id === ans.choice);
+    // 所属を尋ねた問いへの答え（「経理部の人です」）なら、その人の列を部署にたたむ
+    const fold = answered?.foldActorId ? foldByAnswer(model, answered.foldActorId, ctx.utterance) : null;
+    if (fold) {
+      ops.push(fold);
+      const who = model.actors.find((a) => a.id === answered?.foldActorId)?.name;
+      const into = fold.op === "actor.fold" ? model.actors.find((a) => a.id === fold.into)?.name : "";
+      notes.push(`「${who}」を${into}のメンバーにしました`);
+    }
     if (answered?.kind === "purpose" && model.scope.purpose === "" && !ops.some((o) => o.op === "scope.set")) {
       const purpose = ctx.utterance.replace(/\s+/g, " ").replace(/[。．.]+$/, "").trim();
       ops.push({ op: "scope.set", patch: { purpose } });

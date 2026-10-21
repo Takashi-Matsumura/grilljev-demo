@@ -16,6 +16,9 @@
 - `need` に含まれない側は必ず null。
 - 発言から名前が特定できなければ null。推測で作らない。
 - `kind`: `"person"`（個人名）/ `"role"`（部署・役職）/ `"system"`（システム・ツール）/ `"external"`（顧客・取引先などの社外）
+- `kind` が `"person"` のときだけ、`affiliation` にその人の所属を書く。**発言に所属がはっきり出ていて**
+  （「経理部の田中さん」「経理の田中さん」）、それが `known_actors` にあるときだけ、その名前をそのまま書く。
+  出ていなければ null。推測しない。
 
 # 出力形式
 
@@ -33,3 +36,9 @@
 
 入力: `{"utterance":"経理部は、基幹システムに請求データを登録します。","known_actors":["営業"],"need":["from","to"]}`
 出力: `{"from":{"name":"経理部","kind":"role"},"to":{"name":"基幹システム","kind":"system"}}`
+
+入力: `{"utterance":"経理の田中さんが会計システムに入力します。","known_actors":["経理部","会計システム"],"need":["from"]}`
+出力: `{"from":{"name":"田中","kind":"person","affiliation":"経理部"},"to":null}`
+
+入力: `{"utterance":"そのあと山本さんが確認します。","known_actors":["経理部","上長"],"need":["from"]}`
+出力: `{"from":{"name":"山本","kind":"person","affiliation":null},"to":null}`

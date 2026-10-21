@@ -1,6 +1,7 @@
 import type { JevQuestion } from "@/lib/jev";
 import type { FlowModel } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
+import { buildAssigneeQuestions } from "./assignee";
 import { buildCorrectionQuestions } from "./correct";
 import { MAX_CHECKS_PER_REQUEST, type PendingCheck } from "./verify";
 
@@ -92,10 +93,13 @@ export function buildUtteranceQuestions(
 ): Record<string, JevQuestion> {
   const title = model.scope.title || "（未設定）";
 
+  // 部署のメンバー（担当者）も載せる。「田中さんが入力します」で、田中を新しい人ではなく経理部として選ばせる
   const actorOptions: Record<string, string> = Object.fromEntries(
     model.actors.map((a) => [
       a.id,
-      `${a.name}（${a.aliases.length > 0 ? a.aliases.join("・") : a.kind}）`,
+      `${a.name}（${a.aliases.length > 0 ? a.aliases.join("・") : a.kind}${
+        a.members?.length ? `。メンバー: ${a.members.join("・")}` : ""
+      }）`,
     ]),
   );
   // 「新しい」と「分からない」を取り違えやすい（実測: 「顧客から営業に…」で、名前が出ているのに
@@ -248,6 +252,8 @@ export function buildUtteranceQuestions(
 
   // 音声での訂正（「1 番を消して」など）。図の番号つきでステップを選ばせる
   Object.assign(questions, buildCorrectionQuestions(model, focusStepId));
+  // 既存のステップの担当者（「6番は田中さんがやっています」）
+  Object.assign(questions, buildAssigneeQuestions(model));
 
   // 既存のステップが無ければ「どれと同じか」は聞けない（選択肢が「該当なし」1 つになる）
   const steps = activeSteps(model);
