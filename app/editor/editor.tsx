@@ -14,6 +14,7 @@ import { moveStepOps } from "@/lib/model/move";
 import { applyOps } from "@/lib/model/reducer";
 import type { FlowModel, ModelOp } from "@/lib/model/types";
 import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
+import { BranchSection } from "./branch-section";
 import { StepAddPanel } from "./step-add-panel";
 import { useDiagramAutosave } from "./use-diagram-autosave";
 
@@ -229,7 +230,9 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
         </div>
 
         {panel?.mode === "edit" && editingIndex >= 0 && (
-          <StepPanel model={model} stepId={panel.stepId} onClose={() => setPanel(null)} onCommit={commit} />
+          <StepPanel model={model} stepId={panel.stepId} onClose={() => setPanel(null)} onCommit={commit}>
+            <BranchSection model={model} stepId={panel.stepId} onCommit={commit} />
+          </StepPanel>
         )}
         {panel?.mode === "add" && drawable && (
           <StepAddPanel

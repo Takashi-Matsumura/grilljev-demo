@@ -193,6 +193,30 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
       return { ...m, branches: [...m.branches, op.branch] };
     }
 
+    case "branch.update": {
+      if (!m.branches.some((b) => b.id === op.id)) return null;
+      const condition = op.patch.condition?.replace(/\s+/g, " ").trim();
+      if (condition === "") return null;
+      return {
+        ...m,
+        branches: m.branches.map((b) =>
+          b.id === op.id
+            ? { ...b, ...(condition !== undefined ? { condition } : {}), ...(op.patch.kind ? { kind: op.patch.kind } : {}) }
+            : b,
+        ),
+      };
+    }
+
+    case "branch.remove": {
+      if (!m.branches.some((b) => b.id === op.id)) return null;
+      return {
+        ...m,
+        branches: m.branches.filter((b) => b.id !== op.id),
+        // 取り消したステップも外す（元に戻したときに、無い枠を指さないように）
+        steps: m.steps.map((s) => (s.branchId === op.id ? { ...s, branchId: null } : s)),
+      };
+    }
+
     case "issue.add": {
       if (m.issues.some((i) => i.id === op.issue.id)) return null;
       return { ...m, issues: [...m.issues, { ...op.issue, raisedAtRev: rev }] };
