@@ -3,7 +3,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 
 /**
- * 左カラム（文字起こし）の幅（px）。`null` は「既定（左右等分）」を意味する。
+ * 左カラム（文字起こし）の幅（px）。`null` は「既定（左 3 : 右 7）」を意味する。
  *
  * `useDevMode`（use-dev-mode.ts）と同じ作法: `localStorage` に覚えさせ、
  * `useSyncExternalStore` でサーバーの描画を必ず既定値（null）にし、

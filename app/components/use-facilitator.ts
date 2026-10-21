@@ -29,8 +29,8 @@ type Options = {
  * ファシリテーター。gemma が問いの候補を書き、Jev が「いま出すべき 1 問」を選ぶ（/api/facilitate）。
  * 自動（`auto`）では、前回から一定時間あいていて、間が空いた・論点が溜まったなどのときに動く
  * （lib/facilitator/trigger.ts）。出せるのは 1 度に 1 問。出したあと答え・保留になるまでは、次を生成しない。
- * 生成された問いそのものは model.issues に入り、画面には図の上のフローティングカード
- * （facilitator-overlay.tsx）が出す。
+ * 生成された問いそのものは model.issues に入り、画面には図の上の帯
+ * （facilitator-bar.tsx）が出す。
  */
 export function useFacilitator({ auto, getModel, getSignals, getRecent, commit, pushEntry }: Options) {
   const busyRef = useRef(false);

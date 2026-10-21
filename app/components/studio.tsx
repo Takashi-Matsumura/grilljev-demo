@@ -126,7 +126,10 @@ export function Studio({
     };
   }, [dragging, setLeftWidth]);
 
-  const gridTemplateColumns = `${leftWidth === null ? "minmax(0,1fr)" : `${leftWidth}px`} ${DIVIDER_PX}px minmax(0,1fr)${
+  // 既定（ドラッグで変えていない）は 3:7。会議中に一番見たいのは図なので、図の列を広く取る
+  const gridTemplateColumns = `${leftWidth === null ? `minmax(${LEFT_MIN_PX}px,3fr)` : `${leftWidth}px`} ${DIVIDER_PX}px minmax(0,${
+    leftWidth === null ? 7 : 1
+  }fr)${
     devMode ? " auto" : ""
   }`;
 
@@ -320,9 +323,9 @@ export function Studio({
   const archived = pipeline.archives.find((a) => a.id === viewId) ?? null;
   const viewing = archived ? archived.model : pipeline.model;
 
-  // 自動問いかけ ON かつ質問中のときだけ、図の上にフローティングカードで出す。
+  // 自動問いかけ ON かつ質問中のときだけ、図の上（図の外）に帯で出す。
   // 過去の図（読み取り専用）では出さない（問いは常に「現在」の図に属する）。
-  const facilitatorOverlay =
+  const facilitatorBar =
     !archived && facilitatorAuto && asked
       ? { asked, onAnswered, onPark, onNext }
       : null;
@@ -444,7 +447,7 @@ export function Studio({
             onDecideStep={archived ? undefined : onDecideStep}
             onEditActors={archived ? undefined : commitManual}
             onEditSteps={archived ? undefined : commitManual}
-            facilitator={facilitatorOverlay}
+            facilitator={facilitatorBar}
             focusStepId={archived ? null : pipeline.focusStepId}
             onFocusStep={archived ? undefined : pipeline.setFocus}
             devMode={devMode}
