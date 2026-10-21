@@ -75,25 +75,28 @@ export function editOps(model: FlowModel, rows: StakeholderRow[], folds: Fold[] 
 }
 
 /**
- * 削除できない理由。ステップ（取り消したものも含む）がつながっている人は消せない。
+ * 削除できない理由。図に残っているステップがつながっている人は消せない。
  * 図の番号で示し、代わりの手（部署に入れる・先にステップを消す）を添える。
  */
 export function removeBlockedReason(model: FlowModel, row: StakeholderRow): string | null {
-  const linked = model.steps.filter((s) => s.from === row.key || s.to === row.key);
-  if (linked.length === 0) return null;
   const shown = visibleSteps(model);
-  const numbers = linked
+  const numbers = model.steps
+    .filter((s) => (s.from === row.key || s.to === row.key) && s.status !== "retracted")
     .map((s) => shown.indexOf(s) + 1)
     .filter((n) => n > 0)
     .sort((a, b) => a - b);
-  const retracted = linked.some((s) => s.status === "retracted");
-  const where = [
-    ...(numbers.length > 0 ? [`${numbers.map((n) => `${n}番`).join("・")}のステップ`] : []),
-    ...(retracted ? ["削除したステップ"] : []),
-  ].join("と");
+  if (numbers.length === 0) return null;
   const alt =
     row.kind === "person" ? "部署に入れるか、先にステップを消してください" : "先にステップを消すか、送り手・受け手を付け替えてください";
-  return `${where}がつながっているため、削除できません。${alt}。`;
+  return `${numbers.map((n) => `${n}番`).join("・")}のステップがつながっているため、削除できません。${alt}。`;
+}
+
+/** 削除すると一緒に消える、取り消し済みのステップの知らせ（無ければ null） */
+export function removeNotice(model: FlowModel, row: StakeholderRow): string | null {
+  const retracted = model.steps.filter((s) => (s.from === row.key || s.to === row.key) && s.status === "retracted");
+  if (retracted.length === 0) return null;
+  const names = retracted.map((s) => `「${s.label}」`).join("");
+  return `削除すると、削除したステップ${names}も一緒に完全に消えます（元に戻せなくなります）。`;
 }
 
 /** 会議画面で登場人物を手直しする。会話の途中で出てきた人に、起点・終点・出席を付けられる。 */
@@ -167,6 +170,7 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
             rows={rows}
             onChange={setRows}
             removeBlocked={(r) => (originalIds.has(r.key) ? removeBlockedReason(model, r) : null)}
+            removeNotice={(r) => (originalIds.has(r.key) ? removeNotice(model, r) : null)}
             // 図にいる個人だけ（ダイアログで足したばかりの人は、たたむステップが無いので消せばよい）
             onFold={(fromKey, intoKey) => {
               const from = rows.find((r) => r.key === fromKey);
@@ -195,7 +199,7 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
             </p>
           )}
           <p className="text-xs text-zinc-500">
-            ステップがつながっている人は削除できません。改名すると、元の名前は別名として残ります。
+            図にあるステップがつながっている人は削除できません。改名すると、元の名前は別名として残ります。
           </p>
           {duplicate && (
             <p role="alert" className="text-xs text-amber-600 dark:text-amber-400">

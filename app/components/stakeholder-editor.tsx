@@ -132,6 +132,7 @@ export function StakeholderEditor({
   rows,
   onChange,
   removeBlocked = () => null,
+  removeNotice = () => null,
   onFold,
   footer,
 }: {
@@ -142,6 +143,8 @@ export function StakeholderEditor({
    * （送り手・受け手のいないステップは図に描かれず、黙って消えてしまうため）
    */
   removeBlocked?: (row: StakeholderRow) => string | null;
+  /** 削除できるが、一緒に消えるものがあるときの知らせ（取り消したステップなど） */
+  removeNotice?: (row: StakeholderRow) => string | null;
   /**
    * 個人の列を部署にたたむ（会議画面だけ）。渡すと、個人のカードに「部署に入れる」を出す。
    * その人のステップは部署から出るようになり、担当者がその人になる
@@ -205,6 +208,7 @@ export function StakeholderEditor({
 
   const current = rows.find((r) => r.key === selected);
   const blocked = current ? removeBlocked(current) : null;
+  const notice = current ? removeNotice(current) : null;
   const membersText =
     current && membersDraft?.key === current.key ? membersDraft.text : (current?.members ?? []).join("、");
   const commitMembers = () => {
@@ -469,6 +473,7 @@ export function StakeholderEditor({
               </button>
             </div>
             {blocked && <p className="-mt-1 text-xs text-zinc-500">{blocked}</p>}
+            {!blocked && notice && <p className="-mt-1 text-xs text-amber-700 dark:text-amber-400">{notice}</p>}
           </div>
         )}
 
