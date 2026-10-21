@@ -1,8 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActorsResult, StepLabelResult, StepRenameResult } from "@/lib/analysis/label";
-import { buildActorStepOps, buildLabelOps, previousBranchOf, type ActorPlan } from "@/lib/analysis/label-ops";
+import type { ActorsResult, StepEditResult, StepLabelResult, StepRenameResult } from "@/lib/analysis/label";
+import {
+  buildActorStepOps,
+  buildEditOps,
+  buildLabelOps,
+  previousBranchOf,
+  type ActorPlan,
+} from "@/lib/analysis/label-ops";
 import type { FollowUp, Interpretation } from "@/lib/analysis/interpret";
 import type { UtteranceState } from "@/lib/analysis/questions";
 import { placeByUtterance } from "@/lib/analysis/place";
@@ -11,6 +17,7 @@ import { BRANCH_HINT_MIN } from "@/lib/analysis/thresholds";
 import { checkKey, MAX_CHECKS_PER_REQUEST, type PendingCheck } from "@/lib/analysis/verify";
 import type { JevExchange, JevFailureDebug } from "@/lib/jev";
 import { applyOps } from "@/lib/model/reducer";
+import { visibleSteps } from "@/lib/render/mermaid";
 import { splitModel, type ArchivedDiagram } from "@/lib/scope/apply";
 import type { FlowModel, ModelOp } from "@/lib/model/types";
 import { clock, type Line, type LineLabeling } from "@/lib/transcript/line";
@@ -42,7 +49,19 @@ type LabelJob = {
 type ActorsJob = { kind: "actors"; doc: number; lineId: string; plan: ActorPlan };
 /** 音声での名前の言い直し。発言から新しいステップ名を取り出して付け替える */
 type RenameJob = { kind: "rename"; doc: number; lineId: string; utterance: string; stepId: string };
-type FollowJob = LabelJob | ActorsJob | RenameJob;
+/** 決まった直し方に当てはまらない訂正。直す内容は gemma が発言から決める */
+type EditJob = {
+  kind: "edit";
+  doc: number;
+  lineId: string;
+  utterance: string;
+  /** 直前の発言（whisper が 1 つの話を区切ったときの前半） */
+  context: string[];
+  stepId: string;
+};
+type FollowJob = LabelJob | ActorsJob | RenameJob | EditJob;
+
+const UNRESOLVED = "（図の番号をクリックすると、手で直せます）";
 
 /** 検証待ち + それが属する行（結果を行に戻して表示するため）と、作り直しに要る手がかり */
 type Pending = { check: PendingCheck; lineId: string; branchHint: number };
@@ -120,6 +139,16 @@ export function usePipeline({
   /** 発話を受け付けた順（lineId → 通し番号）。ステップを話した順に並べるための基準 */
   const seqRef = useRef(new Map<string, number>());
 
+  /**
+   * いま直しているステップ（音声の訂正で、番号を言わない続きの発言の対象）。
+   * 訂正で指したステップになり、「OK」・図の番号の「声で直す」・リセット・図を分けるで切り替わる
+   */
+  const [focusStepId, setFocusState] = useState<string | null>(null);
+  const focusRef = useRef<string | null>(null);
+  const setFocus = useCallback((id: string | null) => {
+    focusRef.current = id;
+    setFocusState(id);
+  }, []);
   const commitOps = useCallback((ops: ModelOp[], from: UpdateSource) => {
     if (ops.length === 0) return;
     const placed = placeByUtterance(modelRef.current, ops, (id) => seqRef.current.get(id));
@@ -127,7 +156,11 @@ export function usePipeline({
     modelRef.current = next;
     setModel(next);
     setSource(from);
-  }, []);
+    // 直しているステップが消えたら（削除・取り消し）、終える
+    if (focusRef.current !== null && !visibleSteps(next).some((s) => s.id === focusRef.current)) {
+      setFocus(null);
+    }
+  }, [setFocus]);
 
   const pushEntry = useCallback((entry: ConsoleEntry) => {
     setEntries((prev) => [...prev, entry].slice(-MAX_CONSOLE_ENTRIES));
@@ -212,7 +245,7 @@ export function usePipeline({
             currentLabel: step.label,
           });
           if (!alive()) return;
-          if (json.error) return fail(`${json.error}（図の番号をクリックすると、手で直せます）`);
+          if (json.error) return fail(`${json.error}${UNRESOLVED}`);
           // 発言の言葉そのもの（サーバで確かめ済み）なので、Jev の検証には回さない
           commitOps([{ op: "step.update", id: job.stepId, patch: { label: json.label } }], "jev");
           patchLabeling(job.lineId, {
@@ -220,6 +253,50 @@ export function usePipeline({
             label: json.label,
             ms: json.ms,
             note: `「${step.label}」→「${json.label}」に直しました`,
+            check: undefined,
+          });
+          return;
+        }
+
+        if (job.kind === "edit") {
+          const current = modelRef.current;
+          const steps = visibleSteps(current);
+          const index = steps.findIndex((s) => s.id === job.stepId);
+          if (index < 0) return fail("直そうとしたステップが、すでに図にありません");
+          const nameOf = (id: string) => current.actors.find((a) => a.id === id)?.name ?? id;
+          const view = (s: (typeof steps)[number] | undefined) =>
+            s ? { label: s.label, from: nameOf(s.from), to: nameOf(s.to), artifact: s.artifact ?? null } : null;
+          patchLabeling(job.lineId, { state: "pending", note: "直し方を考え中", error: undefined });
+          const json = await post<StepEditResult>({
+            mode: "edit",
+            utterance: job.utterance,
+            context: job.context,
+            step: view(steps[index]),
+            before: view(steps[index - 1]),
+            after: view(steps[index + 1]),
+            actors: current.actors.map((a) => a.name),
+          });
+          if (!alive()) return;
+          if (json.error) return fail(`${json.error}${UNRESOLVED}`);
+          const plan = buildEditOps(modelRef.current, job.stepId, json, job.lineId);
+          if (!plan) return fail("直そうとしたステップが、すでに図にありません");
+          if (plan.ops.length === 0) return fail(`発言から、直す内容を特定できませんでした${UNRESOLVED}`);
+          commitOps(plan.ops, "jev");
+          // gemma が作ったステップ名は、次の発話で Jev が発言に忠実かを検証する
+          const source = [...job.context, job.utterance].join(" ").slice(-300);
+          for (const l of plan.labeled) {
+            addPending({
+              check: { kind: "label", stepId: l.stepId, label: l.label, source, attempts: 1 },
+              lineId: job.lineId,
+              branchHint: 0,
+            });
+          }
+          patchLabeling(job.lineId, {
+            state: "done",
+            ms: json.ms,
+            note:
+              `直しました: ${plan.note}` +
+              (json.dropped.length > 0 ? `（${json.dropped.join("、")}は採用しませんでした）` : ""),
             check: undefined,
           });
           return;
@@ -301,7 +378,7 @@ export function usePipeline({
   );
 
   const followUpsToJobs = useCallback(
-    (followUps: FollowUp[], job: AnalysisJob, utteranceId: string, doc: number): FollowJob[] =>
+    (followUps: FollowUp[], job: AnalysisJob, utteranceId: string, doc: number, context: string[]): FollowJob[] =>
       followUps.map((fu): FollowJob => {
         switch (fu.kind) {
           case "label":
@@ -316,6 +393,8 @@ export function usePipeline({
             };
           case "rename":
             return { kind: "rename", doc, lineId: job.lineId, utterance: job.text, stepId: fu.stepId };
+          case "edit":
+            return { kind: "edit", doc, lineId: job.lineId, utterance: job.text, context, stepId: fu.stepId };
           case "actors":
             return { kind: "actors", doc, lineId: job.lineId, plan: { ...fu, utterance: job.text, utteranceId } };
         }
@@ -329,6 +408,8 @@ export function usePipeline({
     async (job: AnalysisJob) => {
       const epoch = epochRef.current;
       const doc = docRef.current;
+      // この発話より前の発言。手直しで、whisper が区切った話の前半として gemma に渡す
+      const context = recentRef.current;
       // 失敗しても、送った内容と生の応答が取れていればコンソールに残す。
       // ローカル判定器は JSON が崩れることがあり、そのときこそ中身を見たい。
       const fail = (message: string, debug?: JevFailureDebug) => {
@@ -346,6 +427,7 @@ export function usePipeline({
             utteranceId: job.lineId,
             model: modelRef.current,
             recent: recentRef.current,
+            focusStepId: focusRef.current,
             // 前の発話で gemma が作った文言の検証を、この質問に相乗りさせる
             verify: pendingRef.current.map((p) => p.check).slice(-MAX_CHECKS_PER_REQUEST),
           }),
@@ -445,7 +527,9 @@ export function usePipeline({
           interpretation,
         });
 
-        for (const j of [...relabel, ...followUpsToJobs(rebased.followUps, job, job.lineId, doc)]) {
+        if (interpretation.focus !== undefined) setFocus(interpretation.focus);
+
+        for (const j of [...relabel, ...followUpsToJobs(rebased.followUps, job, job.lineId, doc, context)]) {
           enqueueFollow(j);
         }
         onInterpretationRef.current?.(interpretation, job);
@@ -453,7 +537,7 @@ export function usePipeline({
         fail(e instanceof Error ? e.message : "判定に失敗しました");
       }
     },
-    [commitOps, enqueueFollow, followUpsToJobs, patchLabeling, patchLine, pushEntry],
+    [commitOps, enqueueFollow, followUpsToJobs, patchLabeling, patchLine, pushEntry, setFocus],
   );
 
   const drain = useCallback(async () => {
@@ -487,12 +571,13 @@ export function usePipeline({
     seqRef.current.clear();
     signalsRef.current = { analyzed: 0, startedAt: 0, lastActivityAt: 0, grillScore: 0 };
     docRef.current += 1;
+    setFocus(null);
     setArchives([]);
     const fresh = initialModel();
     modelRef.current = fresh;
     setModel(fresh);
     setSource("none");
-  }, [initialModel]);
+  }, [initialModel, setFocus]);
 
   /** ファシリテーターや手動操作から、モデルを変更する（id は最新のモデルで採番し直す） */
   const commit = useCallback(
@@ -514,6 +599,7 @@ export function usePipeline({
       { id: newId(), title: previous.scope.title, model: previous, closedAt: now },
     ]);
     docRef.current += 1;
+    setFocus(null);
     followQueue.current = [];
     pendingRef.current = [];
     signalsRef.current = { analyzed: 0, startedAt: 0, lastActivityAt: 0, grillScore: 0 };
@@ -521,7 +607,7 @@ export function usePipeline({
     modelRef.current = fresh;
     setModel(fresh);
     setSource("manual");
-  }, []);
+  }, [setFocus]);
 
   const getModel = useCallback(() => modelRef.current, []);
   const getSignals = useCallback(() => signalsRef.current, []);
@@ -538,5 +624,7 @@ export function usePipeline({
     getModel,
     getSignals,
     pushEntry,
+    focusStepId,
+    setFocus,
   };
 }

@@ -46,6 +46,24 @@ function pickStep(target: EventTarget, onPick: (n: number) => void) {
   const n = [...svg.querySelectorAll(".messageText")].indexOf(text) + 1;
   if (n > 0) onPick(n);
 }
+/** 強調している番号・ステップ名に付ける印。CSS で色を変える */
+const FOCUS_ATTR = "data-focus";
+const FOCUS_CLASS =
+  "[&_.messageText[data-focus]]:!fill-amber-600 [&_.messageText[data-focus]]:font-bold [&_.sequenceNumber[data-focus]]:!fill-amber-600 dark:[&_.messageText[data-focus]]:!fill-amber-400";
+
+/**
+ * n 番目（1 始まり）のステップの番号とステップ名に印を付ける（0 なら外す）。
+ * 図のコードは変えずに描いた SVG へ印を付けるので、書き出す図には入らない。
+ */
+function markStep(root: HTMLElement, n: number) {
+  for (const el of root.querySelectorAll(`[${FOCUS_ATTR}]`)) el.removeAttribute(FOCUS_ATTR);
+  if (n <= 0) return;
+  root.querySelectorAll(".messageText")[n - 1]?.setAttribute(FOCUS_ATTR, "");
+  for (const num of root.querySelectorAll(".sequenceNumber")) {
+    if (Number(num.textContent?.trim()) === n) num.setAttribute(FOCUS_ATTR, "");
+  }
+}
+
 let renderSeq = 0;
 
 type Rendered = { for: string; svg: string };
@@ -63,6 +81,7 @@ export function MermaidDiagram({
   fill = false,
   onContainerRef,
   onPickStep,
+  highlightStep = 0,
 }: {
   code: string;
   /** 指定すると、図の幅を表示領域の zoom 倍にする（全画面表示用。1 = 幅に合わせる） */
@@ -75,6 +94,8 @@ export function MermaidDiagram({
   onContainerRef?: (el: HTMLDivElement | null) => void;
   /** 図の番号・ステップ名をクリックしたら、その番号（1 始まり）を渡す。渡すと押せる見た目になる */
   onPickStep?: (n: number) => void;
+  /** 強調するステップの番号（1 始まり。0 なら強調しない）。音声で直しているステップを示す */
+  highlightStep?: number;
 }) {
   const [rendered, setRendered] = useState<Rendered | null>(null);
   const onSvgRef = useRef(onSvg);
@@ -82,6 +103,7 @@ export function MermaidDiagram({
     onSvgRef.current = onSvg;
   });
   const [failed, setFailed] = useState<{ for: string; message: string } | null>(null);
+  const svgHostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +134,11 @@ export function MermaidDiagram({
     };
   }, [code]);
 
+  // 描き直すたびに SVG が入れ替わるので、そのつど印を付け直す
+  useEffect(() => {
+    if (svgHostRef.current) markStep(svgHostRef.current, highlightStep);
+  }, [rendered, highlightStep]);
+
   const current = failed?.for === code ? failed : null;
   const updating = rendered !== null && rendered.for !== code && current === null;
 
@@ -123,7 +150,8 @@ export function MermaidDiagram({
       >
         {rendered ? (
           <div
-            className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${PICKABLE_CLASS(onPickStep !== undefined)} ${
+            ref={svgHostRef}
+            className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${FOCUS_CLASS} ${PICKABLE_CLASS(onPickStep !== undefined)} ${
               zoom === undefined ? "[&_svg]:max-w-full" : "[&_svg]:!w-full [&_svg]:!max-w-none"
             } ${updating ? "opacity-60" : "opacity-100"}`}
             style={zoom === undefined ? undefined : { width: `${zoom * 100}%`, margin: "0 auto" }}

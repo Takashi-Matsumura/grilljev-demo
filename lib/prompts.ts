@@ -12,6 +12,7 @@ export type PromptName =
   | "suggest-answer"
   | "suggest-actors"
   | "rename-step"
+  | "edit-step"
   | "scope-shift"
   | "summary";
 

@@ -34,12 +34,15 @@ export function StepEditDialog({
   stepId,
   onClose,
   onCommit,
+  onFocus,
 }: {
   model: FlowModel;
   /** 開いているステップ。null なら閉じる */
   stepId: string | null;
   onClose: () => void;
   onCommit: (ops: ModelOp[]) => void;
+  /** 渡すと「声で直す」を出す。このステップを、番号を言わずに音声で直す対象にする */
+  onFocus?: (stepId: string) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const steps = visibleSteps(model);
@@ -189,6 +192,19 @@ export function StepEditDialog({
           </div>
 
           <div className="flex justify-end gap-2">
+            {onFocus && (
+              <button
+                type="button"
+                className={`${btn} mr-auto`}
+                title="このステップを、番号を言わずに声で直せるようにします"
+                onClick={() => {
+                  onFocus(step.id);
+                  onClose();
+                }}
+              >
+                声で直す
+              </button>
+            )}
             <button type="button" className={btn} onClick={onClose}>
               閉じる
             </button>

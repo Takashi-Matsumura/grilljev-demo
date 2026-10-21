@@ -73,6 +73,8 @@ const VERDICT_TEXT = {
 const CORRECTION_TEXT = {
   apply: "訂正 · 図を修正",
   confirm: "訂正 · 要確認",
+  // 直すステップを指しただけ・手直しを終えただけ
+  unchanged: "訂正 · 図は変更なし",
 } as const;
 
 function AnalysisView({ analysis, devMode }: { analysis: LineAnalysis; devMode: boolean }) {
@@ -101,7 +103,9 @@ function AnalysisView({ analysis, devMode }: { analysis: LineAnalysis; devMode: 
   return (
     <>
       <span className={`ml-2 rounded px-1.5 py-0.5 text-xs ${cls}`} title={analysis.summary}>
-        {correction ? CORRECTION_TEXT[analysis.verdict === "apply" ? "apply" : "confirm"] : VERDICT_TEXT[analysis.verdict]}
+        {correction
+          ? CORRECTION_TEXT[analysis.verdict === "drop" ? "confirm" : analysis.verdict]
+          : VERDICT_TEXT[analysis.verdict]}
         {devMode && ` ${strength.toFixed(2)}`}
       </span>
       {devMode && analysis.match === "match" && (

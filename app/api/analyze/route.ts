@@ -14,6 +14,7 @@ type Body = {
   model?: unknown;
   recent?: unknown;
   verify?: unknown;
+  focusStepId?: unknown;
 };
 
 const str = (v: unknown, max: number): v is string =>
@@ -61,15 +62,21 @@ export async function POST(request: Request) {
 
   const model = body.model;
   const checks = parseChecks(body.verify);
+  // 図にあるステップの id だけを受け付ける（質問文に入るので、任意の文字列は通さない）
+  const focusStepId =
+    typeof body.focusStepId === "string" && model.steps.some((s) => s.id === body.focusStepId)
+      ? body.focusStepId
+      : null;
   try {
     const exchange = await postJev(
       buildUtteranceState(model, utterance, recent),
-      buildUtteranceQuestions(model, checks),
+      buildUtteranceQuestions(model, checks, focusStepId),
     );
     const interpretation = interpret(exchange.response.answers, model, {
       utterance,
       utteranceId,
       checks,
+      focusStepId,
     });
     return Response.json({ interpretation, exchange });
   } catch (e) {

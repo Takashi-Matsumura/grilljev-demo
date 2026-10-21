@@ -173,3 +173,111 @@ export async function renameStep(input: { utterance: string; currentLabel: strin
   }
   return { label, ms: Math.round(performance.now() - startedAt) };
 }
+
+type StepView = { label: string; from: string; to: string; artifact: string | null };
+
+export type StepEditInput = {
+  utterance: string;
+  /** 直前の発言（古い順）。whisper が 1 つの話を区切ったときの前半 */
+  context: string[];
+  step: StepView;
+  before: StepView | null;
+  after: StepView | null;
+  actors: string[];
+};
+
+export type StepInsert = {
+  position: "before" | "after";
+  from: string;
+  to: string;
+  label: string;
+  artifact: string | null;
+};
+
+export type StepEditResult = {
+  /** 対象のステップの書き換え。変える項目だけ入る（artifact: null は「渡すものを無くす」） */
+  update: Partial<{ label: string; from: string; to: string; artifact: string | null }>;
+  inserts: StepInsert[];
+  /** 検証で採用しなかったもの（画面で理由を見せる） */
+  dropped: string[];
+  ms: number;
+};
+
+const MAX_INSERTS = 2;
+
+/**
+ * 決まった直し方に当てはまらない訂正（渡すものを変える・前後に手順を足す など）を、gemma に決めさせる。
+ * gemma の出力は信用しない:
+ * - 登場人物は、図にいる名前だけ（新しい人は作らない）
+ * - 渡すもの（artifact）は、発言にそのまま出てくる言い方だけ（作り話を図に入れない）
+ * - ステップ名は、次の Jev リクエストで発言に忠実かを検証する（呼び出し側）
+ */
+export async function editStep(input: StepEditInput): Promise<StepEditResult> {
+  const startedAt = performance.now();
+  const raw = await chatCompletion(
+    [
+      { role: "system", content: await loadPrompt("edit-step") },
+      { role: "user", content: JSON.stringify(input) },
+    ],
+    { maxTokens: 300, temperature: 0.1 },
+  );
+  const json = extractJson(raw) as Record<string, unknown> | null;
+  if (!json) throw new LlmError(`直し方を取り出せませんでした: ${raw.slice(0, 120)}`, "invalid");
+
+  const spoken = bare([...input.context, input.utterance].join(""));
+  const dropped: string[] = [];
+  const actor = (v: unknown): string | null => {
+    const name = cleanText(v, MAX_NAME_CHARS);
+    if (name === null) return null;
+    if (input.actors.includes(name)) return name;
+    dropped.push(`図にいない登場人物「${name}」`);
+    return null;
+  };
+  const artifactOf = (v: unknown): string | null | undefined => {
+    if (v === null) return null;
+    const a = cleanText(v, MAX_LABEL_CHARS);
+    if (a === null) return undefined;
+    if (spoken.includes(bare(a))) return a;
+    dropped.push(`発言に無い書類名「${a}」`);
+    return undefined;
+  };
+
+  const update: StepEditResult["update"] = {};
+  const u = json.update;
+  if (u && typeof u === "object") {
+    const o = u as Record<string, unknown>;
+    const label = cleanText(o.label, MAX_LABEL_CHARS);
+    if (label && bare(label) !== bare(input.step.label)) update.label = label;
+    const from = "from" in o ? actor(o.from) : null;
+    if (from && from !== input.step.from) update.from = from;
+    const to = "to" in o ? actor(o.to) : null;
+    if (to && to !== input.step.to) update.to = to;
+    if ("artifact" in o) {
+      const a = artifactOf(o.artifact);
+      if (a !== undefined && a !== input.step.artifact) update.artifact = a;
+    }
+  }
+
+  const inserts: StepInsert[] = [];
+  for (const v of Array.isArray(json.insert) ? json.insert.slice(0, MAX_INSERTS) : []) {
+    if (!v || typeof v !== "object") continue;
+    const o = v as Record<string, unknown>;
+    const from = actor(o.from);
+    const to = actor(o.to);
+    const label = cleanText(o.label, MAX_LABEL_CHARS);
+    if (!from || !to || !label) continue;
+    inserts.push({
+      position: o.position === "after" ? "after" : "before",
+      from,
+      to,
+      label,
+      artifact: artifactOf(o.artifact) ?? null,
+    });
+  }
+
+  if (Object.keys(update).length === 0 && inserts.length === 0) {
+    const why = dropped.length > 0 ? `（${dropped.join("、")}は採用しませんでした）` : "";
+    throw new LlmError(`発言から、直す内容を特定できませんでした${why}`, "invalid");
+  }
+  return { update, inserts, dropped, ms: Math.round(performance.now() - startedAt) };
+}

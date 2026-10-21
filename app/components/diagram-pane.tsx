@@ -30,6 +30,8 @@ export function DiagramPane({
   onEditActors,
   onEditSteps,
   facilitator,
+  focusStepId = null,
+  onFocusStep,
   devMode = false,
 }: {
   model: FlowModel;
@@ -42,6 +44,10 @@ export function DiagramPane({
   onEditSteps?: (ops: ModelOp[]) => void;
   /** 自動問いかけ ON かつ質問中のときだけ渡す。図の上にフローティングカードで出す */
   facilitator?: FacilitatorOverlayProps | null;
+  /** 音声で直しているステップ。図で強調し、何を直しているかを帯で出す */
+  focusStepId?: string | null;
+  /** 音声で直すステップを切り替える（null で終える）。過去の図では渡さない */
+  onFocusStep?: (id: string | null) => void;
   devMode?: boolean;
 }) {
   const code = useMemo(() => toMermaid(model), [model]);
@@ -49,6 +55,9 @@ export function DiagramPane({
   const [editingStep, setEditingStep] = useState<string | null>(null);
   const pickStep = (n: number) => setEditingStep(visibleSteps(model)[n - 1]?.id ?? null);
   const drawable = hasDiagram(model);
+  const steps = visibleSteps(model);
+  const focusIndex = focusStepId ? steps.findIndex((s) => s.id === focusStepId) : -1;
+  const focused = focusIndex >= 0 ? steps[focusIndex] : null;
   const attention = useMemo(() => buildAttention(model), [model]);
   // .svg の書き出し用。「どのコードの SVG か」を持ち、いまの図と一致するときだけ使う
   const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
@@ -76,6 +85,31 @@ export function DiagramPane({
           />
         )}
         {onEditSteps && <RetractNotice model={model} onCommit={onEditSteps} />}
+        {focused && (
+          <div
+            role="status"
+            className="mb-2 mr-10 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+          >
+            <span>
+              <span className="font-medium">
+                {focusIndex + 1} 番「{focused.label}」
+              </span>
+              を直しています
+            </span>
+            <span className="text-xs text-amber-700 dark:text-amber-300/80">
+              番号を言わずに直し方を話せます（例: 「渡すのはExcelのファイルです」「その前に確認が入ります」）。終わったら「OK」
+            </span>
+            {onFocusStep && (
+              <button
+                type="button"
+                className="ml-auto rounded border border-amber-400 px-2 py-0.5 text-xs hover:bg-amber-100 dark:border-amber-500/50 dark:hover:bg-amber-500/20"
+                onClick={() => onFocusStep(null)}
+              >
+                終える
+              </button>
+            )}
+          </div>
+        )}
         {drawable && (
           <div className="absolute right-6 top-6 z-10">
             <FullscreenButton title={model.scope.title} code={code} disabled={!drawable} compact />
@@ -87,6 +121,7 @@ export function DiagramPane({
               code={code}
               onSvg={(svg, forCode) => setRendered({ svg, code: forCode })}
               onPickStep={onEditSteps ? pickStep : undefined}
+              highlightStep={focusIndex + 1}
             />
           ) : (
             <p className="rounded-md border border-dashed border-black/15 p-4 text-sm text-zinc-500 dark:border-white/20">
@@ -127,6 +162,7 @@ export function DiagramPane({
           stepId={editingStep}
           onClose={() => setEditingStep(null)}
           onCommit={onEditSteps}
+          onFocus={onFocusStep}
         />
       )}
     </section>

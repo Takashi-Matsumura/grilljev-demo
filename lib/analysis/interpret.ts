@@ -40,7 +40,7 @@ import {
   qFaithful,
   qReadable,
 } from "./questions";
-import { interpretCorrection } from "./correct";
+import { interpretCorrection, interpretRelease } from "./correct";
 import { checkKey, type CheckResult, type PendingCheck } from "./verify";
 
 /**
@@ -85,6 +85,11 @@ export type FollowUp =
       /** 名前の言い直し（音声の訂正）。発言から新しいステップ名を取り出して付け替える */
       kind: "rename";
       stepId: string;
+    }
+  | {
+      /** 決まった直し方に当てはまらない訂正。発言とステップを gemma に渡し、直す内容を決めさせる */
+      kind: "edit";
+      stepId: string;
     };
 
 export type Interpretation = {
@@ -105,6 +110,8 @@ export type Interpretation = {
   checks: CheckResult[];
   /** 図の訂正（「1 番を消して」など）として扱った発言か。画面では、何を直したかを常に見せる */
   correction?: true;
+  /** いま直しているステップの切り替え。null で終える。undefined なら変えない */
+  focus?: string | null;
 };
 
 type Answers = Record<string, JevAnswer | undefined>;
@@ -184,7 +191,13 @@ const FLAG_ISSUES: {
   },
 ];
 
-type Ctx = { utterance: string; utteranceId: string; checks?: PendingCheck[] };
+type Ctx = {
+  utterance: string;
+  utteranceId: string;
+  checks?: PendingCheck[];
+  /** いま直しているステップ（音声の訂正で、番号を言わない続きの発言の対象） */
+  focusStepId?: string | null;
+};
 
 /** 発話の解釈と、前の発話で gemma が作った文言の検証結果をまとめて返す。 */
 export function interpret(answers: Answers, model: FlowModel, ctx: Ctx): Interpretation {
@@ -301,6 +314,10 @@ function interpretUtterance(
   if (chatter === null) {
     return { ...base, verdict: "unchanged", ops: [], summary: "Jev の回答に chatter がありません" };
   }
+  const release = interpretRelease(answers, model, ctx.focusStepId);
+  if (release) {
+    return { ...base, verdict: "unchanged", ops: [], summary: release.note, correction: true, focus: null };
+  }
   if (chatter >= CHATTER_DROP) {
     return {
       ...base,
@@ -314,16 +331,23 @@ function interpretUtterance(
     intentAnswer && intentAnswer.confidence >= INTENT_MIN ? intentAnswer.choice : "other";
 
   // 訂正（「1 番を消して」など）は、新しい内容を足す解釈より先に扱う。直せなかったら要確認にする
-  const correction = interpretCorrection(answers, model, intent, ctx.utterance);
+  const correction = interpretCorrection(answers, model, intent, ctx.utterance, ctx.focusStepId);
   if (correction) {
     const followUps = correction.followUps ?? [];
     return {
       ...base,
-      verdict: correction.ops.length > 0 || followUps.length > 0 ? "apply" : "confirm",
+      // 直す対象を指しただけ・終えただけなら、図は変えないが「直せなかった」わけでもない
+      verdict:
+        correction.ops.length > 0 || followUps.length > 0
+          ? "apply"
+          : correction.focus !== undefined
+            ? "unchanged"
+            : "confirm",
       ops: correction.ops,
       followUps,
       summary: correction.note,
       correction: true,
+      ...(correction.focus !== undefined ? { focus: correction.focus } : {}),
     };
   }
 
