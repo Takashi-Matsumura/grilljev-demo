@@ -95,6 +95,12 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
       };
     }
 
+    case "actor.remove": {
+      if (!m.actors.some((a) => a.id === op.id)) return null;
+      if (m.steps.some((s) => s.from === op.id || s.to === op.id)) return null;
+      return { ...m, actors: m.actors.filter((a) => a.id !== op.id) };
+    }
+
     case "actor.update": {
       const target = m.actors.find((a) => a.id === op.id);
       if (!target) return null;

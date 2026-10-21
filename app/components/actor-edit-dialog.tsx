@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Actor, FlowModel, ModelOp } from "@/lib/model/types";
+import { visibleSteps } from "@/lib/render/mermaid";
 import { StakeholderEditor, type StakeholderRow } from "./stakeholder-editor";
 
 const toRows = (model: FlowModel): StakeholderRow[] =>
@@ -25,6 +26,12 @@ export function editOps(model: FlowModel, rows: StakeholderRow[], folds: Fold[] 
   // たたむのを先に。たたみ先のメンバーには、下の actor.update で（たたんだ人も含めた）全員を書く
   for (const f of folds) {
     if (byId.has(f.from) && byId.has(f.into)) ops.push({ op: "actor.fold", from: f.from, into: f.into });
+  }
+  // ダイアログで消した人（たたんだ人を除く）。ステップがつながっていれば reducer が無視する
+  const kept = new Set(rows.map((r) => r.key));
+  const folded = new Set(folds.map((f) => f.from));
+  for (const a of model.actors) {
+    if (!kept.has(a.id) && !folded.has(a.id)) ops.push({ op: "actor.remove", id: a.id });
   }
 
   for (const r of rows) {
@@ -58,14 +65,35 @@ export function editOps(model: FlowModel, rows: StakeholderRow[], folds: Fold[] 
 
   const newIds = new Set(idOf.values());
   const ids = rows.map((r) => idOf.get(r.key) ?? r.key).filter((id) => byId.has(id) || newIds.has(id));
-  const folded = new Set(folds.map((f) => f.from));
   const current = [...model.actors]
     .sort((a, b) => a.lane - b.lane)
     .map((a) => a.id)
-    .filter((id) => !folded.has(id));
+    .filter((id) => kept.has(id));
   const changed = newIds.size > 0 || ids.some((id, i) => current[i] !== id);
   if (changed) ops.push({ op: "actor.reorder", ids });
   return ops;
+}
+
+/**
+ * 削除できない理由。ステップ（取り消したものも含む）がつながっている人は消せない。
+ * 図の番号で示し、代わりの手（部署に入れる・先にステップを消す）を添える。
+ */
+export function removeBlockedReason(model: FlowModel, row: StakeholderRow): string | null {
+  const linked = model.steps.filter((s) => s.from === row.key || s.to === row.key);
+  if (linked.length === 0) return null;
+  const shown = visibleSteps(model);
+  const numbers = linked
+    .map((s) => shown.indexOf(s) + 1)
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b);
+  const retracted = linked.some((s) => s.status === "retracted");
+  const where = [
+    ...(numbers.length > 0 ? [`${numbers.map((n) => `${n}番`).join("・")}のステップ`] : []),
+    ...(retracted ? ["削除したステップ"] : []),
+  ].join("と");
+  const alt =
+    row.kind === "person" ? "部署に入れるか、先にステップを消してください" : "先にステップを消すか、送り手・受け手を付け替えてください";
+  return `${where}がつながっているため、削除できません。${alt}。`;
 }
 
 /** 会議画面で登場人物を手直しする。会話の途中で出てきた人に、起点・終点・出席を付けられる。 */
@@ -138,7 +166,7 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
           <StakeholderEditor
             rows={rows}
             onChange={setRows}
-            canRemove={(r) => !originalIds.has(r.key)}
+            removeBlocked={(r) => (originalIds.has(r.key) ? removeBlockedReason(model, r) : null)}
             // 図にいる個人だけ（ダイアログで足したばかりの人は、たたむステップが無いので消せばよい）
             onFold={(fromKey, intoKey) => {
               const from = rows.find((r) => r.key === fromKey);
@@ -167,7 +195,7 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
             </p>
           )}
           <p className="text-xs text-zinc-500">
-            図にすでにいる人は削除できません（ステップがつながっているため）。改名すると、元の名前は別名として残ります。
+            ステップがつながっている人は削除できません。改名すると、元の名前は別名として残ります。
           </p>
           {duplicate && (
             <p role="alert" className="text-xs text-amber-600 dark:text-amber-400">
