@@ -1,7 +1,5 @@
-import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import path from "node:path";
 import { modelFromSeed } from "../model/reducer";
+import { db } from "./db";
 import {
   isValidSlug,
   newSlug,
@@ -16,40 +14,13 @@ import {
 /**
  * セッションの保存（SQLite）。server 専用。
  *
- * - 1 ファイルの DB（`sessions/sessions.db`。`SESSIONS_DIR` で場所を変えられる。.gitignore 済み）に
- *   1 行 1 会議。`model` / `seed` / `archives` / `lines` はそのまま JSON テキストで持つ
+ * - 1 ファイルの DB（lib/store/db.ts）の `sessions` テーブルに 1 行 1 会議。`model` / `seed` / `archives` / `lines` はそのまま JSON テキストで持つ
  *   （中身で検索する必要が無いので、列に正規化する意味が薄い）
  * - `node:sqlite`（Node 標準ライブラリ）を使う。追加の依存を増やさないため
  * - `DatabaseSync` の呼び出しは同期・単一スレッドなので、1 回の呼び出しの**途中**に
  *   別のリクエストが割り込むことはない（JSON ファイル版にあった per-slug のキューは不要になった）
  * - slug はテーブルの主キー。形式だけ検証してから使う（`isValidSlug`）
  */
-
-let cached: DatabaseSync | null = null;
-
-function db(): DatabaseSync {
-  if (cached) return cached;
-  // SESSIONS_DIR は実行時のデータ置き場で、バンドルに含めるものは無い。turbopack の静的解析は
-  // ここを「プロジェクト全体をトレースする動的アクセス」と見なすため、明示的に対象外にする
-  // （付けないと public を含む全ソースがサーバ出力に入る）。絶対パス指定を許すので cwd 配下には固定できない。
-  const dir = path.resolve(/*turbopackIgnore: true*/ process.env.SESSIONS_DIR ?? path.join(process.cwd(), "sessions"));
-  mkdirSync(dir, { recursive: true });
-  const conn = new DatabaseSync(path.join(dir, "sessions.db"));
-  conn.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      slug TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      seed TEXT NOT NULL,
-      model TEXT NOT NULL,
-      archives TEXT NOT NULL,
-      lines TEXT NOT NULL
-    )
-  `);
-  cached = conn;
-  return conn;
-}
 
 type Row = {
   slug: string;

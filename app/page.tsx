@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { HealthButton } from "@/app/components/health-dialog";
 import { SessionList } from "@/app/components/session-list";
 import { checkHealth } from "@/lib/health";
@@ -18,7 +19,12 @@ export default async function Home() {
             会議の音声から、業務フロー（シーケンス図）をリアルタイムに立ち上げる
           </p>
         </div>
-        <HealthButton initial={health} />
+        <div className="flex shrink-0 items-center gap-3">
+          <Link href="/editor" className="text-sm text-zinc-500 hover:underline">
+            図を手で描く
+          </Link>
+          <HealthButton initial={health} />
+        </div>
       </header>
       <SessionList initial={sessions} />
     </div>
