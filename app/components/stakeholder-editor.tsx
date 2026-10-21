@@ -131,14 +131,17 @@ function KindIcon({ kind }: { kind: ActorKind }) {
 export function StakeholderEditor({
   rows,
   onChange,
-  canRemove = () => true,
+  removeBlocked = () => null,
   onFold,
   footer,
 }: {
   rows: StakeholderRow[];
   onChange: (rows: StakeholderRow[]) => void;
-  /** 削除できる行か。会議画面では、図にすでにいる人は消さない（ステップが宙に浮くため） */
-  canRemove?: (row: StakeholderRow) => boolean;
+  /**
+   * 削除できない理由（削除できるなら null）。会議画面では、ステップがつながっている人は消さない
+   * （送り手・受け手のいないステップは図に描かれず、黙って消えてしまうため）
+   */
+  removeBlocked?: (row: StakeholderRow) => string | null;
   /**
    * 個人の列を部署にたたむ（会議画面だけ）。渡すと、個人のカードに「部署に入れる」を出す。
    * その人のステップは部署から出るようになり、担当者がその人になる
@@ -201,6 +204,7 @@ export function StakeholderEditor({
   };
 
   const current = rows.find((r) => r.key === selected);
+  const blocked = current ? removeBlocked(current) : null;
   const membersText =
     current && membersDraft?.key === current.key ? membersDraft.text : (current?.members ?? []).join("、");
   const commitMembers = () => {
@@ -455,8 +459,7 @@ export function StakeholderEditor({
               <button
                 type="button"
                 className="rounded-md px-2.5 py-1 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent dark:text-red-400 dark:hover:bg-red-500/10"
-                disabled={!canRemove(current)}
-                title={canRemove(current) ? undefined : "図にすでにいるため、削除できません"}
+                disabled={blocked !== null}
                 onClick={() => remove(current.key)}
               >
                 削除
@@ -465,6 +468,7 @@ export function StakeholderEditor({
                 閉じる
               </button>
             </div>
+            {blocked && <p className="-mt-1 text-xs text-zinc-500">{blocked}</p>}
           </div>
         )}
 

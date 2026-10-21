@@ -148,6 +148,8 @@ export type ModelOp =
    * 担当者が from の名前になる。from が受け手のステップは into が受ける。from の列は消える
    */
   | { op: "actor.fold"; from: ActorId; into: ActorId }
+  /** 登場人物を消す。ステップ（取り消したものも含む）がつながっている人は消さない（ステップが宙に浮くため） */
+  | { op: "actor.remove"; id: ActorId }
   /** ライフラインの並び替え。ids の順に lane を振り直す（ids に無い人は、元の順で後ろに続ける） */
   | { op: "actor.reorder"; ids: ActorId[] }
   | { op: "step.add"; step: NewStep }
