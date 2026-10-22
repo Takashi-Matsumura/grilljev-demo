@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PanelSection } from "@/app/components/step-panel";
 import type { StepInput } from "@/lib/model/add-step";
 import type { FlowModel } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
@@ -47,20 +48,15 @@ export function StepAddPanel({
     if (ready) onAdd({ from, to, label, artifact, provisional }, again);
   };
 
-  const btn =
-    "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10";
-  const field =
-    "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
-
   return (
     <aside
       aria-label="ステップの追加"
-      className="flex shrink-0 flex-col gap-3 overflow-y-auto border-t border-black/10 p-4 text-sm lg:w-80 lg:border-l lg:border-t-0 dark:border-white/15"
+      className="flex shrink-0 flex-col border-t border-black/10 text-sm lg:w-80 lg:border-l lg:border-t-0 dark:border-white/15"
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
       }}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 px-4 pt-4">
         <h2 className="font-medium">ステップの追加</h2>
         <button
           type="button"
@@ -71,10 +67,12 @@ export function StepAddPanel({
           ×
         </button>
       </div>
-      <p className="-mt-2 text-xs text-zinc-500">{position}（図の番号を選んでから追加すると、その後に入ります）</p>
+      <p className="px-4 pb-2 text-xs text-zinc-500" title="図の番号を選んでから追加すると、その後に入ります">
+        {position}
+      </p>
 
       <form
-        className="flex flex-col gap-3"
+        className="flex min-h-0 flex-1 flex-col"
         onSubmit={(e) => {
           e.preventDefault();
           submit(false);
@@ -84,54 +82,105 @@ export function StepAddPanel({
           if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault();
         }}
       >
-        <label className="flex flex-col gap-1">
-          送り手（誰が）
-          <select className={field} value={from} onChange={(e) => setFrom(e.target.value)}>
-            {actors.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          受け手（誰に）
-          <select className={field} value={to} onChange={(e) => setTo(e.target.value)}>
-            {actors.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.id === from ? `${a.name}（自分の中の作業）` : a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          名前（何をする）
-          <input
-            autoFocus
-            className={field}
-            value={label}
-            placeholder="例: 請求書を送る"
-            onChange={(e) => setLabel(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          渡すもの（図の帯）
-          <input
-            className={field}
-            value={artifact}
-            placeholder="なし（書類・データ・ファイル）"
-            onChange={(e) => setArtifact(e.target.value)}
-          />
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={provisional} onChange={(e) => setProvisional(e.target.checked)} />
-          仮のステップにする（点線。まだはっきりしないもの）
-        </label>
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pb-4 pt-2">
+          <PanelSection title="内容">
+            <input
+              autoFocus
+              aria-label="ステップの名前"
+              className={field}
+              value={label}
+              placeholder="何をする（例: 請求書を送る）"
+              onChange={(e) => setLabel(e.target.value)}
+            />
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-black/10 pt-3 dark:border-white/15">
-          <button type="submit" className={btn} disabled={!ready}>
-            追加
-          </button>
+            {/* 誰が → 誰に。同じ人なら自分の中の作業（自己ループ） */}
+            <div className="flex items-center gap-1.5">
+              <select
+                aria-label="送り手（誰が）"
+                className={`${field} min-w-0 flex-1`}
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              >
+                {actors.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+              <span aria-hidden className="text-zinc-400">
+                →
+              </span>
+              <select
+                aria-label="受け手（誰に）"
+                className={`${field} min-w-0 flex-1`}
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              >
+                {actors.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.id === from ? `${a.name}（自分）` : a.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className={iconBtn}
+                aria-label="送り手と受け手を入れ替える"
+                title="送り手と受け手を入れ替える"
+                disabled={from === to}
+                onClick={() => {
+                  setFrom(to);
+                  setTo(from);
+                }}
+              >
+                ⇄
+              </button>
+            </div>
+
+            <label className="grid grid-cols-[4.5rem_1fr] items-center gap-2">
+              <span className="text-xs text-zinc-500">渡すもの</span>
+              <input
+                className={field}
+                value={artifact}
+                placeholder="なし（書類・データ）"
+                title="図の帯になります"
+                onChange={(e) => setArtifact(e.target.value)}
+              />
+            </label>
+          </PanelSection>
+
+          <PanelSection title="状態">
+            <div className="flex items-center gap-3">
+              <div
+                role="group"
+                aria-label="確定か仮か"
+                className="inline-flex rounded-md border border-black/15 p-0.5 dark:border-white/20"
+              >
+                {(
+                  [
+                    ["確定", false],
+                    ["仮", true],
+                  ] as const
+                ).map(([text, value]) => (
+                  <button
+                    key={text}
+                    type="button"
+                    aria-pressed={provisional === value}
+                    className="rounded px-3 py-1 text-sm text-zinc-600 aria-pressed:bg-sky-600 aria-pressed:text-white dark:text-zinc-300"
+                    onClick={() => setProvisional(value)}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-zinc-500">
+                {provisional ? "点線で描きます（まだはっきりしないもの）" : "実線で描きます"}
+              </span>
+            </div>
+          </PanelSection>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-black/10 px-4 py-3 dark:border-white/15">
           <button
             type="button"
             className={btn}
@@ -141,8 +190,21 @@ export function StepAddPanel({
           >
             続けて追加
           </button>
+          <button
+            type="submit"
+            className="rounded-md bg-sky-600 px-3 py-1.5 text-sm text-white hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600"
+            disabled={!ready}
+          >
+            追加
+          </button>
         </div>
       </form>
     </aside>
   );
 }
+
+const btn =
+  "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10";
+const iconBtn =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black/15 hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/20 dark:hover:bg-white/10";
+const field = "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
