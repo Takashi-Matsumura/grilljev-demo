@@ -5,6 +5,7 @@ import { download } from "./download";
 import type { FlowModel } from "@/lib/model/types";
 import { toDrawio } from "@/lib/render/drawio";
 import { DisclosureIcon } from "./disclosure-icon";
+import { toSvg11 } from "./svg11";
 import { useCloseOnOutside } from "./use-close-on-outside";
 import {
   EXPORT_MIME,
@@ -28,6 +29,11 @@ const BUTTONS: { format: ExportFormat; label: string; hint: string }[] = [
   { format: "drawio", label: ".drawio", hint: "draw.io（diagrams.net）で開いて編集できます" },
   { format: "mmd", label: ".mmd", hint: "Mermaid のコード。GitHub や Obsidian でそのまま描画できます" },
   { format: "svg", label: ".svg", hint: "画像として使えます（画面に描画された図そのもの）" },
+  {
+    format: "svg11",
+    label: ".svg（SVG 1.1）",
+    hint: "Canva など、ふつうの .svg を取り込めないアプリ向け。見た目を CSS ではなく要素ごとの属性で書きます",
+  },
 ];
 
 const TRIGGER_BTN =
@@ -43,6 +49,7 @@ export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
       const name = exportFileName(model.scope.title, format);
       if (format === "drawio") download(name, EXPORT_MIME.drawio, toDrawio(model));
       else if (format === "mmd") download(name, EXPORT_MIME.mmd, `${mermaidCode}\n`);
+      else if (format === "svg11" && svg) download(name, EXPORT_MIME.svg11, toSvg11(svg));
       else if (svg) download(name, EXPORT_MIME.svg, finalizeSvg(svg));
       setMessage(`${name} を保存しました`);
     } catch (e) {
@@ -71,7 +78,7 @@ export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
         {/* ボタンの左端に揃えて右へ広げる。右端に揃えると、ボタンが画面の左端にあるとき（削除したステップが無い図など）左にはみ出して見えなくなる */}
         <div className="absolute bottom-full left-0 z-10 mb-1 w-56 rounded-md border border-black/15 bg-background p-1 shadow-lg dark:border-white/20">
           {BUTTONS.map((b) => {
-            const disabled = b.format === "svg" && svg === null;
+            const disabled = (b.format === "svg" || b.format === "svg11") && svg === null;
             return (
               <button
                 key={b.format}
