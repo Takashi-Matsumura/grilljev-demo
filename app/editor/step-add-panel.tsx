@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { FromToPicker, PanelSection } from "@/app/components/step-panel";
 import type { StepInput } from "@/lib/model/add-step";
-import type { FlowModel } from "@/lib/model/types";
+import type { Branch, FlowModel } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
 
 /**
@@ -14,13 +14,19 @@ import { visibleSteps } from "@/lib/render/mermaid";
 export function StepAddPanel({
   model,
   afterStepId,
+  into,
   initialFrom,
   onAdd,
+  onRemoveInto,
   onClose,
 }: {
   model: FlowModel;
   /** このステップの直後に入れる。null なら末尾 */
   afterStepId: string | null;
+  /** この場合（枠の中）の最後に入れる。afterStepId より優先 */
+  into?: Branch;
+  /** 渡すと、into の場合が空のときに「この場合を消す」を出す（作った枠をやめたいとき） */
+  onRemoveInto?: () => void;
   /** 送り手の初期値（「続けて追加」では、前のステップの受け手） */
   initialFrom?: string;
   /** again: 「続けて追加」で押した */
@@ -42,7 +48,14 @@ export function StepAddPanel({
 
   const steps = visibleSteps(model);
   const afterIndex = afterStepId ? steps.findIndex((s) => s.id === afterStepId) : -1;
-  const position = afterIndex >= 0 ? `${afterIndex + 1} 番の後に入れます` : "最後に入れます";
+  const position = into
+    ? `［${into.condition}］の中に入れます`
+    : afterIndex >= 0
+      ? `${afterIndex + 1} 番の後に入れます`
+      : "最後に入れます";
+  // 空の場合なら、やめられるようにする（枠の最後の場合なら、枠ごと消える）
+  const intoEmpty = into !== undefined && !steps.some((s) => s.branchId === into.id);
+  const lastArm = into !== undefined && model.branches.filter((b) => b.groupId === into.groupId).length === 1;
   const ready = label.trim() !== "" && from !== "" && to !== "";
   const submit = (again: boolean) => {
     if (ready) onAdd({ from, to, label, artifact, provisional }, again);
@@ -67,7 +80,10 @@ export function StepAddPanel({
           ×
         </button>
       </div>
-      <p className="px-4 pb-2 text-xs text-zinc-500" title="図の番号を選んでから追加すると、その後に入ります">
+      <p
+        className={`px-4 pb-2 text-xs ${into ? "text-violet-700 dark:text-violet-300" : "text-zinc-500"}`}
+        title={into ? "分岐の枠の中に入れます" : "図の番号を選んでから追加すると、その後に入ります"}
+      >
         {position}
       </p>
 
@@ -149,6 +165,16 @@ export function StepAddPanel({
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-black/10 px-4 py-3 dark:border-white/15">
+          {intoEmpty && onRemoveInto && (
+            <button
+              type="button"
+              className="mr-auto rounded-md px-2 py-1.5 text-xs text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+              title={lastArm ? "中にステップが無いこの枠を消します" : "中にステップが無いこの場合を消します"}
+              onClick={onRemoveInto}
+            >
+              {lastArm ? "この枠を消す" : "この場合を消す"}
+            </button>
+          )}
           <button
             type="button"
             className={btn}

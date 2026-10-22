@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { PLACEHOLDER_TEXT } from "@/lib/render/mermaid";
 
 type MermaidApi = typeof import("mermaid").default;
 
@@ -93,6 +94,28 @@ function detachStepDots(root: HTMLElement) {
   }
 }
 
+/**
+ * 空の場合の注記（「＋ ここにステップを追加」）に、上から何番目かの印を付ける（押せるようにするため）。
+ * 印は描いた SVG に付けるだけなので、書き出す図には入らない。
+ */
+const PLACEHOLDER_ATTR = "data-placeholder";
+function markPlaceholders(root: HTMLElement) {
+  let k = 0;
+  for (const text of root.querySelectorAll(".noteText")) {
+    if (text.textContent?.trim() !== PLACEHOLDER_TEXT) continue;
+    text.parentElement?.setAttribute(PLACEHOLDER_ATTR, String(k));
+    k += 1;
+  }
+}
+
+/** 空の場合の注記の見た目（押せる、点線の枠） */
+const PLACEHOLDER_CLASS = [
+  "[&_[data-placeholder]]:cursor-pointer",
+  "[&_[data-placeholder]_rect]:!fill-sky-50 [&_[data-placeholder]_rect]:!stroke-sky-500 [&_[data-placeholder]_rect]:[stroke-dasharray:4_3]",
+  "[&_[data-placeholder]:hover_rect]:!fill-sky-100 [&_[data-placeholder]_text]:!fill-sky-700",
+  "dark:[&_[data-placeholder]_rect]:!fill-sky-500/10 dark:[&_[data-placeholder]_text]:!fill-sky-300",
+].join(" ");
+
 /** n 番目（1 始まり）のステップ名に印を付ける（0 なら外す） */
 function markStep(root: HTMLElement, attr: string, n: number) {
   for (const el of root.querySelectorAll(`[${attr}]`)) el.removeAttribute(attr);
@@ -137,6 +160,7 @@ export function MermaidDiagram({
   onContainerRef,
   onPickStep,
   onMoveStep,
+  onPickPlaceholder,
   highlightStep = 0,
   selectedStep = 0,
 }: {
@@ -156,6 +180,8 @@ export function MermaidDiagram({
    * 落とした位置（移す前の並びで、何番目のステップの手前か）を渡す。渡すとドラッグできる
    */
   onMoveStep?: (index: number, insertAt: number) => void;
+  /** 空の場合の「＋ ここにステップを追加」を押したら、図の上から何番目（0 始まり）の注記かを渡す */
+  onPickPlaceholder?: (k: number) => void;
   /** 強調するステップの番号（1 始まり。0 なら強調しない）。音声で直しているステップを示す */
   highlightStep?: number;
   /** 編集パネルで選んでいるステップの番号（1 始まり。0 なら無し） */
@@ -206,6 +232,7 @@ export function MermaidDiagram({
   useEffect(() => {
     if (!svgHostRef.current) return;
     detachStepDots(svgHostRef.current);
+    markPlaceholders(svgHostRef.current);
     markStep(svgHostRef.current, FOCUS_ATTR, highlightStep);
     markStep(svgHostRef.current, SELECTED_ATTR, selectedStep);
   }, [rendered, highlightStep, selectedStep]);
@@ -232,7 +259,7 @@ export function MermaidDiagram({
           >
             <div
               ref={svgHostRef}
-              className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${MARK_CLASS} ${DOT_CLASS} ${PICKABLE_CLASS(onPickStep !== undefined)} ${
+              className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${MARK_CLASS} ${DOT_CLASS} ${onPickPlaceholder ? PLACEHOLDER_CLASS : ""} ${PICKABLE_CLASS(onPickStep !== undefined)} ${
                 onMoveStep ? MOVABLE_CLASS : ""
               } ${drop ? "select-none [&_*]:!cursor-grabbing" : ""} ${
                 zoom === undefined ? "[&_svg]:max-w-full" : "[&_svg]:!w-full [&_svg]:!max-w-none"
@@ -240,6 +267,11 @@ export function MermaidDiagram({
               onClick={(e) => {
                 if (suppressClickRef.current) {
                   suppressClickRef.current = false;
+                  return;
+                }
+                const ph = e.target instanceof Element ? e.target.closest(`[${PLACEHOLDER_ATTR}]`) : null;
+                if (ph && onPickPlaceholder) {
+                  onPickPlaceholder(Number(ph.getAttribute(PLACEHOLDER_ATTR)));
                   return;
                 }
                 const n = onPickStep ? stepAt(e.target) : null;
