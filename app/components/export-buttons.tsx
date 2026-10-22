@@ -68,7 +68,8 @@ export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
           ⤓ 書き出し
           <DisclosureIcon />
         </summary>
-        <div className="absolute bottom-full right-0 z-10 mb-1 w-56 rounded-md border border-black/15 bg-background p-1 shadow-lg dark:border-white/20">
+        {/* ボタンの左端に揃えて右へ広げる。右端に揃えると、ボタンが画面の左端にあるとき（削除したステップが無い図など）左にはみ出して見えなくなる */}
+        <div className="absolute bottom-full left-0 z-10 mb-1 w-56 rounded-md border border-black/15 bg-background p-1 shadow-lg dark:border-white/20">
           {BUTTONS.map((b) => {
             const disabled = b.format === "svg" && svg === null;
             return (
