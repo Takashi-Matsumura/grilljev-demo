@@ -15,7 +15,7 @@ import {
   setGroupKindOps,
 } from "@/lib/model/branch";
 import type { Branch, FlowModel, ModelOp } from "@/lib/model/types";
-import { flowItems, visibleSteps } from "@/lib/render/mermaid";
+import { drawnFrames, visibleSteps } from "@/lib/render/mermaid";
 
 /**
  * ステップの編集パネルに出す「分岐」の欄（/editor 専用）。初めて使う人にも分かるように、
@@ -97,12 +97,6 @@ const enter = (fn: () => void) => (e: React.KeyboardEvent) => {
 const armText = (arm: Branch, i: number) =>
   `${i > 0 && arm.kind === "alt" ? "そうでなく" : KIND_TEXT[arm.kind].before}［${arm.condition}］${KIND_TEXT[arm.kind].after}`;
 
-/** 図の上から順の枠（場合を index 順に）。図に描かれていない枠（空で位置の無いもの）は除く */
-function framesInOrder(model: FlowModel): Branch[][] {
-  const groupIds = [...new Set(flowItems(model).flatMap((item) => (item.branch ? [item.branch.groupId] : [])))];
-  return groupIds.map((g) => groupArms(model, g));
-}
-
 /**
  * ステップを、作ってある枠のどれかの場合へ入れる選択欄。枠が無ければ出さない。
  * exceptGroup の枠（いま入っている枠。場合の移し替えは見取り図のボタンで行う）は並べない
@@ -120,7 +114,7 @@ function EnterFrame({
   exceptGroup: string | null;
   onCommit: (ops: ModelOp[]) => void;
 }) {
-  const frames = framesInOrder(model)
+  const frames = drawnFrames(model)
     .map((arms, k) => ({ arms, k }))
     .filter(({ arms }) => arms[0]?.groupId !== exceptGroup);
   if (frames.length === 0) return null;

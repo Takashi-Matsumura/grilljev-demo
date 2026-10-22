@@ -10,14 +10,16 @@ import { StepPanel } from "@/app/components/step-panel";
 import { addStepOp, type StepInput } from "@/lib/model/add-step";
 import { moveStepOps } from "@/lib/model/move";
 import { applyOps } from "@/lib/model/reducer";
-import { addFrameOps } from "@/lib/model/branch";
+import { addFrameOps, enterBranchOps } from "@/lib/model/branch";
 import type { Branch, FlowModel, ModelOp } from "@/lib/model/types";
 import { stripPlaceholders } from "@/lib/render/export";
-import { emptyArms, hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
+import { armOfTarget, emptyArms, hasDiagram, toMermaid, visibleSteps, type ArmTarget } from "@/lib/render/mermaid";
 import { BranchAddPanel } from "./branch-add-panel";
 import { BranchSection } from "./branch-section";
 import { FlowPlayer } from "./flow-player";
+import { ReviewPanel } from "./review-panel";
 import { StepAddPanel } from "./step-add-panel";
+import { useAiReview } from "./use-ai-review";
 import { useDiagramAutosave } from "./use-diagram-autosave";
 import { useWheelZoom } from "./use-wheel-zoom";
 
@@ -32,6 +34,8 @@ type Panel =
   /** into: その場合（空の枠の「＋ ここにステップを追加」など）の最後に入れる */
   | { mode: "add"; afterStepId: string | null; into?: string; initialFrom?: string; seq: number }
   | { mode: "branch"; afterStepId: string | null; seq: number }
+  /** 図の点検。focus は、指摘から示している図の手順（1 始まり。0 なら無し） */
+  | { mode: "review"; focus: number }
   | null;
 
 const SAVE_LABEL = { saved: "保存済み", saving: "保存中…", error: "保存できていません" } as const;
@@ -52,6 +56,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   const [showAssignees, setShowAssignees] = useState(false);
   const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const aiReview = useAiReview();
 
   const commit = useCallback((ops: ModelOp[]) => {
     setHistory((h) => {
@@ -125,6 +130,16 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
     if (ops.length === 0) return;
     commit(ops);
     setPanel({ mode: "edit", stepId: steps[index].id });
+  };
+  /** 図の上で、ステップを場合の目印（空の場合の注記・枠の条件）へ落としたら、その場合の中へ入れる */
+  const dropToArm = (index: number, target: ArmTarget) => {
+    const arm = armOfTarget(model, target);
+    const step = steps[index];
+    if (!arm || !step) return;
+    const ops = enterBranchOps(model, step.id, arm.id, "frame");
+    if (ops.length === 0) return;
+    commit(ops);
+    setPanel({ mode: "edit", stepId: step.id });
   };
   const nextSeq = (panel?.mode === "add" || panel?.mode === "branch" ? panel.seq : 0) + 1;
   // いま選んでいるステップ（編集中、または追加する位置）。その後ろに足す
@@ -232,6 +247,16 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
         >
           ▶ フローの再生
         </button>
+        <button
+          type="button"
+          className={`${btn} ${panel?.mode === "review" ? "bg-black/5 dark:bg-white/10" : ""}`}
+          disabled={!drawable}
+          aria-pressed={panel?.mode === "review"}
+          title="図の抜けや書き方の気になる点を、決まりごとと AI で点検します"
+          onClick={() => setPanel(panel?.mode === "review" ? null : { mode: "review", focus: 0 })}
+        >
+          ✓ フローを点検
+        </button>
         <span className="flex-1" />
         {drawable && (
           <div className="flex items-center gap-1">
@@ -271,7 +296,9 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
                 onPickStep={pickStep}
                 onPickPlaceholder={pickPlaceholder}
                 onMoveStep={moveStep}
+                onDropToArm={dropToArm}
                 selectedStep={selectedIndex + 1}
+                highlightStep={panel?.mode === "review" ? panel.focus : 0}
                 // 1 = 幅に合わせる（小さい図は拡大しない）。それ以外は幅に対する倍率
                 zoom={zoom === 1 ? undefined : zoom}
               />
@@ -307,6 +334,18 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
               commit([{ op: "branch.remove", id: intoArm.id }]);
               setPanel(null);
             } : undefined}
+            onClose={() => setPanel(null)}
+          />
+        )}
+        {panel?.mode === "review" && drawable && (
+          <ReviewPanel
+            model={model}
+            name={name}
+            ai={aiReview.state}
+            onRunAi={(already) => aiReview.run(model, name, already)}
+            onCommit={commit}
+            focusStep={panel.focus}
+            onFocusStep={(n) => setPanel({ mode: "review", focus: n })}
             onClose={() => setPanel(null)}
           />
         )}

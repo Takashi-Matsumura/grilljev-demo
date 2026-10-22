@@ -15,7 +15,10 @@ export type PromptName =
   | "edit-step"
   | "scope-shift"
   | "summary"
-  | "narrate";
+  | "narrate"
+  | "review"
+  | "review-title"
+  | "review-direction";
 
 const cache = new Map<PromptName, string>();
 

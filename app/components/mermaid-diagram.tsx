@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayMark } from "@/lib/preview/scenes";
-import { PLACEHOLDER_TEXT } from "@/lib/render/mermaid";
+import { PLACEHOLDER_TEXT, type ArmTarget } from "@/lib/render/mermaid";
 
 type MermaidApi = typeof import("mermaid").default;
 
@@ -206,7 +206,46 @@ function dropAt(host: HTMLElement, clientY: number): { insertAt: number; lineY: 
   return { insertAt, lineY: boundary - 6 - host.getBoundingClientRect().top };
 }
 
+/** 枠の条件の文字は小さいので、これだけ広げて当たりにする */
+const COND_PAD_X = 40;
+const COND_PAD_Y = 10;
+
+type Box = { top: number; left: number; width: number; height: number };
+
+/**
+ * ドラッグ中のポインタが、場合の目印（空の場合の注記・枠の条件）の上にあれば、その目印と、
+ * 囲みの位置（host 基準）。目印の順番は armOfTarget（lib/render/mermaid.ts）と揃える:
+ * 条件は、枠の見出し（.loopText）が図の何番目の枠か、else の条件（.sectionTitle）が図全体で何番目か
+ */
+function armTargetAt(host: HTMLElement, x: number, y: number): { target: ArmTarget; box: Box } | null {
+  const base = host.getBoundingClientRect();
+  const hit = (el: Element, padX: number, padY: number): Box | null => {
+    const r = el.getBoundingClientRect();
+    if (x < r.left - padX || x > r.right + padX || y < r.top - padY || y > r.bottom + padY) return null;
+    return { top: r.top - padY - base.top, left: r.left - padX - base.left, width: r.width + 2 * padX, height: r.height + 2 * padY };
+  };
+  for (const el of host.querySelectorAll(`[${PLACEHOLDER_ATTR}]`)) {
+    const box = hit(el, 0, 0);
+    if (box) return { target: { kind: "placeholder", k: Number(el.getAttribute(PLACEHOLDER_ATTR)) }, box };
+  }
+  const firsts = [...host.querySelectorAll(".loopText")];
+  for (const [frame, el] of firsts.entries()) {
+    const box = hit(el, COND_PAD_X, COND_PAD_Y);
+    if (box) return { target: { kind: "first", frame }, box };
+  }
+  const elses = [...host.querySelectorAll(".sectionTitle")];
+  for (const [index, el] of elses.entries()) {
+    const box = hit(el, COND_PAD_X, COND_PAD_Y);
+    if (box) return { target: { kind: "else", index }, box };
+  }
+  return null;
+}
+
 type Drag = { n: number; startY: number; pointerId: number; moving: boolean };
+
+/** 落とす先。ステップの間（横線）か、場合の中（囲み） */
+type DropAt = { insertAt: number; lineY: number } | { arm: ArmTarget; box: Box };
+type Drop = { n: number } & DropAt;
 
 let renderSeq = 0;
 
@@ -227,6 +266,7 @@ export function MermaidDiagram({
   onPickStep,
   onMoveStep,
   onPickPlaceholder,
+  onDropToArm,
   highlightStep = 0,
   selectedStep = 0,
   play,
@@ -249,6 +289,11 @@ export function MermaidDiagram({
   onMoveStep?: (index: number, insertAt: number) => void;
   /** 空の場合の「＋ ここにステップを追加」を押したら、図の上から何番目（0 始まり）の注記かを渡す */
   onPickPlaceholder?: (k: number) => void;
+  /**
+   * ステップを、場合の目印（空の場合の注記・枠の条件）の上へドラッグして落としたら、動かしたステップ
+   * （0 始まり）と目印を渡す。渡すと、ドラッグ中に目印が落とし先になる
+   */
+  onDropToArm?: (index: number, target: ArmTarget) => void;
   /** 強調するステップの番号（1 始まり。0 なら強調しない）。音声で直しているステップを示す */
   highlightStep?: number;
   /** 編集パネルで選んでいるステップの番号（1 始まり。0 なら無し） */
@@ -266,7 +311,12 @@ export function MermaidDiagram({
   const dragRef = useRef<Drag | null>(null);
   /** ドラッグを終えた直後の click は、ステップを選ぶ操作として扱わない */
   const suppressClickRef = useRef(false);
-  const [drop, setDrop] = useState<{ n: number; insertAt: number; lineY: number } | null>(null);
+  const [drop, setDrop] = useState<Drop | null>(null);
+  /** ポインタの位置の落とし先。場合の目印の上なら場合の中、そうでなければステップの間 */
+  const dropTarget = (host: HTMLElement, x: number, y: number): DropAt | null => {
+    const arm = onDropToArm ? armTargetAt(host, x, y) : null;
+    return arm ? { arm: arm.target, box: arm.box } : dropAt(host, y);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -297,12 +347,21 @@ export function MermaidDiagram({
     };
   }, [code]);
 
+  // 強調するステップが変わったら、見えるところまでスクロールする（見えていれば動かない）
+  const shownFocusRef = useRef(0);
+
   // 描き直すたびに SVG が入れ替わるので、そのつど印を付け直す
   useEffect(() => {
     if (!svgHostRef.current) return;
     detachStepDots(svgHostRef.current);
     markPlaceholders(svgHostRef.current);
     markStep(svgHostRef.current, FOCUS_ATTR, highlightStep);
+    if (highlightStep !== shownFocusRef.current) {
+      shownFocusRef.current = highlightStep;
+      svgHostRef.current
+        .querySelector(`[${FOCUS_ATTR}]`)
+        ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    }
     markStep(svgHostRef.current, SELECTED_ATTR, selectedStep);
     if (play) markPlay(svgHostRef.current, play);
   }, [rendered, highlightStep, selectedStep, play]);
@@ -368,7 +427,7 @@ export function MermaidDiagram({
                   drag.moving = true;
                   e.currentTarget.setPointerCapture(e.pointerId);
                 }
-                const at = dropAt(host, e.clientY);
+                const at = dropTarget(host, e.clientX, e.clientY);
                 if (at) setDrop({ n: drag.n, ...at });
               }}
               onPointerUp={(e) => {
@@ -377,8 +436,9 @@ export function MermaidDiagram({
                 if (drag.moving) {
                   suppressClickRef.current = true;
                   const host = svgHostRef.current;
-                  const at = host ? dropAt(host, e.clientY) : null;
-                  if (at) onMoveStep?.(drag.n - 1, at.insertAt);
+                  const at = host ? dropTarget(host, e.clientX, e.clientY) : null;
+                  if (at && "arm" in at) onDropToArm?.(drag.n - 1, at.arm);
+                  else if (at) onMoveStep?.(drag.n - 1, at.insertAt);
                 }
                 endDrag();
               }}
@@ -386,7 +446,18 @@ export function MermaidDiagram({
               // securityLevel: "strict" の Mermaid が生成した SVG のみを入れる
               dangerouslySetInnerHTML={{ __html: rendered.svg }}
             />
-            {drop && (
+            {drop && "arm" in drop && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute rounded-md border-2 border-sky-500 bg-sky-500/10"
+                style={drop.box}
+              >
+                <span className="absolute -top-3 left-1 whitespace-nowrap rounded bg-sky-500 px-1.5 text-xs text-white">
+                  {drop.n} をこの場合の中へ
+                </span>
+              </div>
+            )}
+            {drop && "lineY" in drop && (
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 border-t-2 border-sky-500"

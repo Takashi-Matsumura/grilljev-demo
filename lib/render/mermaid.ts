@@ -145,6 +145,26 @@ export function emptyArms(model: FlowModel): Branch[] {
   return flowItems(model).flatMap((item) => (item.step === null ? [item.branch] : []));
 }
 
+/** 図に描かれる枠を、図の上から順に（場合を index 順に）。中にステップも位置も無い枠は描かれないので除く */
+export function drawnFrames(model: FlowModel): Branch[][] {
+  const groupIds = [...new Set(flowItems(model).flatMap((item) => (item.branch ? [item.branch.groupId] : [])))];
+  return groupIds.map((g) => model.branches.filter((b) => b.groupId === g).sort((a, b) => a.index - b.index));
+}
+
+/**
+ * 図の上の「場合」の目印。描いた SVG の中で、何番目の要素かで指す（mermaid-diagram.tsx のドロップ先）。
+ * placeholder = 空の場合の「＋ ここにステップを追加」、first = 枠の見出しの条件、else = 2 つ目以降の場合の条件
+ */
+export type ArmTarget = { kind: "placeholder"; k: number } | { kind: "first"; frame: number } | { kind: "else"; index: number };
+
+/** 図の上の目印から、その場合を割り出す。else を描くのは alt だけ（toMermaid） */
+export function armOfTarget(model: FlowModel, target: ArmTarget): Branch | undefined {
+  if (target.kind === "placeholder") return emptyArms(model)[target.k];
+  const frames = drawnFrames(model);
+  if (target.kind === "first") return frames[target.frame]?.[0];
+  return frames.filter((arms) => arms[0].kind === "alt").flatMap((arms) => arms.slice(1))[target.index];
+}
+
 export function toMermaid(model: FlowModel, options: MermaidOptions = {}): string {
   const lines: string[] = ["sequenceDiagram", "  autonumber"];
 
