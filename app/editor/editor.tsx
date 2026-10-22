@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActorEditDialog } from "@/app/components/actor-edit-dialog";
-import { FullscreenButton } from "@/app/components/diagram-fullscreen";
-import { ZoomControls } from "@/app/components/diagram-pane";
 import { ExportButtons } from "@/app/components/export-buttons";
 import { MermaidDiagram } from "@/app/components/mermaid-diagram";
 import { RetractedSteps, RetractNotice } from "@/app/components/retracted-steps";
@@ -17,6 +15,7 @@ import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
 import { BranchSection } from "./branch-section";
 import { StepAddPanel } from "./step-add-panel";
 import { useDiagramAutosave } from "./use-diagram-autosave";
+import { useWheelZoom } from "./use-wheel-zoom";
 
 /** 元に戻せる回数 */
 const MAX_HISTORY = 100;
@@ -43,7 +42,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   const model = history.present;
   const status = useDiagramAutosave(slug, model);
   const [panel, setPanel] = useState<Panel>(null);
-  const [zoom, setZoom] = useState(1);
+  const { zoom, setZoom, containerRef, hand } = useWheelZoom();
   const [showAssignees, setShowAssignees] = useState(false);
   const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
 
@@ -194,8 +193,15 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
                 担当者を表示
               </label>
             )}
-            <ZoomControls zoom={zoom} onZoom={setZoom} />
-            <FullscreenButton title={model.scope.title} code={displayCode} disabled={!drawable} compact />
+            {/* 拡大縮小は図の上で ⌘ + スクロール。ここは今の倍率の表示と、幅に合わせ直すボタン */}
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-xs tabular-nums text-zinc-600 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10"
+              title="⌘ + スクロールで拡大縮小、Space + ドラッグで移動。クリックで幅に合わせる"
+              onClick={() => setZoom(1)}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
           </div>
         )}
       </div>
@@ -204,11 +210,16 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="relative flex min-h-[20rem] min-w-0 flex-1 flex-col p-4 lg:min-h-0">
           <RetractNotice model={model} onCommit={commit} />
-          <div className="min-h-0 flex-1">
+          <div
+            className={`min-h-0 flex-1 ${
+              hand === "grabbing" ? "select-none [&_*]:!cursor-grabbing" : hand === "grab" ? "[&_*]:!cursor-grab" : ""
+            }`}
+          >
             {drawable ? (
               <MermaidDiagram
                 code={displayCode}
                 onSvg={(svg, forCode) => setRendered({ svg, code: forCode })}
+                onContainerRef={containerRef}
                 onPickStep={pickStep}
                 onMoveStep={moveStep}
                 selectedStep={selectedIndex + 1}
