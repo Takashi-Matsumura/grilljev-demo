@@ -4,12 +4,14 @@ import { PLACEHOLDER_TEXT } from "./mermaid";
  * 書き出し用の小さな純関数（ファイル名と SVG の整形）。ダウンロード自体はブラウザ側（component）で行う。
  */
 
-export type ExportFormat = "drawio" | "mmd" | "svg" | "md";
+/** svg11 = SVG 1.1 に揃えた .svg（Canva など、CSS を読まない取り込み先向け。app/components/svg11.ts） */
+export type ExportFormat = "drawio" | "mmd" | "svg" | "svg11" | "md";
 
 export const EXPORT_MIME: Record<ExportFormat, string> = {
   drawio: "application/vnd.jgraph.mxfile",
   mmd: "text/plain;charset=utf-8",
   svg: "image/svg+xml;charset=utf-8",
+  svg11: "image/svg+xml;charset=utf-8",
   md: "text/markdown;charset=utf-8",
 };
 
@@ -23,7 +25,8 @@ export function exportFileName(title: string, format: ExportFormat, now: Date = 
     "flow";
   const p = (n: number) => String(n).padStart(2, "0");
   const stamp = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}`;
-  return `${base}-${stamp}.${format}`;
+  // SVG 1.1 は中身の書き方が違うだけで、ファイルとしては .svg（名前の末尾で、ふつうの .svg と見分ける）
+  return format === "svg11" ? `${base}-${stamp}-svg11.svg` : `${base}-${stamp}.${format}`;
 }
 
 /**
