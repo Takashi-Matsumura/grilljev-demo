@@ -230,8 +230,17 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
     if (groupId !== null && collapsed.has(groupId)) {
       if (groupId !== openGroup) {
         if (openGroup !== null && !collapsed.has(openGroup)) lines.push("  end");
-        const hidden = items.filter((item) => item.step && item.branch?.groupId === groupId).length;
-        if (span) lines.push(`  Note over ${span}: ${esc(collapsedText(armsOf(model, groupId), hidden))}`);
+        const hidden = items.flatMap((item) => (item.step && item.branch?.groupId === groupId ? [item.step] : []));
+        // 注記は、中の手順に出てくる登場人物の左端から右端までにかける（関係ないレーンにはかけない）
+        const ids = new Set(hidden.flatMap((h) => [h.from, h.to]));
+        const lanes = actors.filter((a) => ids.has(a.id));
+        const over =
+          lanes.length === 0
+            ? span
+            : lanes.length === 1
+              ? safeId(lanes[0].id)
+              : `${safeId(lanes[0].id)},${safeId(lanes[lanes.length - 1].id)}`;
+        if (over) lines.push(`  Note over ${over}: ${esc(collapsedText(armsOf(model, groupId), hidden.length))}`);
         openGroup = groupId;
         openBranch = null;
       }

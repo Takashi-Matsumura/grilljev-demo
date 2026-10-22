@@ -302,6 +302,17 @@ type Drop = { n: number } & DropAt;
 
 let renderSeq = 0;
 
+/**
+ * 画面に出さずに、Mermaid のコードを SVG にする（/editor で、枠を畳んでいても .svg は開いた図で書き出すため）。
+ * 解釈できないコードなら null。
+ */
+export async function renderMermaidSvg(code: string): Promise<string | null> {
+  const mermaid = await loadMermaid();
+  if (!(await mermaid.parse(code, { suppressErrors: true }))) return null;
+  renderSeq += 1;
+  return (await mermaid.render(`mermaid-${renderSeq}`, code)).svg;
+}
+
 type Rendered = { for: string; svg: string };
 
 /**

@@ -28,7 +28,7 @@ type Props = {
 const BUTTONS: { format: ExportFormat; label: string; hint: string }[] = [
   { format: "drawio", label: ".drawio", hint: "draw.io（diagrams.net）で開いて編集できます" },
   { format: "mmd", label: ".mmd", hint: "Mermaid のコード。GitHub や Obsidian でそのまま描画できます" },
-  { format: "svg", label: ".svg", hint: "画像として使えます（画面に描画された図そのもの）" },
+  { format: "svg", label: ".svg", hint: "画像として使えます（画面に描画された図そのもの。畳んだ枠は開いて書き出します）" },
   {
     format: "svg11",
     label: ".svg（SVG 1.1）",

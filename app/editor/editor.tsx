@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActorEditDialog } from "@/app/components/actor-edit-dialog";
 import { ExportButtons } from "@/app/components/export-buttons";
-import { MermaidDiagram } from "@/app/components/mermaid-diagram";
+import { MermaidDiagram, renderMermaidSvg } from "@/app/components/mermaid-diagram";
 import { RetractedSteps, RetractNotice } from "@/app/components/retracted-steps";
 import { StepPanel } from "@/app/components/step-panel";
 import { addStepOp, type StepInput } from "@/lib/model/add-step";
@@ -148,7 +148,36 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
     () => toMermaid(model, { assignees: showAssignees, placeholders: true, collapsed: foldedSet }),
     [model, showAssignees, foldedSet],
   );
-  const svgForExport = rendered && rendered.code === displayCode ? rendered.svg : null;
+  // .svg は畳んだ枠も開いて、全部の手順で書き出す。畳んでいなければ画面の図をそのまま使う
+  const exportCode = useMemo(
+    () => toMermaid(model, { assignees: showAssignees, placeholders: true }),
+    [model, showAssignees],
+  );
+  const [expanded, setExpanded] = useState<{ svg: string; code: string } | null>(null);
+  useEffect(() => {
+    if (exportCode === displayCode) return;
+    let cancelled = false;
+    // 編集のたびに描き直さないよう、画面の図（mermaid-diagram.tsx）と同じくらい間を置く
+    const timer = setTimeout(() => {
+      renderMermaidSvg(exportCode)
+        .then((svg) => {
+          if (!cancelled && svg) setExpanded({ svg: stripPlaceholders(svg), code: exportCode });
+        })
+        .catch(() => {});
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [exportCode, displayCode]);
+  const svgForExport =
+    exportCode === displayCode
+      ? rendered && rendered.code === displayCode
+        ? rendered.svg
+        : null
+      : expanded && expanded.code === exportCode
+        ? expanded.svg
+        : null;
 
   const pickStep = (n: number) => {
     const id = steps[n - 1]?.id;
