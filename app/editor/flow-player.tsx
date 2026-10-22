@@ -38,7 +38,7 @@ export function FlowPlayer({ name, model, onClose }: { name: string; model: Flow
   );
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(1.6);
   const last = scenes.length - 1;
   const scene = scenes[Math.min(index, last)];
 
