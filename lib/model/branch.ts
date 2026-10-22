@@ -177,6 +177,30 @@ export function leaveBranchOps(model: FlowModel, stepId: StepId): ModelOp[] {
   return [{ op: "step.update", id: stepId, patch }];
 }
 
+/**
+ * 作ってあるステップを、場合（branchId）に入れる。ほかの枠・場合からの移し替えもこれ。
+ * - 枠にほかのステップがあれば、その場合の最後へ動かす（枠の中身が連続したままになるように）
+ * - 枠がまるごと空なら、ステップは動かさず、枠のほうがステップの位置に来る。先に枠を作って、
+ *   あとから既存のステップを入れるときに、手順が枠を作った場所（図の最後など）へ飛んでいかないように。
+ *   ただしステップが別の枠の中にいるなら、その枠の直後に出す（途中に残すと、元の枠が 2 つに割れるため）
+ */
+export function enterBranchOps(model: FlowModel, stepId: StepId, branchId: string): ModelOp[] {
+  const step = visibleSteps(model).find((s) => s.id === stepId);
+  const branch = model.branches.find((b) => b.id === branchId);
+  if (!step || !branch || step.branchId === branchId) return [];
+  const rest: FlowModel = { ...model, steps: model.steps.filter((s) => s.id !== stepId) };
+  const arms = groupArms(model, branch.groupId);
+  const frameEmpty = !visibleSteps(rest).some((s) => arms.some((b) => b.id === s.branchId));
+  const fromGroup = step.branchId ? model.branches.find((b) => b.id === step.branchId)?.groupId : undefined;
+  const order = !frameEmpty
+    ? orderInArm(rest, branchId)
+    : fromGroup !== undefined && fromGroup !== branch.groupId
+      ? orderAfterStep(model, stepId)
+      : step.order;
+  if (order === undefined) return [];
+  return [{ op: "step.update", id: stepId, patch: order === step.order ? { branchId } : { branchId, order } }];
+}
+
 /** 枠を消す（中のステップは残して、枠の外に出す）。 */
 export function removeGroupOps(model: FlowModel, groupId: string): ModelOp[] {
   return groupArms(model, groupId).map((b) => ({ op: "branch.remove", id: b.id }));
