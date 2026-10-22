@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { moveStepOps } from "@/lib/model/move";
-import type { FlowModel, ModelOp } from "@/lib/model/types";
+import type { Actor, FlowModel, ModelOp } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
 
 /**
@@ -128,46 +128,14 @@ export function StepPanel({
             }}
           />
 
-          {/* 誰が → 誰に。同じ人なら自分の中の作業（自己ループ） */}
-          <div className="flex items-center gap-1.5">
-            <select
-              aria-label="送り手（誰が）"
-              className={`${field} min-w-0 flex-1`}
-              value={step.from}
-              onChange={(e) => changeSender(e.target.value)}
-            >
-              {actors.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-            <span aria-hidden className="text-zinc-400">
-              →
-            </span>
-            <select
-              aria-label="受け手（誰に）"
-              className={`${field} min-w-0 flex-1`}
-              value={step.to}
-              onChange={(e) => update({ to: e.target.value })}
-            >
-              {actors.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.id === step.from ? `${a.name}（自分）` : a.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className={iconBtn}
-              aria-label="送り手と受け手を入れ替える"
-              title="送り手と受け手を入れ替える"
-              disabled={step.from === step.to}
-              onClick={swap}
-            >
-              ⇄
-            </button>
-          </div>
+          <FromToPicker
+            actors={actors}
+            from={step.from}
+            to={step.to}
+            onFrom={changeSender}
+            onTo={(id) => update({ to: id })}
+            onSwap={swap}
+          />
 
           <label className={row}>
             <span className={rowLabel}>渡すもの</span>
@@ -312,6 +280,70 @@ const iconBtn =
 const field = "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
 const row = "grid grid-cols-[4.5rem_1fr] items-center gap-2";
 const rowLabel = "text-xs text-zinc-500";
+
+/**
+ * 送り手と受け手。図と同じ左右の並び（ライフラインの順）に置き、矢印も図と同じ向きにする。
+ * 右から左へ渡すステップは「受け手 ← 送り手」と並ぶ。同じ人なら自分の中の作業（自己ループ）
+ */
+export function FromToPicker({
+  actors,
+  from,
+  to,
+  onFrom,
+  onTo,
+  onSwap,
+}: {
+  /** ライフラインの順（左から）に並べたもの */
+  actors: Actor[];
+  from: string;
+  to: string;
+  onFrom: (id: string) => void;
+  onTo: (id: string) => void;
+  onSwap: () => void;
+}) {
+  const lane = (id: string) => actors.findIndex((a) => a.id === id);
+  const self = from === to;
+  const fromLeft = lane(from) <= lane(to);
+  const picker = (side: "from" | "to") => (
+    <label className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="text-[11px] text-zinc-500">{side === "from" ? "送り手（誰が）" : "受け手（誰に）"}</span>
+      <select
+        className={`${field} min-w-0`}
+        value={side === "from" ? from : to}
+        onChange={(e) => (side === "from" ? onFrom(e.target.value) : onTo(e.target.value))}
+      >
+        {actors.map((a) => (
+          <option key={a.id} value={a.id}>
+            {side === "to" && a.id === from ? `${a.name}（自分）` : a.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  return (
+    <div className="flex items-end gap-1.5">
+      {fromLeft ? picker("from") : picker("to")}
+      <span
+        aria-hidden
+        className="flex h-8 shrink-0 items-center text-base text-zinc-500"
+        title={self ? "自分の中の作業" : undefined}
+      >
+        {self ? "↻" : fromLeft ? "→" : "←"}
+      </span>
+      {fromLeft ? picker("to") : picker("from")}
+      <button
+        type="button"
+        className={iconBtn}
+        aria-label="送り手と受け手を入れ替える"
+        title="送り手と受け手を入れ替える（矢印の向きが逆になります）"
+        disabled={self}
+        onClick={onSwap}
+      >
+        ⇄
+      </button>
+    </div>
+  );
+}
 
 /** 編集パネルの中の一区切り（内容・状態・分岐など）。見出しを小さく出す */
 export function PanelSection({ title, children }: { title: string; children: ReactNode }) {

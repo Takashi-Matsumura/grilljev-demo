@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PanelSection } from "@/app/components/step-panel";
+import { FromToPicker, PanelSection } from "@/app/components/step-panel";
 import type { StepInput } from "@/lib/model/add-step";
 import type { FlowModel } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
@@ -93,49 +93,17 @@ export function StepAddPanel({
               onChange={(e) => setLabel(e.target.value)}
             />
 
-            {/* 誰が → 誰に。同じ人なら自分の中の作業（自己ループ） */}
-            <div className="flex items-center gap-1.5">
-              <select
-                aria-label="送り手（誰が）"
-                className={`${field} min-w-0 flex-1`}
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              >
-                {actors.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <span aria-hidden className="text-zinc-400">
-                →
-              </span>
-              <select
-                aria-label="受け手（誰に）"
-                className={`${field} min-w-0 flex-1`}
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-              >
-                {actors.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.id === from ? `${a.name}（自分）` : a.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className={iconBtn}
-                aria-label="送り手と受け手を入れ替える"
-                title="送り手と受け手を入れ替える"
-                disabled={from === to}
-                onClick={() => {
-                  setFrom(to);
-                  setTo(from);
-                }}
-              >
-                ⇄
-              </button>
-            </div>
+            <FromToPicker
+              actors={actors}
+              from={from}
+              to={to}
+              onFrom={setFrom}
+              onTo={setTo}
+              onSwap={() => {
+                setFrom(to);
+                setTo(from);
+              }}
+            />
 
             <label className="grid grid-cols-[4.5rem_1fr] items-center gap-2">
               <span className="text-xs text-zinc-500">渡すもの</span>
@@ -205,6 +173,4 @@ export function StepAddPanel({
 
 const btn =
   "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10";
-const iconBtn =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black/15 hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/20 dark:hover:bg-white/10";
 const field = "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
