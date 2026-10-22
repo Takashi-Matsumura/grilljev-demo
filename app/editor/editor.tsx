@@ -16,6 +16,7 @@ import { stripPlaceholders } from "@/lib/render/export";
 import { emptyArms, hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
 import { BranchAddPanel } from "./branch-add-panel";
 import { BranchSection } from "./branch-section";
+import { FlowPlayer } from "./flow-player";
 import { StepAddPanel } from "./step-add-panel";
 import { useDiagramAutosave } from "./use-diagram-autosave";
 import { useWheelZoom } from "./use-wheel-zoom";
@@ -50,6 +51,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   const { zoom, setZoom, containerRef, hand } = useWheelZoom();
   const [showAssignees, setShowAssignees] = useState(false);
   const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const commit = useCallback((ops: ModelOp[]) => {
     setHistory((h) => {
@@ -220,6 +222,16 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
         >
           ↷ やり直し
         </button>
+        <span className="mx-1 h-6 w-px bg-black/10 dark:bg-white/15" aria-hidden />
+        <button
+          type="button"
+          className={btn}
+          disabled={steps.length === 0}
+          title="起点から終点まで、図の上で手順を順に追いながら、字幕で流れを確認します"
+          onClick={() => setPreviewing(true)}
+        >
+          ▶ フローの再生
+        </button>
         <span className="flex-1" />
         {drawable && (
           <div className="flex items-center gap-1">
@@ -313,6 +325,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
         <RetractedSteps model={model} onCommit={commit} />
         <ExportButtons model={model} mermaidCode={code} svg={svgForExport} empty={!drawable} />
       </div>
+      {previewing && <FlowPlayer name={name} model={model} onClose={() => setPreviewing(false)} />}
     </div>
   );
 }
