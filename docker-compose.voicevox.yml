@@ -1,0 +1,19 @@
+# 流れのプレビューの読み上げに使う VOICEVOX エンジン。Docker Desktop で動かす（Colima ではない）。
+#
+# 使い方:
+#   docker context use desktop-linux
+#   docker compose -f docker-compose.voicevox.yml up -d
+#   curl -s http://127.0.0.1:50021/version
+#
+# 既定はホストの 127.0.0.1 だけに公開する（npm run dev のアプリから呼ぶ分にはこれで足りる）。
+# Colima 側の app コンテナから host.docker.internal 経由で呼ぶときだけ VOICEVOX_BIND=0.0.0.0 にする。
+#
+# Apple Silicon でも cpu イメージに arm64 版がある。GPU（Metal）は使えないが、字幕 1 文なら CPU で十分速い。
+
+services:
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-0.25.2
+    container_name: voicevox-engine
+    restart: unless-stopped
+    ports:
+      - "${VOICEVOX_BIND:-127.0.0.1}:50021:50021"
