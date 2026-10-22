@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PanelSection } from "@/app/components/step-panel";
 import {
   addArmOps,
   armConditionPrefix,
@@ -36,14 +37,13 @@ export function BranchSection({
   const branch = step?.branchId ? model.branches.find((b) => b.id === step.branchId) : undefined;
   if (!step) return null;
   return (
-    <div className="flex flex-col gap-2 border-t border-black/10 pt-3 dark:border-white/15">
-      <span className="text-xs text-zinc-500">分岐（枠）</span>
+    <PanelSection title="分岐（枠）">
       {branch ? (
         <InBranch key={branch.id} model={model} stepId={stepId} branch={branch} onCommit={onCommit} />
       ) : (
         <OutOfBranch key={stepId} model={model} stepId={stepId} onCommit={onCommit} />
       )}
-    </div>
+    </PanelSection>
   );
 }
 
@@ -95,7 +95,7 @@ function InBranch({
         の中にあります
       </p>
       <label className="flex flex-col gap-1">
-        条件
+        <span className="text-xs text-zinc-500">条件</span>
         <input
           className={field}
           value={condition}
@@ -106,7 +106,7 @@ function InBranch({
       </label>
       {arms.length === 1 && (
         <label className="flex flex-col gap-1">
-          種類
+          <span className="text-xs text-zinc-500">種類</span>
           <select
             className={field}
             value={branch.kind}
@@ -239,7 +239,7 @@ function OutOfBranch({
       {mode === "wrap" && (
         <>
           <label className="flex flex-col gap-1">
-            種類
+            <span className="text-xs text-zinc-500">種類</span>
             <select className={field} value={kind} onChange={(e) => setKind(e.target.value as Branch["kind"])}>
               {BRANCH_KINDS.map((k) => (
                 <option key={k.kind} value={k.kind}>
@@ -249,7 +249,7 @@ function OutOfBranch({
             </select>
           </label>
           <label className="flex flex-col gap-1">
-            条件
+            <span className="text-xs text-zinc-500">条件</span>
             <input
               autoFocus
               onFocus={caretToEnd}
@@ -269,7 +269,7 @@ function OutOfBranch({
       {mode === "join" && (
         <>
           <label className="flex flex-col gap-1">
-            入れる先
+            <span className="text-xs text-zinc-500">入れる先</span>
             <select className={field} value={target} onChange={(e) => setTarget(e.target.value)}>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -294,7 +294,7 @@ function OutOfBranch({
         <>
           {altGroups.length > 1 && (
             <label className="flex flex-col gap-1">
-              どの場合分けに
+              <span className="text-xs text-zinc-500">どの場合分けに</span>
               <select
                 className={field}
                 value={armGroup}
@@ -314,7 +314,7 @@ function OutOfBranch({
             </label>
           )}
           <label className="flex flex-col gap-1">
-            この場合の条件
+            <span className="text-xs text-zinc-500">この場合の条件</span>
             <input
               autoFocus
               onFocus={caretToEnd}
