@@ -27,7 +27,7 @@ export function StepPanel({
   onCommit: (ops: ModelOp[]) => void;
   /** 渡すと「声で直す」を出す。このステップを、番号を言わずに音声で直す対象にする */
   onFocus?: (stepId: string) => void;
-  /** 確定チェックと順番の間に足す欄（/editor の分岐の操作など） */
+  /** 「状態」の下に足す欄（/editor の分岐の操作など）。PanelSection で包むと見た目が揃う */
   children?: ReactNode;
 }) {
   const steps = visibleSteps(model);
@@ -48,7 +48,6 @@ export function StepPanel({
     setDraft(null);
     if (next !== "" && next !== step.label) update({ label: next });
   };
-  const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   const sender = model.actors.find((a) => a.id === step.from);
   // 担当者を書けるのは、送り手が部署・社外のとき（個人・システムは、それ自体が担当）
   const canAssign = sender !== undefined && sender.kind !== "person" && sender.kind !== "system";
@@ -81,22 +80,24 @@ export function StepPanel({
     const keep = step.assignee !== undefined && members.includes(step.assignee);
     update(keep ? { from: id } : { from: id, assignee: undefined });
   };
+  /** 送り手と受け手を入れ替える。担当者は新しい送り手のメンバーなら残す */
+  const swap = () => {
+    const members = model.actors.find((a) => a.id === step.to)?.members ?? [];
+    const keep = step.assignee !== undefined && members.includes(step.assignee);
+    update(keep ? { from: step.to, to: step.from } : { from: step.to, to: step.from, assignee: undefined });
+  };
   const actors = [...model.actors].sort((a, b) => a.lane - b.lane);
-
-  const btn =
-    "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10";
-  const field =
-    "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
+  const confirmed = step.status === "confirmed";
 
   return (
     <aside
       aria-label="ステップの編集"
-      className="flex shrink-0 flex-col gap-3 overflow-y-auto border-t border-black/10 p-4 text-sm lg:w-80 lg:border-l lg:border-t-0 dark:border-white/15"
+      className="flex shrink-0 flex-col border-t border-black/10 text-sm lg:w-80 lg:border-l lg:border-t-0 dark:border-white/15"
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
       }}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 px-4 pb-2 pt-4">
         <h2 className="font-medium">
           <span className="mr-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-sky-600 px-1.5 text-xs text-white">
             {index + 1}
@@ -112,114 +113,154 @@ export function StepPanel({
           ×
         </button>
       </div>
-      <p className="-mt-2 text-xs text-zinc-500">
-        {nameOf(step.from)} → {nameOf(step.to)}
-      </p>
 
-      <label className="flex flex-col gap-1">
-        名前
-        <input
-          className={field}
-          value={label}
-          onChange={(e) => setDraft({ for: `${step.id}:${step.label}`, label: e.target.value })}
-          onBlur={commitLabel}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) commitLabel();
-          }}
-        />
-      </label>
-
-      {(["from", "to"] as const).map((side) => (
-        <label key={side} className="flex flex-col gap-1">
-          {side === "from" ? "送り手（誰が）" : "受け手（誰に）"}
-          <select
-            className={field}
-            value={step[side]}
-            onChange={(e) => (side === "from" ? changeSender(e.target.value) : update({ to: e.target.value }))}
-          >
-            {actors.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      ))}
-
-      <label className="flex flex-col gap-1">
-        渡すもの（図の帯）
-        <input
-          className={field}
-          value={artifact}
-          placeholder="なし（書類・データ・ファイル）"
-          onChange={(e) => setArtifactDraft({ for: artifactKey, text: e.target.value })}
-          onBlur={commitArtifact}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) commitArtifact();
-          }}
-        />
-      </label>
-
-      {canAssign && (
-        <label className="flex flex-col gap-1">
-          担当者（{sender.name}の中で、実際にやる人）
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pb-4 pt-2">
+        <PanelSection title="内容">
           <input
+            aria-label="ステップの名前"
             className={field}
-            value={assignee}
-            list={`members-${sender.id}`}
-            placeholder="未設定"
-            onChange={(e) => setAssigneeDraft({ for: assigneeKey, text: e.target.value })}
-            onBlur={commitAssignee}
+            value={label}
+            placeholder="何をする"
+            onChange={(e) => setDraft({ for: `${step.id}:${step.label}`, label: e.target.value })}
+            onBlur={commitLabel}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) commitAssignee();
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) commitLabel();
             }}
           />
-          <datalist id={`members-${sender.id}`}>
-            {(sender.members ?? []).map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </label>
-      )}
 
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={step.status === "confirmed"}
-          // 「確定」にしたら実線・確信度 1 にする（要対応の承認と同じ扱い）。外したら仮に戻す
-          onChange={(e) =>
-            update(e.target.checked ? { status: "confirmed", confidence: 1 } : { status: "provisional" })
-          }
-        />
-        確定にする（外すと仮のステップ＝点線）
-      </label>
+          {/* 誰が → 誰に。同じ人なら自分の中の作業（自己ループ） */}
+          <div className="flex items-center gap-1.5">
+            <select
+              aria-label="送り手（誰が）"
+              className={`${field} min-w-0 flex-1`}
+              value={step.from}
+              onChange={(e) => changeSender(e.target.value)}
+            >
+              {actors.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <span aria-hidden className="text-zinc-400">
+              →
+            </span>
+            <select
+              aria-label="受け手（誰に）"
+              className={`${field} min-w-0 flex-1`}
+              value={step.to}
+              onChange={(e) => update({ to: e.target.value })}
+            >
+              {actors.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.id === step.from ? `${a.name}（自分）` : a.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className={iconBtn}
+              aria-label="送り手と受け手を入れ替える"
+              title="送り手と受け手を入れ替える"
+              disabled={step.from === step.to}
+              onClick={swap}
+            >
+              ⇄
+            </button>
+          </div>
 
-      {children}
+          <label className={row}>
+            <span className={rowLabel}>渡すもの</span>
+            <input
+              className={field}
+              value={artifact}
+              placeholder="なし（書類・データ）"
+              title="図の帯になります"
+              onChange={(e) => setArtifactDraft({ for: artifactKey, text: e.target.value })}
+              onBlur={commitArtifact}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) commitArtifact();
+              }}
+            />
+          </label>
 
-      <div className="flex flex-col gap-2 border-t border-black/10 pt-3 dark:border-white/15">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">順番</span>
-          <button
-            type="button"
-            className={btn}
-            disabled={index === 0}
-            onClick={() => onCommit(moveStepOps(steps, index, index - 1))}
-          >
-            ↑ 前へ
-          </button>
-          <button
-            type="button"
-            className={btn}
-            disabled={index === steps.length - 1}
-            onClick={() => onCommit(moveStepOps(steps, index, index + 2))}
-          >
-            ↓ 後へ
-          </button>
-        </div>
-        <p className="text-xs text-zinc-500">図の番号やステップ名をドラッグしても並べ替えられます</p>
+          {canAssign && (
+            <label className={row}>
+              <span className={rowLabel}>担当者</span>
+              <input
+                className={field}
+                value={assignee}
+                list={`members-${sender.id}`}
+                placeholder="未設定"
+                title={`${sender.name}の中で、実際にやる人`}
+                onChange={(e) => setAssigneeDraft({ for: assigneeKey, text: e.target.value })}
+                onBlur={commitAssignee}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) commitAssignee();
+                }}
+              />
+              <datalist id={`members-${sender.id}`}>
+                {(sender.members ?? []).map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            </label>
+          )}
+        </PanelSection>
+
+        <PanelSection title="状態">
+          <div className="flex items-center gap-3">
+            <div role="group" aria-label="確定か仮か" className="inline-flex rounded-md border border-black/15 p-0.5 dark:border-white/20">
+              {/* 「確定」にしたら実線・確信度 1 にする（要対応の承認と同じ扱い）。「仮」は点線 */}
+              {(
+                [
+                  ["確定", true],
+                  ["仮", false],
+                ] as const
+              ).map(([text, value]) => (
+                <button
+                  key={text}
+                  type="button"
+                  aria-pressed={confirmed === value}
+                  className="rounded px-3 py-1 text-sm text-zinc-600 aria-pressed:bg-sky-600 aria-pressed:text-white dark:text-zinc-300"
+                  onClick={() =>
+                    confirmed !== value &&
+                    update(value ? { status: "confirmed", confidence: 1 } : { status: "provisional" })
+                  }
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-zinc-500">{confirmed ? "実線で描きます" : "点線で描きます"}</span>
+          </div>
+        </PanelSection>
+
+        {children}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-black/10 pt-3 dark:border-white/15">
+      <div className="flex items-center gap-1.5 border-t border-black/10 px-4 py-3 dark:border-white/15">
+        <span className="mr-0.5 text-xs text-zinc-500">順番</span>
+        <button
+          type="button"
+          className={iconBtn}
+          aria-label="前へ"
+          title="前へ（図の番号やステップ名をドラッグしても並べ替えられます）"
+          disabled={index === 0}
+          onClick={() => onCommit(moveStepOps(steps, index, index - 1))}
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          className={iconBtn}
+          aria-label="後へ"
+          title="後へ（図の番号やステップ名をドラッグしても並べ替えられます）"
+          disabled={index === steps.length - 1}
+          onClick={() => onCommit(moveStepOps(steps, index, index + 2))}
+        >
+          ↓
+        </button>
         {onFocus && (
           <button
             type="button"
@@ -236,9 +277,12 @@ export function StepPanel({
         <span className="flex-1" />
         {confirmingDelete === step.id ? (
           <>
+            <button type="button" className={btn} onClick={() => setConfirmingDelete(null)}>
+              やめる
+            </button>
             <button
               type="button"
-              className={`${btn} border-red-600 text-red-700 dark:border-red-400 dark:text-red-300`}
+              className="rounded-md bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700"
               onClick={() => {
                 onCommit([{ op: "step.retract", id: step.id }]);
                 onClose();
@@ -246,16 +290,35 @@ export function StepPanel({
             >
               削除する
             </button>
-            <button type="button" className={btn} onClick={() => setConfirmingDelete(null)}>
-              やめる
-            </button>
           </>
         ) : (
-          <button type="button" className={btn} onClick={() => setConfirmingDelete(step.id)}>
+          <button
+            type="button"
+            className="rounded-md px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+            onClick={() => setConfirmingDelete(step.id)}
+          >
             削除
           </button>
         )}
       </div>
     </aside>
+  );
+}
+
+const btn =
+  "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10";
+const iconBtn =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black/15 hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/20 dark:hover:bg-white/10";
+const field = "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
+const row = "grid grid-cols-[4.5rem_1fr] items-center gap-2";
+const rowLabel = "text-xs text-zinc-500";
+
+/** 編集パネルの中の一区切り（内容・状態・分岐など）。見出しを小さく出す */
+export function PanelSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-xs font-medium text-zinc-500">{title}</h3>
+      {children}
+    </section>
   );
 }
