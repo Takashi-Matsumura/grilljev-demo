@@ -13,13 +13,24 @@ import { applyOps } from "@/lib/model/reducer";
 import { addFrameOps, enterBranchOps } from "@/lib/model/branch";
 import type { Branch, FlowModel, ModelOp } from "@/lib/model/types";
 import { stripPlaceholders } from "@/lib/render/export";
-import { armOfTarget, emptyArms, hasDiagram, toMermaid, visibleSteps, type ArmTarget } from "@/lib/render/mermaid";
+import {
+  armOfTarget,
+  collapsedFrames,
+  drawnFrames,
+  emptyArms,
+  frameIds,
+  hasDiagram,
+  toMermaid,
+  visibleSteps,
+  type ArmTarget,
+} from "@/lib/render/mermaid";
 import { BranchAddPanel } from "./branch-add-panel";
 import { BranchSection } from "./branch-section";
 import { FlowPlayer } from "./flow-player";
 import { ReviewPanel } from "./review-panel";
 import { StepAddPanel } from "./step-add-panel";
 import { useAiReview } from "./use-ai-review";
+import { useCollapsedFrames } from "./use-collapsed-frames";
 import { useDiagramAutosave } from "./use-diagram-autosave";
 import { useWheelZoom } from "./use-wheel-zoom";
 
@@ -97,12 +108,6 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   // 書き出し（.mmd・.drawio）は担当者を付けないコード。画面の図（.svg）は表示どおり
   const code = useMemo(() => toMermaid(model), [model]);
   const hasAssignees = model.steps.some((s) => s.status !== "retracted" && s.assignee);
-  // 画面の図には、空の場合に「＋ ここにステップを追加」を描く（書き出す .svg からは外す）
-  const displayCode = useMemo(
-    () => toMermaid(model, { assignees: showAssignees, placeholders: true }),
-    [model, showAssignees],
-  );
-  const svgForExport = rendered && rendered.code === displayCode ? rendered.svg : null;
   const drawable = hasDiagram(model);
   const steps = visibleSteps(model);
 
@@ -114,6 +119,36 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
       : -1;
   const intoArm = panel?.mode === "add" && panel.into ? model.branches.find((b) => b.id === panel.into) : undefined;
   const selectedIndex = editingIndex >= 0 ? editingIndex : afterIndex;
+
+  // ── 枠（alt / opt / loop）を畳む。画面の見え方だけで、図のデータは変えない ──
+  const [collapsed, setCollapsed] = useCollapsedFrames(slug);
+  const frames = frameIds(model);
+  // 選んでいる・点検で示している・中に足そうとしているステップの枠は、畳んでいても開いて見せる
+  const shownGroups = new Set(
+    [
+      steps[selectedIndex]?.branchId,
+      panel?.mode === "review" ? steps[panel.focus - 1]?.branchId : undefined,
+      intoArm?.id,
+    ].flatMap((id) => model.branches.find((b) => b.id === id)?.groupId ?? []),
+  );
+  const folded = [...collapsed].filter((g) => frames.includes(g) && !shownGroups.has(g)).sort();
+  const foldedKey = folded.join(",");
+  const foldedSet = useMemo(() => new Set(foldedKey ? foldedKey.split(",") : []), [foldedKey]);
+  const collapseFrame = (frame: number) => {
+    const arms = drawnFrames(model, foldedSet)[frame];
+    if (arms) setCollapsed(new Set([...collapsed, arms[0].groupId]));
+  };
+  const expandFrame = (k: number) => {
+    const groupId = collapsedFrames(model, foldedSet)[k];
+    if (groupId) setCollapsed(new Set([...collapsed].filter((g) => g !== groupId)));
+  };
+
+  // 画面の図には、空の場合に「＋ ここにステップを追加」を描く（書き出す .svg からは外す）
+  const displayCode = useMemo(
+    () => toMermaid(model, { assignees: showAssignees, placeholders: true, collapsed: foldedSet }),
+    [model, showAssignees, foldedSet],
+  );
+  const svgForExport = rendered && rendered.code === displayCode ? rendered.svg : null;
 
   const pickStep = (n: number) => {
     const id = steps[n - 1]?.id;
@@ -133,7 +168,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   };
   /** 図の上で、ステップを場合の目印（空の場合の注記・枠の条件）へ落としたら、その場合の中へ入れる */
   const dropToArm = (index: number, target: ArmTarget) => {
-    const arm = armOfTarget(model, target);
+    const arm = armOfTarget(model, target, foldedSet);
     const step = steps[index];
     if (!arm || !step) return;
     const ops = enterBranchOps(model, step.id, arm.id, "frame");
@@ -149,7 +184,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   /** 場合（branchId）の最後にステップを足すフォームを開く */
   const openAddInto = (branchId: string) => setPanel({ mode: "add", afterStepId: null, into: branchId, seq: nextSeq });
   const pickPlaceholder = (k: number) => {
-    const arm = emptyArms(model)[k];
+    const arm = emptyArms(model, foldedSet)[k];
     if (arm) openAddInto(arm.id);
   };
   const addStep = (input: StepInput, again: boolean) => {
@@ -260,6 +295,16 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
         <span className="flex-1" />
         {drawable && (
           <div className="flex items-center gap-1">
+            {frames.length > 0 && (
+              <button
+                type="button"
+                className="mr-2 rounded-md px-2 py-1 text-xs text-zinc-600 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10"
+                title="枠（alt / opt / loop）は、見出しの札を押すと 1 つずつ畳めます。畳んだ枠は押すと開きます"
+                onClick={() => setCollapsed(folded.length > 0 ? new Set() : new Set(frames))}
+              >
+                {folded.length > 0 ? "▾ 枠をすべて開く" : "▸ 枠をすべて畳む"}
+              </button>
+            )}
             {hasAssignees && (
               <label className="mr-2 flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
                 <input type="checkbox" checked={showAssignees} onChange={(e) => setShowAssignees(e.target.checked)} />
@@ -297,6 +342,8 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
                 onPickPlaceholder={pickPlaceholder}
                 onMoveStep={moveStep}
                 onDropToArm={dropToArm}
+                onCollapseFrame={collapseFrame}
+                onExpandFrame={expandFrame}
                 selectedStep={selectedIndex + 1}
                 highlightStep={panel?.mode === "review" ? panel.focus : 0}
                 // 1 = 幅に合わせる（小さい図は拡大しない）。それ以外は幅に対する倍率
