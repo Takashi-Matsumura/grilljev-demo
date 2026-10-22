@@ -1,4 +1,4 @@
-import type { Actor, FlowModel, Step } from "@/lib/model/types";
+import type { Actor, Branch, FlowModel, Step } from "@/lib/model/types";
 
 /**
  * FlowModel → Mermaid の sequenceDiagram。
@@ -91,7 +91,59 @@ export function hasDiagram(model: FlowModel): boolean {
 export type MermaidOptions = {
   /** ステップ名の後ろに担当者を付ける（「フローを入力する（田中）」）。画面の表示用。既定は付けない */
   assignees?: boolean;
+  /**
+   * 中にステップが無い場合（空の枠）に「＋ ここにステップを追加」の注記を描く。/editor の画面用。
+   * 書き出し（.mmd）には描かない（空の場合は、条件だけの空の枠になる）
+   */
+  placeholders?: boolean;
 };
+
+/** 空の場合に描く注記の文言。図の上でこの注記を押すと、その場合にステップを足す（mermaid-diagram.tsx） */
+export const PLACEHOLDER_TEXT = "＋ ここにステップを追加";
+
+/** 図に描く並び。ステップと、中にステップが無い場合（空の枠） */
+type FlowItem = { step: Step; branch: Branch | undefined } | { step: null; branch: Branch };
+
+/**
+ * ステップと空の場合を、図の並び順に並べる。
+ * 空の場合は、同じ枠のほかの場合の隣に置く（前の場合の最後のステップの直後。前に無ければ、後ろの場合の
+ * 最初のステップの直前）。枠の場合がすべて空のときは、その枠の order の位置に置く（order が無ければ描かない）。
+ */
+function flowItems(model: FlowModel): FlowItem[] {
+  const steps = visibleSteps(model);
+  const branchById = new Map(model.branches.map((b) => [b.id, b]));
+  // [order, 同じ order の中での順, item]
+  const keyed: [number, number, FlowItem][] = steps.map((step) => [
+    step.order,
+    0,
+    { step, branch: step.branchId ? branchById.get(step.branchId) : undefined },
+  ]);
+  const filled = new Set(steps.map((s) => s.branchId));
+  for (const groupId of new Set(model.branches.map((b) => b.groupId))) {
+    const arms = model.branches.filter((b) => b.groupId === groupId).sort((a, b) => a.index - b.index);
+    const base = arms.find((b) => b.order !== undefined)?.order;
+    arms.forEach((arm, i) => {
+      if (filled.has(arm.id)) return;
+      const before = arms.slice(0, i).findLast((b) => filled.has(b.id));
+      const after = arms.slice(i + 1).find((b) => filled.has(b.id));
+      if (before) {
+        const last = steps.findLast((s) => s.branchId === before.id)!;
+        keyed.push([last.order, 1 + i, { step: null, branch: arm }]);
+      } else if (after) {
+        const first = steps.find((s) => s.branchId === after.id)!;
+        keyed.push([first.order, -arms.length + i, { step: null, branch: arm }]);
+      } else if (base !== undefined) {
+        keyed.push([base, i, { step: null, branch: arm }]);
+      }
+    });
+  }
+  return keyed.sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, , item]) => item);
+}
+
+/** 図に描かれる空の場合を、図の上から順に。n 番目の「＋ ここにステップを追加」が、n 番目の場合 */
+export function emptyArms(model: FlowModel): Branch[] {
+  return flowItems(model).flatMap((item) => (item.step === null ? [item.branch] : []));
+}
 
 export function toMermaid(model: FlowModel, options: MermaidOptions = {}): string {
   const lines: string[] = ["sequenceDiagram", "  autonumber"];
@@ -100,12 +152,14 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
     lines.push(`  ${participantKeyword(actor)} ${safeId(actor.id)} as ${esc(actorLabel(actor))}`);
   }
 
-  const branchById = new Map(model.branches.map((b) => [b.id, b]));
+  const actors = [...model.actors].sort((a, b) => a.lane - b.lane);
+  // 空の場合の注記は、左端から右端の登場人物にかける（枠の幅いっぱいに出す）
+  const span =
+    actors.length > 1 ? `${safeId(actors[0].id)},${safeId(actors[actors.length - 1].id)}` : safeId(actors[0]?.id ?? "");
   let openGroup: string | null = null;
   let openBranch: string | null = null;
 
-  for (const step of visibleSteps(model)) {
-    const branch = step.branchId ? branchById.get(step.branchId) : undefined;
+  for (const { step, branch } of flowItems(model)) {
     const groupId = branch?.groupId ?? null;
 
     if (groupId !== openGroup) {
@@ -120,6 +174,10 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
     }
 
     const indent = openGroup !== null ? "    " : "  ";
+    if (step === null) {
+      if (options.placeholders && span) lines.push(`${indent}Note over ${span}: ${PLACEHOLDER_TEXT}`);
+      continue;
+    }
     const from = safeId(step.from);
     const to = safeId(step.to);
     const label =

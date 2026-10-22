@@ -1,5 +1,5 @@
 import { visibleSteps } from "../render/mermaid";
-import { nextOrder } from "./reducer";
+import { endOrder, orderInArm, orderJustAfter } from "./branch";
 import type { ActorId, FlowModel, ModelOp, StepId } from "./types";
 
 /** 手で足すステップの入力（/editor のステップ追加フォーム。後で音声からも同じ形で渡す）。 */
@@ -20,17 +20,33 @@ export function nextStepId(model: FlowModel): StepId {
 }
 
 /**
- * ステップを 1 つ足す op。afterStepId を渡すと、図の並びでそのステップの直後に入れる
- * （order は直後のステップとの中点）。渡さない・見つからないときは末尾。
- * 前後が同じ分岐の中なら、その分岐に入れる。
+ * ステップを 1 つ足す op。afterStepId を渡すと、図の並びでそのステップの直後に入れる。
+ * 渡さない・見つからないときは末尾。前後が同じ枠の中なら、前のステップと同じ場合に入れる。
+ * into（場合の id）を渡すと、その場合の最後に入れる（空の枠の「＋ ここにステップを追加」）。
  */
-export function addStepOp(model: FlowModel, input: StepInput, afterStepId?: StepId | null): ModelOp {
+export function addStepOp(
+  model: FlowModel,
+  input: StepInput,
+  afterStepId?: StepId | null,
+  into?: string | null,
+): ModelOp {
   const steps = visibleSteps(model);
+  const intoOrder = into ? orderInArm(model, into) : undefined;
   const at = afterStepId ? steps.findIndex((s) => s.id === afterStepId) : -1;
   const prev = at >= 0 ? steps[at] : undefined;
   const next = at >= 0 ? steps[at + 1] : undefined;
-  const order = prev ? (next ? (prev.order + next.order) / 2 : prev.order + 1) : nextOrder(model);
-  const branchId = prev && next && prev.branchId === next.branchId ? prev.branchId : null;
+  const groupOf = new Map(model.branches.map((b) => [b.id, b.groupId]));
+  const group = (id: string | null) => (id ? groupOf.get(id) : undefined);
+  let branchId: string | null = null;
+  let order: number;
+  if (into && intoOrder !== undefined) {
+    branchId = into;
+    order = intoOrder;
+  } else if (prev) {
+    // 枠の途中（同じ枠の別の場合との境目も）に入れたら、前のステップの場合に入れる（枠が割れないように）
+    if (next && prev.branchId !== null && group(prev.branchId) === group(next.branchId)) branchId = prev.branchId;
+    order = branchId ? (prev.order + next!.order) / 2 : orderJustAfter(model, prev.order);
+  } else order = endOrder(model);
   const artifact = input.artifact?.replace(/\s+/g, " ").trim();
   return {
     op: "step.add",
@@ -50,3 +66,4 @@ export function addStepOp(model: FlowModel, input: StepInput, afterStepId?: Step
     },
   };
 }
+

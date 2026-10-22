@@ -162,21 +162,23 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
     }
 
     case "step.update": {
-      if (!m.steps.some((s) => s.id === op.id)) return null;
-      return {
-        ...m,
-        steps: m.steps.map((s) => (s.id === op.id ? { ...s, ...op.patch } : s)),
-      };
+      const target = m.steps.find((s) => s.id === op.id);
+      if (!target) return null;
+      const next = { ...m, steps: m.steps.map((s) => (s.id === op.id ? { ...s, ...op.patch } : s)) };
+      return target.branchId !== null && next.steps.find((s) => s.id === op.id)?.branchId !== target.branchId
+        ? keepEmptyArm(next, target.branchId, target.order)
+        : next;
     }
 
     case "step.retract": {
       const target = m.steps.find((s) => s.id === op.id);
       if (!target || target.status === "retracted") return null;
       const retractedFrom = target.status;
-      return {
+      const next = {
         ...m,
         steps: m.steps.map((s): Step => (s.id === op.id ? { ...s, status: "retracted", retractedFrom } : s)),
       };
+      return target.branchId !== null ? keepEmptyArm(next, target.branchId, target.order) : next;
     }
 
     case "step.restore": {
@@ -309,4 +311,13 @@ export function modelFromSeed(seed: SessionSeed, at: string): FlowModel {
 /** 末尾に足すときの order。中間に挿すときは前後の中点を自分で計算すること。 */
 export function nextOrder(model: FlowModel): number {
   return model.steps.reduce((max, s) => Math.max(max, s.order), 0) + 1;
+}
+
+/**
+ * ステップが場合（branchId）から抜けて、その場合に残るステップが無くなったら、抜けたステップの位置を
+ * 場合の order として覚えておく（空の枠も、元の位置に描き続けるため）。
+ */
+function keepEmptyArm(m: FlowModel, branchId: string, order: number): FlowModel {
+  if (m.steps.some((s) => s.branchId === branchId && s.status !== "retracted")) return m;
+  return { ...m, branches: m.branches.map((b) => (b.id === branchId ? { ...b, order } : b)) };
 }

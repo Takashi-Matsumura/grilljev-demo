@@ -1,3 +1,5 @@
+import { PLACEHOLDER_TEXT } from "./mermaid";
+
 /**
  * 書き出し用の小さな純関数（ファイル名と SVG の整形）。ダウンロード自体はブラウザ側（component）で行う。
  */
@@ -47,4 +49,22 @@ export function finalizeSvg(svg: string): string {
     }
   }
   return out.startsWith("<?xml") ? out : `<?xml version="1.0" encoding="UTF-8"?>\n${out}`;
+}
+
+/**
+ * 画面の図から、空の場合の注記（「＋ ここにステップを追加」）を外した SVG にする（.svg の書き出し用）。
+ * 注記は画面で押すためのもので、図の中身ではない。外したあとは、条件だけの空の枠として残る。
+ * DOMParser を使うので、ブラウザでだけ呼ぶ。
+ */
+export function stripPlaceholders(svg: string): string {
+  if (!svg.includes(PLACEHOLDER_TEXT)) return svg;
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  for (const text of doc.querySelectorAll(".noteText")) {
+    if (text.textContent?.trim() !== PLACEHOLDER_TEXT) continue;
+    // 注記は <g>（枠の rect + 文字）にまとまっている
+    const g = text.parentElement;
+    if (g && g.tagName.toLowerCase() === "g") g.remove();
+    else text.remove();
+  }
+  return new XMLSerializer().serializeToString(doc.documentElement);
 }

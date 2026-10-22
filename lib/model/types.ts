@@ -75,6 +75,11 @@ export type Branch = {
   /** alt の else 側は同じ groupId で index を 1 にする */
   groupId: string;
   index: number;
+  /**
+   * 枠の中が空のときの、図の中の位置（ステップの order と同じ物差し）。/editor で先に枠を作ると、
+   * 中にステップが無いので、これで描く位置を決める。中にステップがあれば使わない（ステップの位置で決まる）
+   */
+  order?: number;
 };
 
 export type IssueKind =

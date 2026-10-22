@@ -10,8 +10,11 @@ import { StepPanel } from "@/app/components/step-panel";
 import { addStepOp, type StepInput } from "@/lib/model/add-step";
 import { moveStepOps } from "@/lib/model/move";
 import { applyOps } from "@/lib/model/reducer";
-import type { FlowModel, ModelOp } from "@/lib/model/types";
-import { hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
+import { addFrameOps } from "@/lib/model/branch";
+import type { Branch, FlowModel, ModelOp } from "@/lib/model/types";
+import { stripPlaceholders } from "@/lib/render/export";
+import { emptyArms, hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
+import { BranchAddPanel } from "./branch-add-panel";
 import { BranchSection } from "./branch-section";
 import { StepAddPanel } from "./step-add-panel";
 import { useDiagramAutosave } from "./use-diagram-autosave";
@@ -25,7 +28,9 @@ type History = { past: FlowModel[]; present: FlowModel; future: FlowModel[] };
 /** 右側のパネル。ステップの編集か、ステップの追加 */
 type Panel =
   | { mode: "edit"; stepId: string }
-  | { mode: "add"; afterStepId: string | null; initialFrom?: string; seq: number }
+  /** into: その場合（空の枠の「＋ ここにステップを追加」など）の最後に入れる */
+  | { mode: "add"; afterStepId: string | null; into?: string; initialFrom?: string; seq: number }
+  | { mode: "branch"; afterStepId: string | null; seq: number }
   | null;
 
 const SAVE_LABEL = { saved: "保存済み", saving: "保存中…", error: "保存できていません" } as const;
@@ -85,9 +90,10 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   // 書き出し（.mmd・.drawio）は担当者を付けないコード。画面の図（.svg）は表示どおり
   const code = useMemo(() => toMermaid(model), [model]);
   const hasAssignees = model.steps.some((s) => s.status !== "retracted" && s.assignee);
+  // 画面の図には、空の場合に「＋ ここにステップを追加」を描く（書き出す .svg からは外す）
   const displayCode = useMemo(
-    () => (showAssignees ? toMermaid(model, { assignees: true }) : code),
-    [code, model, showAssignees],
+    () => toMermaid(model, { assignees: showAssignees, placeholders: true }),
+    [model, showAssignees],
   );
   const svgForExport = rendered && rendered.code === displayCode ? rendered.svg : null;
   const drawable = hasDiagram(model);
@@ -95,14 +101,22 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
 
   // 消えた（削除・元に戻した）ステップは選んでいないことにする
   const editingIndex = panel?.mode === "edit" ? steps.findIndex((s) => s.id === panel.stepId) : -1;
-  const afterIndex = panel?.mode === "add" && panel.afterStepId ? steps.findIndex((s) => s.id === panel.afterStepId) : -1;
+  const afterIndex =
+    (panel?.mode === "add" || panel?.mode === "branch") && panel.afterStepId
+      ? steps.findIndex((s) => s.id === panel.afterStepId)
+      : -1;
+  const intoArm = panel?.mode === "add" && panel.into ? model.branches.find((b) => b.id === panel.into) : undefined;
   const selectedIndex = editingIndex >= 0 ? editingIndex : afterIndex;
 
   const pickStep = (n: number) => {
     const id = steps[n - 1]?.id;
     if (!id) return;
-    // 追加フォームを開いているときは、入れる位置を選び直す
-    setPanel((p) => (p?.mode === "add" ? { ...p, afterStepId: id } : { mode: "edit", stepId: id }));
+    // 追加フォームを開いているときは、入れる位置を選び直す（場合の中に入れる指定は外す）
+    setPanel((p) =>
+      p?.mode === "add" || p?.mode === "branch"
+        ? { ...p, afterStepId: id, ...(p.mode === "add" ? { into: undefined } : {}) }
+        : { mode: "edit", stepId: id },
+    );
   };
   const moveStep = (index: number, insertAt: number) => {
     const ops = moveStepOps(steps, index, insertAt);
@@ -110,23 +124,36 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
     commit(ops);
     setPanel({ mode: "edit", stepId: steps[index].id });
   };
-  const openAdd = () =>
-    setPanel((p) => ({
-      mode: "add",
-      afterStepId: p?.mode === "edit" && editingIndex >= 0 ? p.stepId : null,
-      seq: (p?.mode === "add" ? p.seq : 0) + 1,
-    }));
+  const nextSeq = (panel?.mode === "add" || panel?.mode === "branch" ? panel.seq : 0) + 1;
+  // いま選んでいるステップ（編集中、または追加する位置）。その後ろに足す
+  const selectedId = selectedIndex >= 0 ? steps[selectedIndex].id : null;
+  const openAdd = () => setPanel({ mode: "add", afterStepId: selectedId, seq: nextSeq });
+  const openBranch = () => setPanel({ mode: "branch", afterStepId: selectedId, seq: nextSeq });
+  /** 場合（branchId）の最後にステップを足すフォームを開く */
+  const openAddInto = (branchId: string) => setPanel({ mode: "add", afterStepId: null, into: branchId, seq: nextSeq });
+  const pickPlaceholder = (k: number) => {
+    const arm = emptyArms(model)[k];
+    if (arm) openAddInto(arm.id);
+  };
   const addStep = (input: StepInput, again: boolean) => {
     const afterStepId = panel?.mode === "add" ? panel.afterStepId : null;
-    const op = addStepOp(model, input, afterStepId);
+    const op = addStepOp(model, input, afterStepId, intoArm?.id);
     if (op.op !== "step.add") return;
     commit([op]);
     const id = op.step.id;
+    // 続けて追加するときも、同じ場合の中に入れ続ける
     setPanel(
       again
-        ? { mode: "add", afterStepId: id, initialFrom: input.to, seq: (panel?.mode === "add" ? panel.seq : 0) + 1 }
+        ? { mode: "add", afterStepId: id, into: intoArm?.id, initialFrom: input.to, seq: nextSeq }
         : { mode: "edit", stepId: id },
     );
+  };
+  const createFrame = (kind: Branch["kind"], conditions: string[]) => {
+    const { ops, armIds } = addFrameOps(model, kind, conditions, panel?.mode === "branch" ? panel.afterStepId : null);
+    if (ops.length === 0) return;
+    commit(ops);
+    // 作った枠の最初の場合に、そのままステップを足せるようにする
+    setPanel({ mode: "add", afterStepId: null, into: armIds[0], seq: nextSeq });
   };
 
   const btn =
@@ -170,6 +197,15 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
         <ActorEditDialog model={model} onSave={commit} />
         <button type="button" className={btn} disabled={!drawable} onClick={openAdd}>
           ＋ ステップを追加
+        </button>
+        <button
+          type="button"
+          className={btn}
+          disabled={!drawable}
+          title="条件によって変わる作業（もし〜なら）や、くり返す作業の枠を先に作ります"
+          onClick={openBranch}
+        >
+          ＋ 分岐を追加
         </button>
         <span className="mx-1 h-6 w-px bg-black/10 dark:bg-white/15" aria-hidden />
         <button type="button" className={btn} disabled={history.past.length === 0} onClick={undo} title="元に戻す（⌘Z）">
@@ -218,9 +254,10 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
             {drawable ? (
               <MermaidDiagram
                 code={displayCode}
-                onSvg={(svg, forCode) => setRendered({ svg, code: forCode })}
+                onSvg={(svg, forCode) => setRendered({ svg: stripPlaceholders(svg), code: forCode })}
                 onContainerRef={containerRef}
                 onPickStep={pickStep}
+                onPickPlaceholder={pickPlaceholder}
                 onMoveStep={moveStep}
                 selectedStep={selectedIndex + 1}
                 // 1 = 幅に合わせる（小さい図は拡大しない）。それ以外は幅に対する倍率
@@ -242,7 +279,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
 
         {panel?.mode === "edit" && editingIndex >= 0 && (
           <StepPanel model={model} stepId={panel.stepId} onClose={() => setPanel(null)} onCommit={commit}>
-            <BranchSection model={model} stepId={panel.stepId} onCommit={commit} />
+            <BranchSection model={model} stepId={panel.stepId} onCommit={commit} onAddInto={openAddInto} />
           </StepPanel>
         )}
         {panel?.mode === "add" && drawable && (
@@ -251,8 +288,22 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
             key={panel.seq}
             model={model}
             afterStepId={afterIndex >= 0 ? panel.afterStepId : null}
+            into={intoArm}
             initialFrom={panel.initialFrom}
             onAdd={addStep}
+            onRemoveInto={intoArm ? () => {
+              commit([{ op: "branch.remove", id: intoArm.id }]);
+              setPanel(null);
+            } : undefined}
+            onClose={() => setPanel(null)}
+          />
+        )}
+        {panel?.mode === "branch" && drawable && (
+          <BranchAddPanel
+            key={panel.seq}
+            model={model}
+            afterStepId={afterIndex >= 0 ? panel.afterStepId : null}
+            onCreate={createFrame}
             onClose={() => setPanel(null)}
           />
         )}
