@@ -42,7 +42,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   const model = history.present;
   const status = useDiagramAutosave(slug, model);
   const [panel, setPanel] = useState<Panel>(null);
-  const { zoom, setZoom, containerRef } = useWheelZoom();
+  const { zoom, setZoom, containerRef, hand } = useWheelZoom();
   const [showAssignees, setShowAssignees] = useState(false);
   const [rendered, setRendered] = useState<{ svg: string; code: string } | null>(null);
 
@@ -197,7 +197,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
             <button
               type="button"
               className="rounded-md px-2 py-1 text-xs tabular-nums text-zinc-600 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10"
-              title="⌘ + スクロールで拡大縮小。クリックで幅に合わせる"
+              title="⌘ + スクロールで拡大縮小、Space + ドラッグで移動。クリックで幅に合わせる"
               onClick={() => setZoom(1)}
             >
               {Math.round(zoom * 100)}%
@@ -210,7 +210,11 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="relative flex min-h-[20rem] min-w-0 flex-1 flex-col p-4 lg:min-h-0">
           <RetractNotice model={model} onCommit={commit} />
-          <div className="min-h-0 flex-1">
+          <div
+            className={`min-h-0 flex-1 ${
+              hand === "grabbing" ? "select-none [&_*]:!cursor-grabbing" : hand === "grab" ? "[&_*]:!cursor-grab" : ""
+            }`}
+          >
             {drawable ? (
               <MermaidDiagram
                 code={displayCode}
