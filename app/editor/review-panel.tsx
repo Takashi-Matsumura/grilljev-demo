@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FlowModel, ModelOp, Scope } from "@/lib/model/types";
 import { CATEGORY_LABEL, reviewRules, SEVERITY_LABEL, type Finding, type Severity } from "@/lib/review/rules";
 import { reviewKey, type AiReviewState } from "./use-ai-review";
+import { useReviewWidth } from "./use-review-width";
+
+/** パネルの幅の下限。指摘の見出しが 1 行に収まるくらい */
+const REVIEW_MIN_PX = 320;
+/** 広げても、図にはこれだけ残す（30rem） */
+const DIAGRAM_MIN_PX = 480;
+/** 境界をキーボード（← →）で動かすときの 1 回の幅 */
+const KEY_STEP_PX = 32;
 
 const SEVERITY_CLASS: Record<Severity, string> = {
   high: "bg-red-600 text-white",
@@ -49,6 +57,15 @@ export function ReviewPanel({
   const stale = ai.status !== "idle" && ai.for !== key;
   const runAi = () => onRunAi(rules.map((f) => f.title));
 
+  // ── 幅を左端の境界のドラッグで調整（指摘を大きく読みたいとき）──
+  const [width, setWidth] = useReviewWidth();
+  const asideRef = useRef<HTMLElement>(null);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const clampWidth = (w: number) =>
+    Math.round(Math.min(Math.max(w, REVIEW_MIN_PX), Math.max(REVIEW_MIN_PX, window.innerWidth - DIAGRAM_MIN_PX)));
+  const currentWidth = () => asideRef.current?.getBoundingClientRect().width ?? REVIEW_MIN_PX;
+
   // 初めて開いたときだけ、AI の点検を始める（図を直したあとは、ボタンで頼み直す）
   useEffect(() => {
     if (ai.status === "idle") runAi();
@@ -58,12 +75,51 @@ export function ReviewPanel({
 
   return (
     <aside
+      ref={asideRef}
       aria-label="フローの点検"
-      className="flex min-h-0 shrink-0 flex-col border-t border-black/10 text-sm lg:w-96 lg:border-l lg:border-t-0 dark:border-white/15"
+      // 保存した幅が、いまの画面では図を押しつぶす大きさでも、図の分は残す
+      style={{ "--review-w": width === null ? "24rem" : `min(${width}px, calc(100vw - ${DIAGRAM_MIN_PX}px))` } as React.CSSProperties}
+      className="relative flex min-h-0 shrink-0 flex-col border-t border-black/10 text-sm lg:w-[var(--review-w)] lg:border-l lg:border-t-0 dark:border-white/15"
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
       }}
     >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="フローの点検の幅"
+        aria-valuenow={width ?? undefined}
+        tabIndex={0}
+        title="ドラッグして幅を調整（ダブルクリックで既定に戻す）"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          dragRef.current = { startX: e.clientX, startWidth: currentWidth() };
+          setDragging(true);
+        }}
+        onPointerMove={(e) => {
+          const start = dragRef.current;
+          // 境界は左端にあるので、左へ動かすほど広がる
+          if (start) setWidth(clampWidth(start.startWidth + (start.startX - e.clientX)));
+        }}
+        onPointerUp={() => {
+          dragRef.current = null;
+          setDragging(false);
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+          setDragging(false);
+        }}
+        onDoubleClick={() => setWidth(null)}
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          setWidth(clampWidth(currentWidth() + (e.key === "ArrowLeft" ? KEY_STEP_PX : -KEY_STEP_PX)));
+        }}
+        className={`absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize touch-none lg:block ${
+          dragging ? "bg-black/10 dark:bg-white/15" : "hover:bg-black/5 focus-visible:bg-sky-500/20 dark:hover:bg-white/10"
+        }`}
+      />
       <div className="flex items-center justify-between gap-2 px-4 pt-4">
         <h2 className="font-medium">フローの点検</h2>
         <button
