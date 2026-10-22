@@ -347,12 +347,21 @@ export function MermaidDiagram({
     };
   }, [code]);
 
+  // 強調するステップが変わったら、見えるところまでスクロールする（見えていれば動かない）
+  const shownFocusRef = useRef(0);
+
   // 描き直すたびに SVG が入れ替わるので、そのつど印を付け直す
   useEffect(() => {
     if (!svgHostRef.current) return;
     detachStepDots(svgHostRef.current);
     markPlaceholders(svgHostRef.current);
     markStep(svgHostRef.current, FOCUS_ATTR, highlightStep);
+    if (highlightStep !== shownFocusRef.current) {
+      shownFocusRef.current = highlightStep;
+      svgHostRef.current
+        .querySelector(`[${FOCUS_ATTR}]`)
+        ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    }
     markStep(svgHostRef.current, SELECTED_ATTR, selectedStep);
     if (play) markPlay(svgHostRef.current, play);
   }, [rendered, highlightStep, selectedStep, play]);
