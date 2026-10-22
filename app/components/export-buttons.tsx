@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { download } from "./download";
 import type { FlowModel } from "@/lib/model/types";
 import { toDrawio } from "@/lib/render/drawio";
 import { DisclosureIcon } from "./disclosure-icon";
+import { useCloseOnOutside } from "./use-close-on-outside";
 import {
   EXPORT_MIME,
   exportFileName,
@@ -35,7 +36,7 @@ const TRIGGER_BTN =
 /** 図の書き出し（.drawio / .mmd / .svg）。「書き出し ▾」の下に3形式を畳む。 */
 export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
   const [message, setMessage] = useState<string | null>(null);
-  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const detailsRef = useCloseOnOutside();
 
   const run = (format: ExportFormat) => {
     try {

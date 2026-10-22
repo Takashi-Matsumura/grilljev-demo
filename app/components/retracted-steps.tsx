@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { FlowModel, ModelOp, Step } from "@/lib/model/types";
 import { DisclosureIcon } from "./disclosure-icon";
+import { useCloseOnOutside } from "./use-close-on-outside";
 
 /** 取り消された（削除された）ステップ。新しく取り消したものほど前に並べる */
 const retracted = (model: FlowModel): Step[] =>
@@ -16,11 +17,12 @@ const restoreBtn =
  * あとからでも元に戻せるようにする。戻すと元の位置（order）と、消す前の確定/仮に戻る。
  */
 export function RetractedSteps({ model, onCommit }: { model: FlowModel; onCommit: (ops: ModelOp[]) => void }) {
+  const detailsRef = useCloseOnOutside();
   const steps = retracted(model);
   if (steps.length === 0) return null;
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   return (
-    <details className="group relative">
+    <details ref={detailsRef} className="group relative">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-black/15 px-2.5 py-1 text-sm hover:bg-black/5 [&::-webkit-details-marker]:hidden dark:border-white/20 dark:hover:bg-white/10">
         <DisclosureIcon />
         削除したステップ
