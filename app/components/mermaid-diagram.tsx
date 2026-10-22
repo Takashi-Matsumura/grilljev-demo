@@ -24,11 +24,15 @@ const DEBOUNCE_MS = 300;
 /** 番号（autonumber）とステップ名を、押せる見た目にする */
 const PICKABLE_CLASS = (on: boolean) =>
   on
-    ? "[&_.messageText]:cursor-pointer [&_.sequenceNumber]:cursor-pointer [&_.messageText:hover]:fill-sky-600 [&_.messageText:hover]:underline"
+    ? "[&_.messageText]:cursor-pointer [&_.step-dot]:cursor-pointer [&_.messageText:hover]:fill-sky-600 [&_.messageText:hover]:underline [&_.step-dot:hover]:scale-160"
     : "";
 
+/** 番号の黒丸の拡大アニメーション（押せるときだけ大きくなる。拡大の中心は丸の中心） */
+const DOT_CLASS =
+  "[&_.step-dot]:origin-center [&_.step-dot]:[transform-box:fill-box] [&_.step-dot]:transition-[scale] [&_.step-dot]:duration-150 [&_.step-dot]:ease-out motion-reduce:[&_.step-dot]:transition-none";
+
 /** ドラッグで動かせるときの見た目（つかめるカーソル） */
-const MOVABLE_CLASS = "[&_.messageText]:cursor-grab [&_.sequenceNumber]:cursor-grab";
+const MOVABLE_CLASS = "[&_.messageText]:cursor-grab [&_.step-dot]:cursor-grab";
 
 /**
  * 要素から、図の何番目（1 始まり）のステップかを割り出す。ステップの番号・名前でなければ null。
@@ -37,7 +41,7 @@ const MOVABLE_CLASS = "[&_.messageText]:cursor-grab [&_.sequenceNumber]:cursor-g
  */
 function stepAt(target: EventTarget): number | null {
   if (!(target instanceof Element)) return null;
-  const num = target.closest(".sequenceNumber");
+  const num = target.closest(".sequenceNumber") ?? target.closest(".step-dot")?.querySelector(".sequenceNumber");
   if (num) {
     const n = Number(num.textContent?.trim());
     return Number.isInteger(n) && n > 0 ? n : null;
@@ -60,6 +64,34 @@ const MARK_CLASS = [
   "[&_.messageText[data-focus]]:!fill-amber-600 [&_.messageText[data-focus]]:font-bold dark:[&_.messageText[data-focus]]:!fill-amber-400",
   "[&_.messageText[data-selected]]:!fill-sky-600 [&_.messageText[data-selected]]:font-bold dark:[&_.messageText[data-selected]]:!fill-sky-400",
 ].join(" ");
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * 番号の黒丸を、1 つずつ動かせる円にする。Mermaid は黒丸を全番号共通のマーカー（線の端の飾り）で
+ * 描くので、そのままでは 1 つだけ大きくできない。マーカーを外し、同じ位置・同じ色の円と番号を
+ * `<g class="step-dot">` にまとめる（拡大は CSS）。描いた SVG に手を加えるだけなので、書き出す図には入らない。
+ */
+function detachStepDots(root: HTMLElement) {
+  const fill = root.querySelector("marker[id$='sequencenumber'] circle");
+  const color = fill ? getComputedStyle(fill).fill : "#333";
+  for (const num of root.querySelectorAll(".sequenceNumber")) {
+    const line = num.previousElementSibling;
+    if (!line || line.tagName !== "line" || !line.getAttribute("marker-start") || num.parentElement?.classList.contains("step-dot")) {
+      continue;
+    }
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "step-dot");
+    const circle = document.createElementNS(SVG_NS, "circle");
+    circle.setAttribute("cx", line.getAttribute("x1") ?? "0");
+    circle.setAttribute("cy", line.getAttribute("y1") ?? "0");
+    circle.setAttribute("r", "9");
+    circle.setAttribute("fill", color);
+    line.removeAttribute("marker-start");
+    num.replaceWith(g);
+    g.append(circle, num);
+  }
+}
 
 /** n 番目（1 始まり）のステップ名に印を付ける（0 なら外す） */
 function markStep(root: HTMLElement, attr: string, n: number) {
@@ -173,6 +205,7 @@ export function MermaidDiagram({
   // 描き直すたびに SVG が入れ替わるので、そのつど印を付け直す
   useEffect(() => {
     if (!svgHostRef.current) return;
+    detachStepDots(svgHostRef.current);
     markStep(svgHostRef.current, FOCUS_ATTR, highlightStep);
     markStep(svgHostRef.current, SELECTED_ATTR, selectedStep);
   }, [rendered, highlightStep, selectedStep]);
@@ -199,7 +232,7 @@ export function MermaidDiagram({
           >
             <div
               ref={svgHostRef}
-              className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${MARK_CLASS} ${PICKABLE_CLASS(onPickStep !== undefined)} ${
+              className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${MARK_CLASS} ${DOT_CLASS} ${PICKABLE_CLASS(onPickStep !== undefined)} ${
                 onMoveStep ? MOVABLE_CLASS : ""
               } ${drop ? "select-none [&_*]:!cursor-grabbing" : ""} ${
                 zoom === undefined ? "[&_svg]:max-w-full" : "[&_svg]:!w-full [&_svg]:!max-w-none"
