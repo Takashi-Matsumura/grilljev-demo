@@ -153,3 +153,29 @@ export function armConditionPrefix(model: FlowModel, groupId: string): string {
   const first = groupArms(model, groupId)[0];
   return first ? (/^「.+」の結果：/.exec(first.condition)?.[0] ?? "") : "";
 }
+
+/**
+ * 場合分けの場合の順番を入れ替える（dir: -1 = 上へ、1 = 下へ）。隣の場合と index を入れ替え、
+ * 中のステップも新しい順番で並べ直す。枠の中で使っていた order の値をそのまま配り直すので、
+ * 枠の外のステップは動かない。
+ */
+export function moveArmOps(model: FlowModel, branchId: string, dir: -1 | 1): ModelOp[] {
+  const branch = model.branches.find((b) => b.id === branchId);
+  if (!branch) return [];
+  const arms = groupArms(model, branch.groupId);
+  const i = arms.findIndex((b) => b.id === branchId);
+  const other = arms[i + dir];
+  if (!other) return [];
+  const swapped = arms.map((b) => (b.id === branch.id ? other : b.id === other.id ? branch : b));
+  const steps = visibleSteps(model).filter((s) => arms.some((b) => b.id === s.branchId));
+  const orders = steps.map((s) => s.order);
+  const reordered = swapped.flatMap((b) => steps.filter((s) => s.branchId === b.id));
+  const ops: ModelOp[] = [
+    { op: "branch.update", id: branch.id, patch: { index: other.index } },
+    { op: "branch.update", id: other.id, patch: { index: branch.index } },
+  ];
+  reordered.forEach((s, k) => {
+    if (s.order !== orders[k]) ops.push({ op: "step.update", id: s.id, patch: { order: orders[k] } });
+  });
+  return ops;
+}
