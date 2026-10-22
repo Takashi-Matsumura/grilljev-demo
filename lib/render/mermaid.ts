@@ -25,6 +25,15 @@ function esc(text: string): string {
   return escaped || "（未入力）";
 }
 
+/**
+ * 分岐（alt / else / opt / loop）の条件。
+ * Mermaid は枠の条件の中の実体参照（#58; など）を戻さず文字化けさせるので、半角の「:」は全角にしてから退避する。
+ * （枠の条件は枠の幅で必ず折り返され、空白の無い日本語は語の途中に「-」が入る。Mermaid の仕様で、設定では止められない）
+ */
+function escCondition(text: string): string {
+  return esc(text.replace(/:/g, "："));
+}
+
 /** participant id は英数字と _ のみ。日本語は `as` の後ろに置く。 */
 function safeId(id: string): string {
   return id.replace(/[^A-Za-z0-9_]/g, "_");
@@ -101,12 +110,12 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
 
     if (groupId !== openGroup) {
       if (openGroup !== null) lines.push("  end");
-      if (branch) lines.push(`  ${branch.kind} ${esc(branch.condition)}`);
+      if (branch) lines.push(`  ${branch.kind} ${escCondition(branch.condition)}`);
       openGroup = groupId;
       openBranch = branch?.id ?? null;
     } else if (branch && branch.id !== openBranch) {
       // 同じ group の別の枝。else を持てるのは alt だけ
-      if (branch.kind === "alt") lines.push(`  else ${esc(branch.condition)}`);
+      if (branch.kind === "alt") lines.push(`  else ${escCondition(branch.condition)}`);
       openBranch = branch.id;
     }
 

@@ -3,8 +3,10 @@
 import { useState } from "react";
 import {
   addArmOps,
+  armConditionPrefix,
   BRANCH_KINDS,
   branchKindLabel,
+  conditionPrefix,
   groupArms,
   joinBranchOps,
   leaveBranchOps,
@@ -47,6 +49,11 @@ export function BranchSection({
 const btn =
   "rounded-md border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10";
 const field = "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
+/** 書き出しを入れた条件欄にフォーカスしたら、続きを書けるようにカーソルを末尾へ */
+const caretToEnd = (e: React.FocusEvent<HTMLInputElement>) => {
+  const n = e.currentTarget.value.length;
+  e.currentTarget.setSelectionRange(n, n);
+};
 const enter = (fn: () => void) => (e: React.KeyboardEvent) => {
   if (e.key === "Enter" && !e.nativeEvent.isComposing) {
     e.preventDefault();
@@ -176,7 +183,14 @@ function OutOfBranch({
   const [armGroup, setArmGroup] = useState<string>(
     prevBranch && altGroups.includes(prevBranch.groupId) ? prevBranch.groupId : (altGroups[0] ?? ""),
   );
-  const ready = condition.trim() !== "";
+  // 条件欄に最初から入れておく書き出し（直前のステップ名）。書き出しだけでは条件にならない
+  const [prefix, setPrefix] = useState("");
+  const ready = condition.trim() !== "" && condition.trim() !== prefix.trim();
+  const start = (next: Mode, text: string) => {
+    setMode(next);
+    setPrefix(text);
+    setCondition(text);
+  };
 
   const submitWrap = () => ready && onCommit(wrapStepOps(model, stepId, kind, condition));
   const submitArm = () => ready && onCommit(addArmOps(model, stepId, armGroup, condition));
@@ -184,7 +198,7 @@ function OutOfBranch({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={btn} aria-pressed={mode === "wrap"} onClick={() => setMode("wrap")}>
+        <button type="button" className={btn} aria-pressed={mode === "wrap"} onClick={() => start("wrap", prev ? conditionPrefix(prev.label) : "")}>
           枠で囲む
         </button>
         {branches.length > 0 && (
@@ -193,7 +207,7 @@ function OutOfBranch({
           </button>
         )}
         {altGroups.length > 0 && (
-          <button type="button" className={btn} aria-pressed={mode === "arm"} onClick={() => setMode("arm")}>
+          <button type="button" className={btn} aria-pressed={mode === "arm"} onClick={() => start("arm", armConditionPrefix(model, armGroup))}>
             別の場合を足して入れる
           </button>
         )}
@@ -215,6 +229,7 @@ function OutOfBranch({
             条件
             <input
               autoFocus
+              onFocus={caretToEnd}
               className={field}
               value={condition}
               placeholder={kind === "loop" ? "例: 不備がなくなるまで" : "例: 不備あり"}
@@ -257,7 +272,14 @@ function OutOfBranch({
           {altGroups.length > 1 && (
             <label className="flex flex-col gap-1">
               どの場合分けに
-              <select className={field} value={armGroup} onChange={(e) => setArmGroup(e.target.value)}>
+              <select
+                className={field}
+                value={armGroup}
+                onChange={(e) => {
+                  setArmGroup(e.target.value);
+                  start("arm", armConditionPrefix(model, e.target.value));
+                }}
+              >
                 {altGroups.map((g) => (
                   <option key={g} value={g}>
                     {groupArms(model, g)
@@ -272,6 +294,7 @@ function OutOfBranch({
             この場合の条件
             <input
               autoFocus
+              onFocus={caretToEnd}
               className={field}
               value={condition}
               placeholder="例: 問題なし"
