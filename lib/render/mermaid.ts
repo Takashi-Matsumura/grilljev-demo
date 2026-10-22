@@ -96,7 +96,27 @@ export type MermaidOptions = {
    * 書き出し（.mmd）には描かない（空の場合は、条件だけの空の枠になる）
    */
   placeholders?: boolean;
+  /**
+   * 畳む枠（Branch.groupId）。畳んだ枠は中身を描かず、「▸ alt 条件／条件（3 手順）」の注記 1 つにする。/editor の画面用。
+   * 後ろの手順の番号は詰めずに、元の番号のまま描く（autonumber を振り直す）
+   */
+  collapsed?: ReadonlySet<string>;
 };
+
+/** 畳んだ枠の注記の頭。図の上でこの注記を押すと、枠を開く（mermaid-diagram.tsx） */
+export const COLLAPSED_MARK = "▸";
+
+const NO_FRAMES: ReadonlySet<string> = new Set();
+
+/** 枠の場合を index 順に */
+function armsOf(model: FlowModel, groupId: string): Branch[] {
+  return model.branches.filter((b) => b.groupId === groupId).sort((a, b) => a.index - b.index);
+}
+
+function collapsedText(arms: Branch[], steps: number): string {
+  const conditions = arms.map((a) => a.condition.trim() || "（未入力）").join("／");
+  return `${COLLAPSED_MARK} ${arms[0].kind} ${conditions}（${steps} 手順）`;
+}
 
 /** 空の場合に描く注記の文言。図の上でこの注記を押すと、その場合にステップを足す（mermaid-diagram.tsx） */
 export const PLACEHOLDER_TEXT = "＋ ここにステップを追加";
@@ -140,15 +160,30 @@ export function flowItems(model: FlowModel): FlowItem[] {
   return keyed.sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, , item]) => item);
 }
 
-/** 図に描かれる空の場合を、図の上から順に。n 番目の「＋ ここにステップを追加」が、n 番目の場合 */
-export function emptyArms(model: FlowModel): Branch[] {
-  return flowItems(model).flatMap((item) => (item.step === null ? [item.branch] : []));
+/** 図に描かれる空の場合を、図の上から順に。n 番目の「＋ ここにステップを追加」が、n 番目の場合（畳んだ枠の中は描かれない） */
+export function emptyArms(model: FlowModel, collapsed: ReadonlySet<string> = NO_FRAMES): Branch[] {
+  return flowItems(model).flatMap((item) =>
+    item.step === null && !collapsed.has(item.branch.groupId) ? [item.branch] : [],
+  );
 }
 
-/** 図に描かれる枠を、図の上から順に（場合を index 順に）。中にステップも位置も無い枠は描かれないので除く */
-export function drawnFrames(model: FlowModel): Branch[][] {
-  const groupIds = [...new Set(flowItems(model).flatMap((item) => (item.branch ? [item.branch.groupId] : [])))];
-  return groupIds.map((g) => model.branches.filter((b) => b.groupId === g).sort((a, b) => a.index - b.index));
+/** 図の中の枠（groupId）を、図の上から順に。中にステップも位置も無い枠は描かれないので除く */
+export function frameIds(model: FlowModel): string[] {
+  return [...new Set(flowItems(model).flatMap((item) => (item.branch ? [item.branch.groupId] : [])))];
+}
+
+/**
+ * 図に描かれる枠を、図の上から順に（場合を index 順に）。畳んだ枠は枠として描かれない（注記になる）ので除く
+ */
+export function drawnFrames(model: FlowModel, collapsed: ReadonlySet<string> = NO_FRAMES): Branch[][] {
+  return frameIds(model)
+    .filter((g) => !collapsed.has(g))
+    .map((g) => armsOf(model, g));
+}
+
+/** 畳んだ枠を、図の上から順に。k 番目の「▸ …」の注記が、k 番目の枠 */
+export function collapsedFrames(model: FlowModel, collapsed: ReadonlySet<string>): string[] {
+  return frameIds(model).filter((g) => collapsed.has(g));
 }
 
 /**
@@ -158,9 +193,13 @@ export function drawnFrames(model: FlowModel): Branch[][] {
 export type ArmTarget = { kind: "placeholder"; k: number } | { kind: "first"; frame: number } | { kind: "else"; index: number };
 
 /** 図の上の目印から、その場合を割り出す。else を描くのは alt だけ（toMermaid） */
-export function armOfTarget(model: FlowModel, target: ArmTarget): Branch | undefined {
-  if (target.kind === "placeholder") return emptyArms(model)[target.k];
-  const frames = drawnFrames(model);
+export function armOfTarget(
+  model: FlowModel,
+  target: ArmTarget,
+  collapsed: ReadonlySet<string> = NO_FRAMES,
+): Branch | undefined {
+  if (target.kind === "placeholder") return emptyArms(model, collapsed)[target.k];
+  const frames = drawnFrames(model, collapsed);
   if (target.kind === "first") return frames[target.frame]?.[0];
   return frames.filter((arms) => arms[0].kind === "alt").flatMap((arms) => arms.slice(1))[target.index];
 }
@@ -178,12 +217,33 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
     actors.length > 1 ? `${safeId(actors[0].id)},${safeId(actors[actors.length - 1].id)}` : safeId(actors[0]?.id ?? "");
   let openGroup: string | null = null;
   let openBranch: string | null = null;
+  const collapsed = options.collapsed ?? NO_FRAMES;
+  const items = flowItems(model);
+  // 描いたかどうかに関わらず数えた、ステップの番号（autonumber と同じ 1 始まり）
+  let number = 0;
+  /** 畳んだ枠で番号を飛ばしたので、次に描くステップの前で振り直す */
+  let renumber = false;
 
-  for (const { step, branch } of flowItems(model)) {
+  for (const { step, branch } of items) {
     const groupId = branch?.groupId ?? null;
 
+    if (groupId !== null && collapsed.has(groupId)) {
+      if (groupId !== openGroup) {
+        if (openGroup !== null && !collapsed.has(openGroup)) lines.push("  end");
+        const hidden = items.filter((item) => item.step && item.branch?.groupId === groupId).length;
+        if (span) lines.push(`  Note over ${span}: ${esc(collapsedText(armsOf(model, groupId), hidden))}`);
+        openGroup = groupId;
+        openBranch = null;
+      }
+      if (step) {
+        number += 1;
+        renumber = true;
+      }
+      continue;
+    }
+
     if (groupId !== openGroup) {
-      if (openGroup !== null) lines.push("  end");
+      if (openGroup !== null && !collapsed.has(openGroup)) lines.push("  end");
       if (branch) lines.push(`  ${branch.kind} ${escCondition(branch.condition)}`);
       openGroup = groupId;
       openBranch = branch?.id ?? null;
@@ -197,6 +257,11 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
     if (step === null) {
       if (options.placeholders && span) lines.push(`${indent}Note over ${span}: ${PLACEHOLDER_TEXT}`);
       continue;
+    }
+    number += 1;
+    if (renumber) {
+      lines.push(`  autonumber ${number}`);
+      renumber = false;
     }
     const from = safeId(step.from);
     const to = safeId(step.to);
@@ -216,6 +281,6 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
     }
   }
 
-  if (openGroup !== null) lines.push("  end");
+  if (openGroup !== null && !collapsed.has(openGroup)) lines.push("  end");
   return lines.join("\n");
 }

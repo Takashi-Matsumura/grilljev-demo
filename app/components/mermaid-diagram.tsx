@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayMark } from "@/lib/preview/scenes";
-import { PLACEHOLDER_TEXT, type ArmTarget } from "@/lib/render/mermaid";
+import { COLLAPSED_MARK, PLACEHOLDER_TEXT, type ArmTarget } from "@/lib/render/mermaid";
 
 type MermaidApi = typeof import("mermaid").default;
 
@@ -37,9 +37,27 @@ const DOT_CLASS =
 const MOVABLE_CLASS = "[&_.messageText]:cursor-grab [&_.step-dot]:cursor-grab";
 
 /**
- * 要素から、図の何番目（1 始まり）のステップかを割り出す。ステップの番号・名前でなければ null。
- * 番号（.sequenceNumber）はその数字を、ステップ名（.messageText）は図の中での出現順を使う。
- * Mermaid はメッセージを図の上から順に描くので、出現順がそのまま autonumber と一致する。
+ * 図の上から i 番目（0 始まり）に描いたメッセージの、ステップの番号（1 始まり）。
+ * Mermaid はメッセージと番号（.sequenceNumber）を図の上から 1 つずつ描くので、i 番目どうしが対応する。
+ * 枠を畳むと描かないステップがあるが、番号は元のまま振り直してある（toMermaid）ので、番号で数えれば崩れない。
+ */
+function numberAt(root: ParentNode, i: number): number | null {
+  const nums = root.querySelectorAll(".sequenceNumber");
+  if (nums.length === 0) return i + 1;
+  const n = Number(nums[i]?.textContent?.trim());
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** ステップの番号（1 始まり）から、図の上から何番目に描いたメッセージか（0 始まり。描いていなければ -1） */
+function drawnIndexOf(root: ParentNode, n: number): number {
+  const nums = [...root.querySelectorAll(".sequenceNumber")];
+  if (nums.length === 0) return n - 1;
+  return nums.findIndex((num) => Number(num.textContent?.trim()) === n);
+}
+
+/**
+ * 要素から、何番目（1 始まり）のステップかを割り出す。ステップの番号・名前でなければ null。
+ * 番号（.sequenceNumber）はその数字を、ステップ名（.messageText）は図の中での出現順から番号を引く。
  */
 function stepAt(target: EventTarget): number | null {
   if (!(target instanceof Element)) return null;
@@ -51,8 +69,8 @@ function stepAt(target: EventTarget): number | null {
   const text = target.closest(".messageText");
   const svg = text?.closest("svg");
   if (!text || !svg) return null;
-  const n = [...svg.querySelectorAll(".messageText")].indexOf(text) + 1;
-  return n > 0 ? n : null;
+  const i = [...svg.querySelectorAll(".messageText")].indexOf(text);
+  return i >= 0 ? numberAt(svg, i) : null;
 }
 
 /**
@@ -109,6 +127,38 @@ function markPlaceholders(root: HTMLElement) {
   }
 }
 
+/**
+ * 畳んだ枠の注記（「▸ alt …」）に、上から何番目かの印を付ける（押すと開く）。
+ * 枠の見出し（alt / opt / loop の札）には、押すと畳めることを示す title を付ける。
+ */
+const COLLAPSED_ATTR = "data-collapsed";
+function markFrames(root: HTMLElement, foldable: boolean) {
+  let k = 0;
+  for (const text of root.querySelectorAll(".noteText")) {
+    if (!text.textContent?.trim().startsWith(COLLAPSED_MARK)) continue;
+    text.parentElement?.setAttribute(COLLAPSED_ATTR, String(k));
+    addTitle(text.parentElement, "押すと枠を開きます");
+    k += 1;
+  }
+  if (!foldable) return;
+  for (const el of root.querySelectorAll(".labelText, .labelBox")) addTitle(el, "押すと枠を畳みます");
+}
+
+function addTitle(el: Element | null, text: string) {
+  if (!el || el.querySelector(":scope > title")) return;
+  const title = document.createElementNS(SVG_NS, "title");
+  title.textContent = text;
+  el.append(title);
+}
+
+/** 畳んだ枠の注記と、枠の見出しの見た目（押せる） */
+const FRAME_CLASS = [
+  "[&_.labelText]:cursor-pointer [&_.labelBox]:cursor-pointer [&_.labelBox:hover]:!fill-sky-100 dark:[&_.labelBox:hover]:!fill-sky-500/20",
+  "[&_[data-collapsed]]:cursor-pointer [&_[data-collapsed]_rect]:!fill-zinc-100 [&_[data-collapsed]_rect]:!stroke-zinc-400",
+  "[&_[data-collapsed]:hover_rect]:!fill-sky-50 [&_[data-collapsed]:hover_rect]:!stroke-sky-500",
+  "dark:[&_[data-collapsed]_rect]:!fill-zinc-800 dark:[&_[data-collapsed]:hover_rect]:!fill-sky-500/10",
+].join(" ");
+
 /** 空の場合の注記の見た目（押せる、点線の枠） */
 const PLACEHOLDER_CLASS = [
   "[&_[data-placeholder]]:cursor-pointer",
@@ -117,10 +167,10 @@ const PLACEHOLDER_CLASS = [
   "dark:[&_[data-placeholder]_rect]:!fill-sky-500/10 dark:[&_[data-placeholder]_text]:!fill-sky-300",
 ].join(" ");
 
-/** n 番目（1 始まり）のステップ名に印を付ける（0 なら外す） */
+/** n 番目（1 始まり）のステップ名に印を付ける（0 なら外す。畳んだ枠の中で描いていなければ付けない） */
 function markStep(root: HTMLElement, attr: string, n: number) {
   for (const el of root.querySelectorAll(`[${attr}]`)) el.removeAttribute(attr);
-  if (n > 0) root.querySelectorAll(".messageText")[n - 1]?.setAttribute(attr, "");
+  if (n > 0) root.querySelectorAll(".messageText")[drawnIndexOf(root, n)]?.setAttribute(attr, "");
 }
 
 /**
@@ -195,14 +245,17 @@ const DRAG_THRESHOLD_PX = 5;
  * ドラッグ中のポインタ位置 y（画面座標）→ 落とす位置（何番目のステップの手前か。0..n）と、
  * その位置を示す横線の y（host 基準）。
  * ステップ名の上端どうしの間を、そのステップの「帯」とみなし、帯の中ほどより下なら後ろに入れる。
+ * 畳んだ枠で描いていないステップがあっても、位置はステップの番号で返す（描いた k 番目の手前 = その番号の手前）。
  */
 function dropAt(host: HTMLElement, clientY: number): { insertAt: number; lineY: number } | null {
   const tops = [...host.querySelectorAll(".messageText")].map((t) => t.getBoundingClientRect().top);
   if (tops.length === 0) return null;
   const spacing = tops.length > 1 ? (tops[tops.length - 1] - tops[0]) / (tops.length - 1) : 48;
   const bandEnd = (i: number) => (i + 1 < tops.length ? tops[i + 1] : tops[i] + spacing);
-  const insertAt = tops.filter((top, i) => (top + bandEnd(i)) / 2 < clientY).length;
-  const boundary = insertAt < tops.length ? tops[insertAt] : bandEnd(tops.length - 1);
+  const k = tops.filter((top, i) => (top + bandEnd(i)) / 2 < clientY).length;
+  const boundary = k < tops.length ? tops[k] : bandEnd(tops.length - 1);
+  // 最後に描いたステップの後ろ = その番号の後ろ（畳んだ枠が後ろにあれば、その手前）
+  const insertAt = k < tops.length ? (numberAt(host, k) ?? k + 1) - 1 : (numberAt(host, k - 1) ?? k);
   return { insertAt, lineY: boundary - 6 - host.getBoundingClientRect().top };
 }
 
@@ -267,6 +320,8 @@ export function MermaidDiagram({
   onMoveStep,
   onPickPlaceholder,
   onDropToArm,
+  onCollapseFrame,
+  onExpandFrame,
   highlightStep = 0,
   selectedStep = 0,
   play,
@@ -294,6 +349,10 @@ export function MermaidDiagram({
    * （0 始まり）と目印を渡す。渡すと、ドラッグ中に目印が落とし先になる
    */
   onDropToArm?: (index: number, target: ArmTarget) => void;
+  /** 枠の見出し（alt / opt / loop の札）を押したら、図に描いた枠の上から何番目（0 始まり）かを渡す（畳む） */
+  onCollapseFrame?: (frame: number) => void;
+  /** 畳んだ枠の注記（「▸ …」）を押したら、上から何番目（0 始まり）の注記かを渡す（開く） */
+  onExpandFrame?: (k: number) => void;
   /** 強調するステップの番号（1 始まり。0 なら強調しない）。音声で直しているステップを示す */
   highlightStep?: number;
   /** 編集パネルで選んでいるステップの番号（1 始まり。0 なら無し） */
@@ -355,6 +414,7 @@ export function MermaidDiagram({
     if (!svgHostRef.current) return;
     detachStepDots(svgHostRef.current);
     markPlaceholders(svgHostRef.current);
+    markFrames(svgHostRef.current, onCollapseFrame !== undefined);
     markStep(svgHostRef.current, FOCUS_ATTR, highlightStep);
     if (highlightStep !== shownFocusRef.current) {
       shownFocusRef.current = highlightStep;
@@ -364,6 +424,8 @@ export function MermaidDiagram({
     }
     markStep(svgHostRef.current, SELECTED_ATTR, selectedStep);
     if (play) markPlay(svgHostRef.current, play);
+    // onCollapseFrame は押せるかどうか（title を付けるか）だけを見る。毎回変わる関数でも描き直さない
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rendered, highlightStep, selectedStep, play]);
 
   const endDrag = () => {
@@ -388,7 +450,7 @@ export function MermaidDiagram({
           >
             <div
               ref={svgHostRef}
-              className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${MARK_CLASS} ${DOT_CLASS} ${onPickPlaceholder ? PLACEHOLDER_CLASS : ""} ${PICKABLE_CLASS(onPickStep !== undefined)} ${
+              className={`[&_svg]:mx-auto [&_svg]:h-auto transition-opacity ${MARK_CLASS} ${DOT_CLASS} ${onPickPlaceholder ? PLACEHOLDER_CLASS : ""} ${onCollapseFrame ? FRAME_CLASS : ""} ${PICKABLE_CLASS(onPickStep !== undefined)} ${
                 onMoveStep ? MOVABLE_CLASS : ""
               } ${drop ? "select-none [&_*]:!cursor-grabbing" : ""} ${
                 zoom === undefined ? "[&_svg]:max-w-full" : "[&_svg]:!w-full [&_svg]:!max-w-none"
@@ -401,6 +463,18 @@ export function MermaidDiagram({
                 const ph = e.target instanceof Element ? e.target.closest(`[${PLACEHOLDER_ATTR}]`) : null;
                 if (ph && onPickPlaceholder) {
                   onPickPlaceholder(Number(ph.getAttribute(PLACEHOLDER_ATTR)));
+                  return;
+                }
+                const folded = e.target instanceof Element ? e.target.closest(`[${COLLAPSED_ATTR}]`) : null;
+                if (folded && onExpandFrame) {
+                  onExpandFrame(Number(folded.getAttribute(COLLAPSED_ATTR)));
+                  return;
+                }
+                const label = e.target instanceof Element ? e.target.closest(".labelText, .labelBox") : null;
+                if (label && onCollapseFrame) {
+                  const cls = label.classList.contains("labelText") ? ".labelText" : ".labelBox";
+                  const frame = [...e.currentTarget.querySelectorAll(cls)].indexOf(label);
+                  if (frame >= 0) onCollapseFrame(frame);
                   return;
                 }
                 const n = onPickStep ? stepAt(e.target) : null;
