@@ -10,10 +10,10 @@ import { StepPanel } from "@/app/components/step-panel";
 import { addStepOp, type StepInput } from "@/lib/model/add-step";
 import { moveStepOps } from "@/lib/model/move";
 import { applyOps } from "@/lib/model/reducer";
-import { addFrameOps } from "@/lib/model/branch";
+import { addFrameOps, enterBranchOps } from "@/lib/model/branch";
 import type { Branch, FlowModel, ModelOp } from "@/lib/model/types";
 import { stripPlaceholders } from "@/lib/render/export";
-import { emptyArms, hasDiagram, toMermaid, visibleSteps } from "@/lib/render/mermaid";
+import { armOfTarget, emptyArms, hasDiagram, toMermaid, visibleSteps, type ArmTarget } from "@/lib/render/mermaid";
 import { BranchAddPanel } from "./branch-add-panel";
 import { BranchSection } from "./branch-section";
 import { FlowPlayer } from "./flow-player";
@@ -125,6 +125,16 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
     if (ops.length === 0) return;
     commit(ops);
     setPanel({ mode: "edit", stepId: steps[index].id });
+  };
+  /** 図の上で、ステップを場合の目印（空の場合の注記・枠の条件）へ落としたら、その場合の中へ入れる */
+  const dropToArm = (index: number, target: ArmTarget) => {
+    const arm = armOfTarget(model, target);
+    const step = steps[index];
+    if (!arm || !step) return;
+    const ops = enterBranchOps(model, step.id, arm.id, "frame");
+    if (ops.length === 0) return;
+    commit(ops);
+    setPanel({ mode: "edit", stepId: step.id });
   };
   const nextSeq = (panel?.mode === "add" || panel?.mode === "branch" ? panel.seq : 0) + 1;
   // いま選んでいるステップ（編集中、または追加する位置）。その後ろに足す
@@ -271,6 +281,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
                 onPickStep={pickStep}
                 onPickPlaceholder={pickPlaceholder}
                 onMoveStep={moveStep}
+                onDropToArm={dropToArm}
                 selectedStep={selectedIndex + 1}
                 // 1 = 幅に合わせる（小さい図は拡大しない）。それ以外は幅に対する倍率
                 zoom={zoom === 1 ? undefined : zoom}

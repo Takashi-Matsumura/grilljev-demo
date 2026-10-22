@@ -180,11 +180,18 @@ export function leaveBranchOps(model: FlowModel, stepId: StepId): ModelOp[] {
 /**
  * 作ってあるステップを、場合（branchId）に入れる。ほかの枠・場合からの移し替えもこれ。
  * - 枠にほかのステップがあれば、その場合の最後へ動かす（枠の中身が連続したままになるように）
- * - 枠がまるごと空なら、ステップは動かさず、枠のほうがステップの位置に来る。先に枠を作って、
- *   あとから既存のステップを入れるときに、手順が枠を作った場所（図の最後など）へ飛んでいかないように。
- *   ただしステップが別の枠の中にいるなら、その枠の直後に出す（途中に残すと、元の枠が 2 つに割れるため）
+ * - 枠がまるごと空なら、place で決める
+ *   - "step"（編集パネルから）: ステップは動かさず、枠のほうがステップの位置に来る。先に枠を作って、
+ *     あとから既存のステップを入れるときに、手順が枠を作った場所（図の最後など）へ飛んでいかないように。
+ *     ただしステップが別の枠の中にいるなら、その枠の直後に出す（途中に残すと、元の枠が 2 つに割れるため）
+ *   - "frame"（図の上で枠へドラッグ）: 落とした場所に入れたいので、ステップのほうを枠の位置へ動かす
  */
-export function enterBranchOps(model: FlowModel, stepId: StepId, branchId: string): ModelOp[] {
+export function enterBranchOps(
+  model: FlowModel,
+  stepId: StepId,
+  branchId: string,
+  place: "step" | "frame" = "step",
+): ModelOp[] {
   const step = visibleSteps(model).find((s) => s.id === stepId);
   const branch = model.branches.find((b) => b.id === branchId);
   if (!step || !branch || step.branchId === branchId) return [];
@@ -192,11 +199,12 @@ export function enterBranchOps(model: FlowModel, stepId: StepId, branchId: strin
   const arms = groupArms(model, branch.groupId);
   const frameEmpty = !visibleSteps(rest).some((s) => arms.some((b) => b.id === s.branchId));
   const fromGroup = step.branchId ? model.branches.find((b) => b.id === step.branchId)?.groupId : undefined;
-  const order = !frameEmpty
-    ? orderInArm(rest, branchId)
-    : fromGroup !== undefined && fromGroup !== branch.groupId
-      ? orderAfterStep(model, stepId)
-      : step.order;
+  const order =
+    !frameEmpty || place === "frame"
+      ? orderInArm(rest, branchId)
+      : fromGroup !== undefined && fromGroup !== branch.groupId
+        ? orderAfterStep(model, stepId)
+        : step.order;
   if (order === undefined) return [];
   return [{ op: "step.update", id: stepId, patch: order === step.order ? { branchId } : { branchId, order } }];
 }
