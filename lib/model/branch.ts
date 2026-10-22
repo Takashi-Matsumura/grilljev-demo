@@ -141,3 +141,15 @@ export function setGroupKindOps(model: FlowModel, groupId: string, kind: Branch[
   if (arms.length !== 1 || arms[0].kind === kind) return [];
   return [{ op: "branch.update", id: arms[0].id, patch: { kind } }];
 }
+
+/**
+ * 枠の条件の書き出し。直前のステップの結果で分かれることが多いので、そのステップ名を主語にする
+ * （「［不備なし］」だけだと、図を渡された人には何の不備か分からない）。
+ */
+export const conditionPrefix = (label: string) => `「${label}」の結果：`;
+
+/** 場合分けに場合を足すときの書き出し。最初の場合が conditionPrefix で始まっていれば、同じものを使う。 */
+export function armConditionPrefix(model: FlowModel, groupId: string): string {
+  const first = groupArms(model, groupId)[0];
+  return first ? (/^「.+」の結果：/.exec(first.condition)?.[0] ?? "") : "";
+}
