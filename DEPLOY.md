@@ -234,6 +234,8 @@ compose が読むのは `.env`（`.env.docker.example` からコピー）。
 | `TYPESAFE_API_KEY` | （空）| Jev（クラウド・従量課金）を使うときだけ設定 |
 | `LLAMA_BASE_URL` | `http://host.docker.internal:8080` | gemma |
 | `WHISPER_BASE_URL` | `http://host.docker.internal:8178` | 文字起こし |
+| `VOICEVOX_BASE_URL` | `http://host.docker.internal:50021` | 読み上げ（無くても動く） |
+| `VOICEVOX_SPEAKER` | `8` | 読み上げの話者（スタイル ID） |
 | `SESSIONS_DIR` | `/data/sessions` | volume のマウント先。変えない |
 
 ## トラブルシュート

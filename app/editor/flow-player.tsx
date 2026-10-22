@@ -11,13 +11,28 @@ function durationOf(scene: Scene): number {
   return 2_200 + 110 * scene.caption.length + (scene.kind === "step" ? 900 : 0);
 }
 
+/** 読み上げるときの、場面の最短の長さ（ミリ秒）。短い字幕でも、矢印の丸が走り終わるまでは待つ */
+function minDurationOf(scene: Scene): number {
+  return scene.kind === "step" ? 1_400 : 800;
+}
+
+/** 読み終えてから次の場面へ移るまでの間（ミリ秒） */
+const VOICE_GAP_MS = 500;
+
+/** `voice` は VOICEVOX の話す速さ。場面の速さほど上げると聞き取れないので、控えめにする */
 const SPEEDS = [
-  { value: 0.6, label: "ゆっくり" },
-  { value: 1, label: "ふつう" },
-  { value: 1.6, label: "はやい" },
+  { value: 0.6, label: "ゆっくり", voice: 0.9 },
+  { value: 1, label: "ふつう", voice: 1.1 },
+  { value: 1.6, label: "はやい", voice: 1.3 },
 ] as const;
 
 type Ai = { status: "loading" } | { status: "ready"; narration: Narration } | { status: "error"; message: string };
+type Tts = { status: "loading" } | { status: "ready"; credit: string } | { status: "error"; message: string };
+
+async function errorOf(res: Response): Promise<string> {
+  const json = (await res.json().catch(() => ({}))) as { error?: string };
+  return json.error ?? `HTTP ${res.status}`;
+}
 
 /**
  * フローのプレビュー。起点から終点まで、図の上で今の手順を強調しながら、字幕で流れを言葉にする。
@@ -25,6 +40,9 @@ type Ai = { status: "loading" } | { status: "ready"; narration: Narration } | { 
  *
  * 字幕はまずコードで作ったもの（lib/preview/scenes.ts）で流し始め、gemma の言い回しが届いたら差し替える。
  * gemma が落ちていても、再生はそのまま続けられる。
+ *
+ * 読み上げ（VOICEVOX、/api/tts）が使えるときは、字幕を読み終えてから次の場面へ進む。
+ * 使えないとき・切ったときは、字幕の長さから決めた時間で進む。
  */
 export function FlowPlayer({ name, model, onClose }: { name: string; model: FlowModel; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -39,6 +57,11 @@ export function FlowPlayer({ name, model, onClose }: { name: string; model: Flow
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1.6);
+  const [voice, setVoice] = useState(true);
+  const [tts, setTts] = useState<Tts>({ status: "loading" });
+  const voiceSpeed = SPEEDS.find((s) => s.value === speed)?.voice ?? 1;
+  // 字幕と話す速さごとの音声（object URL）。前へ戻ったときや先読みで、同じ文を作り直さない
+  const audioCache = useRef(new Map<string, Promise<string>>());
   const last = scenes.length - 1;
   const scene = scenes[Math.min(index, last)];
 
@@ -68,15 +91,97 @@ export function FlowPlayer({ name, model, onClose }: { name: string; model: Flow
     return () => ctrl.abort();
   }, [model, name]);
 
-  // 再生中は、場面の時間が過ぎたら次へ。最後の場面で止まる
+  // 読み上げの声のクレジット。取れたら読み上げが使える
+  useEffect(() => {
+    if (!voice || tts.status !== "loading") return;
+    const ctrl = new AbortController();
+    fetch("/api/tts", { signal: ctrl.signal })
+      .then(async (res) => {
+        const json = (await res.json().catch(() => ({}))) as { credit?: string; error?: string };
+        setTts(
+          res.ok && json.credit
+            ? { status: "ready", credit: json.credit }
+            : { status: "error", message: json.error ?? `HTTP ${res.status}` },
+        );
+      })
+      .catch((e) => {
+        if (!ctrl.signal.aborted) setTts({ status: "error", message: e instanceof Error ? e.message : "通信に失敗しました" });
+      });
+    return () => ctrl.abort();
+  }, [voice, tts.status]);
+
+  useEffect(() => {
+    const cache = audioCache.current;
+    return () => {
+      for (const url of cache.values()) url.then(URL.revokeObjectURL, () => {});
+      cache.clear();
+    };
+  }, []);
+
+  const speech = useCallback(
+    (text: string): Promise<string> => {
+      const key = `${voiceSpeed}:${text}`;
+      let url = audioCache.current.get(key);
+      if (!url) {
+        url = fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, speed: voiceSpeed }),
+        }).then(async (res) => {
+          if (!res.ok) throw new Error(await errorOf(res));
+          return URL.createObjectURL(await res.blob());
+        });
+        // 失敗は覚えない（VOICEVOX を起動し直したら、次は作れる）
+        url.catch(() => audioCache.current.delete(key));
+        audioCache.current.set(key, url);
+      }
+      return url;
+    },
+    [voiceSpeed],
+  );
+  const speaking = voice && tts.status === "ready";
+
+  // 再生中は、場面の時間が過ぎたら（読み上げ中は読み終えたら）次へ。最後の場面で止まる
   useEffect(() => {
     if (!playing) return;
-    const timer = setTimeout(() => {
+    const advance = () => {
       if (index >= last) setPlaying(false);
       else setIndex(index + 1);
-    }, durationOf(scene) / speed);
-    return () => clearTimeout(timer);
-  }, [playing, index, last, scene, speed]);
+    };
+    if (!speaking) {
+      const timer = setTimeout(advance, durationOf(scene) / speed);
+      return () => clearTimeout(timer);
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let audio: HTMLAudioElement | undefined;
+    const startedAt = performance.now();
+    const fail = (e: unknown) => {
+      if (cancelled) return;
+      // 読み上げを止めて、字幕の長さで進む再生に切り替える（この効果が作り直される）
+      setTts({ status: "error", message: e instanceof Error ? e.message : "読み上げに失敗しました" });
+    };
+    speech(scene.caption)
+      .then((url) => {
+        if (cancelled) return;
+        audio = new Audio(url);
+        audio.onended = () => {
+          const rest = minDurationOf(scene) / speed - (performance.now() - startedAt);
+          timer = setTimeout(advance, Math.max(VOICE_GAP_MS / speed, rest));
+        };
+        // 自動再生が止められたときも、ここに来る
+        return audio.play();
+      })
+      .catch(fail);
+    // 次の場面の音声を先に作っておき、場面の切り替わりで待たせない
+    if (index < last) speech(scenes[index + 1].caption).catch(() => {});
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      audio?.pause();
+    };
+  }, [playing, index, last, scene, scenes, speed, speaking, speech]);
 
   const go = useCallback(
     (i: number) => setIndex(Math.max(0, Math.min(last, i))),
@@ -232,6 +337,30 @@ export function FlowPlayer({ name, model, onClose }: { name: string; model: Flow
               AI の言い回し
               <span className="text-xs text-zinc-500">
                 {ai.status === "loading" ? "（準備中…）" : ai.status === "error" ? "（使えません）" : ""}
+              </span>
+            </label>
+            <label
+              className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400"
+              title={tts.status === "error" ? tts.message : "字幕を声で読み上げます（ローカルの VOICEVOX）"}
+            >
+              <input
+                type="checkbox"
+                checked={voice}
+                onChange={(e) => {
+                  setVoice(e.target.checked);
+                  // 入れ直したら、もう一度つなぎに行く（VOICEVOX をあとから起動した場合）
+                  if (e.target.checked && tts.status === "error") setTts({ status: "loading" });
+                }}
+              />
+              読み上げ
+              <span className="text-xs text-zinc-500">
+                {!voice
+                  ? ""
+                  : tts.status === "loading"
+                    ? "（準備中…）"
+                    : tts.status === "error"
+                      ? "（使えません）"
+                      : `（${tts.credit}）`}
               </span>
             </label>
           </div>

@@ -71,6 +71,10 @@ npm run whisper
 npm run dev
 ```
 
+流れのプレビューで字幕を読み上げたいときは、[VOICEVOX](https://voicevox.hiroshiba.jp/) のエンジンも起動します（ポート 50021。
+Docker Desktop で `docker compose -f docker-compose.voicevox.yml up -d`。設定は同ファイルの先頭を参照）。
+起動していなければ、読み上げなしで再生します。声を使う画面には、規約どおり「VOICEVOX:話者名」を表記しています。
+
 http://localhost:3000 を開きます。画面右上の心拍アイコンで、3 つのバックエンドの状態を確認できます
 （Jev はキーの有無だけを見ます。課金される外部 API なので、疎通確認では呼びません）。
 
@@ -87,6 +91,8 @@ http://localhost:3000 を開きます。画面右上の心拍アイコンで、3
 | `LLAMA_MODEL` | `gemma` | llama-server に渡すモデル名 |
 | `LLAMA_IDLE_TIMEOUT_MS` | `120000` | トークンが届かない無音がこの時間続いたらアボート |
 | `WHISPER_BASE_URL` | `http://127.0.0.1:8178` | whisper-server |
+| `VOICEVOX_BASE_URL` | `http://127.0.0.1:50021` | VOICEVOX エンジン（流れのプレビューの読み上げ）。起動していなければ読み上げなしで再生する |
+| `VOICEVOX_SPEAKER` | `8` | 読み上げの話者（スタイル ID。`GET /speakers` で確認）。8 = 春日部つむぎ |
 | `SESSIONS_DIR` | `./sessions` | 会議の保存先 |
 
 ### ローカル判定器（Jev の代わり）
@@ -293,6 +299,7 @@ app/
     use-scope-shift.ts     対象業務の変化の検知
   api/
     transcribe/            音声 → whisper-server
+    tts/                   字幕 → VOICEVOX（流れのプレビューの読み上げ）
     analyze/               1 発話 → Jev（十数問を 1 リクエスト）
     label/                 gemma: ステップ名・登場人物・分岐の条件文
     facilitate/            gemma: 問いの候補 → Jev: 選別

@@ -57,6 +57,9 @@ services:
       LLAMA_IDLE_TIMEOUT_MS: "${LLAMA_IDLE_TIMEOUT_MS:-120000}"
       # --- 文字起こし（whisper.cpp）---
       WHISPER_BASE_URL: "${WHISPER_BASE_URL:-http://host.docker.internal:8178}"
+      # --- 読み上げ（VOICEVOX エンジン。無くても動く）---
+      VOICEVOX_BASE_URL: "${VOICEVOX_BASE_URL:-http://host.docker.internal:50021}"
+      VOICEVOX_SPEAKER: "${VOICEVOX_SPEAKER:-8}"
       # --- 会議データの保存先（下の named volume と一致させる）---
       SESSIONS_DIR: /data/sessions
       # 社内プロキシがコンテナに注入される（~/.docker/config.json）。ホスト側の
