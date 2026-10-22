@@ -7,6 +7,7 @@ import {
   armConditionPrefix,
   BRANCH_KINDS,
   branchKindLabel,
+  enterBranchOps,
   groupArms,
   leaveBranchOps,
   moveArmOps,
@@ -14,14 +15,14 @@ import {
   setGroupKindOps,
 } from "@/lib/model/branch";
 import type { Branch, FlowModel, ModelOp } from "@/lib/model/types";
-import { visibleSteps } from "@/lib/render/mermaid";
+import { flowItems, visibleSteps } from "@/lib/render/mermaid";
 
 /**
  * ステップの編集パネルに出す「分岐」の欄（/editor 専用）。初めて使う人にも分かるように、
  * 図の言葉（alt / opt / loop、枠、場合）ではなく「もし〜なら」「〜のときだけ」「〜の間くり返す」で書く。
  * 分岐は先に枠を作り（ツールバーの「＋ 分岐を追加」）、中にステップを足す。ここでは作った枠を直す。
  * - 枠の中のステップ: 枠の中身を小さな見取り図で見せ、そこで条件・場合の順番を直し、場合ごとにステップを足す
- * - 枠の外のステップ: 分岐の作り方を案内するだけ
+ * - 枠の外のステップ: 分岐の作り方を案内し、作ってある枠があれば、そこへ入れられるようにする
  */
 export function BranchSection({
   model,
@@ -50,9 +51,18 @@ export function BranchSection({
           onAddInto={onAddInto}
         />
       ) : (
-        <p className="text-xs text-zinc-500">
-          条件によって変わる作業や、くり返す作業は、上の「＋ 分岐を追加」で先に枠を作り、その中にステップを足します。
-        </p>
+        <>
+          <p className="text-xs text-zinc-500">
+            条件によって変わる作業や、くり返す作業は、上の「＋ 分岐を追加」で先に枠を作り、その中にステップを足します。
+          </p>
+          <EnterFrame
+            label="作ってある枠に入れる"
+            model={model}
+            stepId={stepId}
+            exceptGroup={null}
+            onCommit={onCommit}
+          />
+        </>
       )}
     </PanelSection>
   );
@@ -82,6 +92,60 @@ const enter = (fn: () => void) => (e: React.KeyboardEvent) => {
     fn();
   }
 };
+
+/** 場合を「もし［〜］なら」の形で */
+const armText = (arm: Branch, i: number) =>
+  `${i > 0 && arm.kind === "alt" ? "そうでなく" : KIND_TEXT[arm.kind].before}［${arm.condition}］${KIND_TEXT[arm.kind].after}`;
+
+/** 図の上から順の枠（場合を index 順に）。図に描かれていない枠（空で位置の無いもの）は除く */
+function framesInOrder(model: FlowModel): Branch[][] {
+  const groupIds = [...new Set(flowItems(model).flatMap((item) => (item.branch ? [item.branch.groupId] : [])))];
+  return groupIds.map((g) => groupArms(model, g));
+}
+
+/**
+ * ステップを、作ってある枠のどれかの場合へ入れる選択欄。枠が無ければ出さない。
+ * exceptGroup の枠（いま入っている枠。場合の移し替えは見取り図のボタンで行う）は並べない
+ */
+function EnterFrame({
+  label,
+  model,
+  stepId,
+  exceptGroup,
+  onCommit,
+}: {
+  label: string;
+  model: FlowModel;
+  stepId: string;
+  exceptGroup: string | null;
+  onCommit: (ops: ModelOp[]) => void;
+}) {
+  const frames = framesInOrder(model)
+    .map((arms, k) => ({ arms, k }))
+    .filter(({ arms }) => arms[0]?.groupId !== exceptGroup);
+  if (frames.length === 0) return null;
+  return (
+    <label className="flex flex-col gap-1">
+      <span className={caption}>{label}</span>
+      <select
+        className={field}
+        value=""
+        onChange={(e) => e.target.value && onCommit(enterBranchOps(model, stepId, e.target.value))}
+      >
+        <option value="">枠と場合を選ぶ…</option>
+        {frames.map(({ arms, k }) => (
+          <optgroup key={arms[0].groupId} label={`枠 ${k + 1}（${branchKindLabel(arms[0].kind)}）`}>
+            {arms.map((arm, i) => (
+              <option key={arm.id} value={arm.id}>
+                {armText(arm, i)}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 /** 図の番号つきで、その場合に入っているステップ */
 function armSteps(model: FlowModel, branchId: string) {
@@ -201,14 +265,24 @@ function InBranch({
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <button
                     type="button"
-                    className="w-fit rounded px-1.5 py-0.5 text-xs text-sky-700 hover:bg-sky-100 dark:text-sky-300 dark:hover:bg-sky-500/10"
+                    className="w-fit whitespace-nowrap rounded px-1.5 py-0.5 text-xs text-sky-700 hover:bg-sky-100 dark:text-sky-300 dark:hover:bg-sky-500/10"
                     onClick={() => onAddInto(arm.id)}
                   >
                     ＋ ステップを追加
                   </button>
+                  {!current && (
+                    <button
+                      type="button"
+                      className="w-fit whitespace-nowrap rounded px-1.5 py-0.5 text-xs text-sky-700 hover:bg-sky-100 dark:text-sky-300 dark:hover:bg-sky-500/10"
+                      title="このステップを、この場合の最後へ移します"
+                      onClick={() => onCommit(enterBranchOps(model, stepId, arm.id))}
+                    >
+                      このステップをここへ移す
+                    </button>
+                  )}
                   {steps.length === 0 && arms.length > 1 && (
                     <button
                       type="button"
@@ -281,6 +355,8 @@ function InBranch({
           </div>
         </div>
       )}
+
+      <EnterFrame label="ほかの枠へ移す" model={model} stepId={stepId} exceptGroup={branch.groupId} onCommit={onCommit} />
 
       <div className="flex flex-wrap gap-2">
         <button

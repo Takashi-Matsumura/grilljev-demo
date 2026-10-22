@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { PlayMark } from "@/lib/preview/scenes";
 import { PLACEHOLDER_TEXT } from "@/lib/render/mermaid";
 
 type MermaidApi = typeof import("mermaid").default;
@@ -122,6 +123,71 @@ function markStep(root: HTMLElement, attr: string, n: number) {
   if (n > 0) root.querySelectorAll(".messageText")[n - 1]?.setAttribute(attr, "");
 }
 
+/**
+ * フローのプレビュー（flow-player.tsx）の強調。今の場面に関わる要素に印（data-play）を付け、
+ * ほかは CSS（globals.css の .flow-play）で薄くする。今のステップの矢印には、送り手から受け手へ走る丸を描く。
+ * 印も丸も描いた SVG に付けるだけなので、書き出す図には入らない。
+ */
+const PLAY_ATTR = "data-play";
+function markPlay(root: HTMLElement, play: PlayMark) {
+  for (const el of root.querySelectorAll(`[${PLAY_ATTR}]`)) el.removeAttribute(PLAY_ATTR);
+  for (const el of root.querySelectorAll(".play-token")) el.remove();
+  const mark = (el: Element | null | undefined) => el?.setAttribute(PLAY_ATTR, "");
+  let focus: Element | null = null;
+
+  if (play.step > 0) {
+    const i = play.step - 1;
+    const text = root.querySelectorAll(".messageText")[i];
+    const line = root.querySelectorAll("[class*='messageLine']")[i];
+    mark(text);
+    mark(line);
+    mark(root.querySelectorAll(".step-dot")[i]);
+    focus = text ?? null;
+    if (line && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) addToken(line);
+  }
+  if (play.note >= 0) mark(root.querySelectorAll(".noteText")[play.note]?.parentElement);
+  if (play.frame >= 0) {
+    mark(root.querySelectorAll(".labelText")[play.frame]);
+    mark(root.querySelectorAll(".labelBox")[play.frame]);
+    const c = play.condition;
+    const text = c
+      ? c.first
+        ? root.querySelectorAll(".loopText")[play.frame]
+        : root.querySelectorAll(".sectionTitle")[c.index]
+      : null;
+    mark(text);
+    focus ??= text ?? root.querySelectorAll(".labelText")[play.frame] ?? null;
+  }
+  const names = new Set(play.actors);
+  for (const t of root.querySelectorAll("text.actor")) {
+    if (names.has(t.textContent?.trim() ?? "")) mark(t.parentElement);
+  }
+  focus?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+}
+
+/** 矢印（直線、または自分への曲線）に沿って、送り手から受け手へ丸を走らせる */
+function addToken(line: Element) {
+  const d =
+    line.tagName === "line"
+      ? `M ${line.getAttribute("x1")} ${line.getAttribute("y1")} L ${line.getAttribute("x2")} ${line.getAttribute("y2")}`
+      : line.getAttribute("d");
+  if (!d) return;
+  const circle = document.createElementNS(SVG_NS, "circle");
+  circle.setAttribute("class", "play-token");
+  circle.setAttribute("r", "7");
+  const motion = document.createElementNS(SVG_NS, "animateMotion");
+  motion.setAttribute("path", d);
+  motion.setAttribute("dur", "0.9s");
+  motion.setAttribute("begin", "indefinite");
+  motion.setAttribute("fill", "freeze");
+  motion.setAttribute("calcMode", "spline");
+  motion.setAttribute("keyTimes", "0;1");
+  motion.setAttribute("keySplines", "0.4 0 0.2 1");
+  circle.append(motion);
+  line.after(circle);
+  (motion as SVGAnimationElement).beginElement();
+}
+
 /** これより動かしたらドラッグ。小さな手ぶれはクリックのまま */
 const DRAG_THRESHOLD_PX = 5;
 
@@ -163,6 +229,7 @@ export function MermaidDiagram({
   onPickPlaceholder,
   highlightStep = 0,
   selectedStep = 0,
+  play,
 }: {
   code: string;
   /** 指定すると、図の幅を表示領域の zoom 倍にする（全画面表示用。1 = 幅に合わせる） */
@@ -186,6 +253,8 @@ export function MermaidDiagram({
   highlightStep?: number;
   /** 編集パネルで選んでいるステップの番号（1 始まり。0 なら無し） */
   selectedStep?: number;
+  /** フローのプレビューで、今の場面に関わる要素を強調する（ほかは薄くする） */
+  play?: PlayMark;
 }) {
   const [rendered, setRendered] = useState<Rendered | null>(null);
   const onSvgRef = useRef(onSvg);
@@ -235,7 +304,8 @@ export function MermaidDiagram({
     markPlaceholders(svgHostRef.current);
     markStep(svgHostRef.current, FOCUS_ATTR, highlightStep);
     markStep(svgHostRef.current, SELECTED_ATTR, selectedStep);
-  }, [rendered, highlightStep, selectedStep]);
+    if (play) markPlay(svgHostRef.current, play);
+  }, [rendered, highlightStep, selectedStep, play]);
 
   const endDrag = () => {
     dragRef.current = null;

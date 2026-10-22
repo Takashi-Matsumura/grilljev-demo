@@ -14,7 +14,8 @@ export type PromptName =
   | "rename-step"
   | "edit-step"
   | "scope-shift"
-  | "summary";
+  | "summary"
+  | "narrate";
 
 const cache = new Map<PromptName, string>();
 

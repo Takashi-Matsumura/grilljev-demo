@@ -102,14 +102,14 @@ export type MermaidOptions = {
 export const PLACEHOLDER_TEXT = "＋ ここにステップを追加";
 
 /** 図に描く並び。ステップと、中にステップが無い場合（空の枠） */
-type FlowItem = { step: Step; branch: Branch | undefined } | { step: null; branch: Branch };
+export type FlowItem = { step: Step; branch: Branch | undefined } | { step: null; branch: Branch };
 
 /**
  * ステップと空の場合を、図の並び順に並べる。
  * 空の場合は、同じ枠のほかの場合の隣に置く（前の場合の最後のステップの直後。前に無ければ、後ろの場合の
  * 最初のステップの直前）。枠の場合がすべて空のときは、その枠の order の位置に置く（order が無ければ描かない）。
  */
-function flowItems(model: FlowModel): FlowItem[] {
+export function flowItems(model: FlowModel): FlowItem[] {
   const steps = visibleSteps(model);
   const branchById = new Map(model.branches.map((b) => [b.id, b]));
   // [order, 同じ order の中での順, item]

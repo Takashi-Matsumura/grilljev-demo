@@ -23,6 +23,19 @@
   --font-mono-jp: "BIZ UDGothic", "Osaka-Mono", "MS Gothic", monospace;
   /* 録音中の丸を、心拍のように二拍で鼓動させる（録音ボタンの状態表示用） */
   --animate-heartbeat: heartbeat 1.1s ease-in-out infinite;
+  /* フローのプレビューで、場面が変わるたびに字幕を下から浮かび上がらせる */
+  --animate-caption-in: caption-in 0.4s ease-out;
+}
+
+@keyframes caption-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes heartbeat {
@@ -250,5 +263,72 @@ body {
   .aqua-button--pulse:not(:disabled),
   .aqua-button--beckon:not(:disabled) {
     animation: none;
+  }
+}
+
+/*
+ * フローのプレビュー（app/editor/flow-player.tsx）。今の場面に関わる要素（[data-play]、印は
+ * mermaid-diagram.tsx の markPlay が付ける）以外を薄くし、今のステップの名前と矢印を色で目立たせる。
+ * Mermaid は図ごとに #mermaid-N で始まる強いセレクタで色を付けるので、色は !important で上書きする。
+ */
+.flow-play {
+  --play-accent: #0284c7;
+}
+@media (prefers-color-scheme: dark) {
+  .flow-play {
+    --play-accent: #38bdf8;
+  }
+}
+/* :where で詳細度を 0 にする（:is だと rect.actor の分だけ強くなり、[data-play] の側が負ける） */
+.flow-play
+  svg
+  :where(
+    .messageText,
+    [class*="messageLine"],
+    .step-dot,
+    .note,
+    .noteText,
+    .loopLine,
+    .labelBox,
+    .labelText,
+    .loopText,
+    .sectionTitle,
+    rect.actor,
+    text.actor,
+    .actor-man
+  ) {
+  opacity: 0.2;
+  transition: opacity 0.35s ease;
+}
+.flow-play svg [data-play],
+.flow-play svg [data-play] * {
+  opacity: 1;
+}
+.flow-play svg .messageText[data-play],
+.flow-play svg :is(.loopText, .sectionTitle, .labelText)[data-play] {
+  fill: var(--play-accent) !important;
+  font-weight: 700;
+}
+.flow-play svg [class*="messageLine"][data-play] {
+  stroke: var(--play-accent) !important;
+  stroke-width: 2.5px !important;
+}
+.flow-play svg [data-play] :is(rect.actor, .note) {
+  stroke: var(--play-accent) !important;
+  stroke-width: 2.5px !important;
+}
+.flow-play svg .actor-man[data-play] :is(line, circle) {
+  stroke: var(--play-accent) !important;
+  stroke-width: 2.5px !important;
+}
+.flow-play svg .play-token {
+  fill: var(--play-accent);
+  stroke: #fff;
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 4px var(--play-accent));
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-play svg * {
+    transition: none !important;
   }
 }
