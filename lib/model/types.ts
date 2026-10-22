@@ -162,8 +162,11 @@ export type ModelOp =
   /** 取り消したステップを元に戻す。状態は取り消す前に戻し、並び順（order）はそのまま */
   | { op: "step.restore"; id: StepId }
   | { op: "branch.add"; branch: Branch }
-  /** 分岐の条件・種類を変える（種類は枠全体で揃えること。branch.ts の setGroupKindOps） */
-  | { op: "branch.update"; id: string; patch: { condition?: string; kind?: Branch["kind"] } }
+  /**
+   * 分岐の条件・種類・場合の順番（index）を変える。種類は枠全体で揃えること（branch.ts の setGroupKindOps）。
+   * index を変えるときは、ステップの並びも合わせること（branch.ts の moveArmOps）
+   */
+  | { op: "branch.update"; id: string; patch: { condition?: string; kind?: Branch["kind"]; index?: number } }
   /** 分岐（枠の 1 つの場合）を消す。中にあったステップは枠の外に出す（ステップ自体は消さない） */
   | { op: "branch.remove"; id: string }
   | { op: "issue.add"; issue: NewIssue }

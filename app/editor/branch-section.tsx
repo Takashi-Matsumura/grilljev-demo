@@ -10,6 +10,7 @@ import {
   groupArms,
   joinBranchOps,
   leaveBranchOps,
+  moveArmOps,
   removeGroupOps,
   setGroupKindOps,
   wrapStepOps,
@@ -73,6 +74,7 @@ function InBranch({
   onCommit: (ops: ModelOp[]) => void;
 }) {
   const arms = groupArms(model, branch.groupId);
+  const armIndex = arms.findIndex((b) => b.id === branch.id);
   const [draft, setDraft] = useState<{ for: string; text: string } | null>(null);
   const key = `${branch.id}:${branch.condition}`;
   const condition = draft?.for === key ? draft.text : branch.condition;
@@ -89,7 +91,7 @@ function InBranch({
     <>
       <p className="text-xs">
         {branchKindLabel(branch.kind)}
-        {arms.length > 1 && `（${arms.length} 通りのうち ${arms.findIndex((b) => b.id === branch.id) + 1} つ目）`}
+        {arms.length > 1 && `（${arms.length} 通りのうち ${armIndex + 1} つ目）`}
         の中にあります
       </p>
       <label className="flex flex-col gap-1">
@@ -117,6 +119,27 @@ function InBranch({
             ))}
           </select>
         </label>
+      )}
+      {arms.length > 1 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">この場合の順番</span>
+          <button
+            type="button"
+            className={btn}
+            disabled={armIndex === 0}
+            onClick={() => onCommit(moveArmOps(model, branch.id, -1))}
+          >
+            ↑ 上へ
+          </button>
+          <button
+            type="button"
+            className={btn}
+            disabled={armIndex === arms.length - 1}
+            onClick={() => onCommit(moveArmOps(model, branch.id, 1))}
+          >
+            ↓ 下へ
+          </button>
+        </div>
       )}
       {branch.kind === "alt" && arms.length === 1 && (
         <p className="text-xs text-zinc-500">

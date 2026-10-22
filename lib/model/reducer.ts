@@ -201,7 +201,12 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
         ...m,
         branches: m.branches.map((b) =>
           b.id === op.id
-            ? { ...b, ...(condition !== undefined ? { condition } : {}), ...(op.patch.kind ? { kind: op.patch.kind } : {}) }
+            ? {
+                ...b,
+                ...(condition !== undefined ? { condition } : {}),
+                ...(op.patch.kind ? { kind: op.patch.kind } : {}),
+                ...(op.patch.index !== undefined ? { index: op.patch.index } : {}),
+              }
             : b,
         ),
       };
