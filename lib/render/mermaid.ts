@@ -51,12 +51,24 @@ export function flagSuffix(step: Step): string {
   return marks.join("");
 }
 
-/** 起点・終点の登場人物は、ライフラインの名前の末尾に印を付ける。Mermaid と drawio で共通。 */
+/**
+ * 起点・終点の登場人物は、ライフラインの名前の末尾に印を付ける。Mermaid と drawio で共通。
+ * 製品・サービス名（actor.product）はここに入れず、図の側で 2 段目に添える。
+ * 再生の強調は、この文字と図の 1 段目の文字の一致で見つけるため（mermaid-diagram.tsx）
+ */
 export function actorLabel(actor: Actor): string {
   if (actor.role === "trigger") return `${actor.name}［起点］`;
   if (actor.role === "end") return `${actor.name}［終点］`;
   return actor.name;
 }
+
+/** この業務の中心となる登場人物。明示した人がいなければ終点の人。どちらもいなければ undefined */
+export function focusActorOf<A extends Pick<Actor, "focus" | "role">>(actors: A[]): A | undefined {
+  return actors.find((a) => a.focus) ?? actors.find((a) => a.role === "end");
+}
+
+/** 中心の登場人物を、図を描いたあと（mermaid-diagram.tsx）に強調するための印。`%% focus: A3` */
+export const FOCUS_COMMENT = "%% focus: ";
 
 function arrowFor(step: Step): string {
   // 未確認は点線で描き、確信がないものを確信ありげに見せない
@@ -206,9 +218,13 @@ export function armOfTarget(
 
 export function toMermaid(model: FlowModel, options: MermaidOptions = {}): string {
   const lines: string[] = ["sequenceDiagram", "  autonumber"];
+  const focus = focusActorOf(model.actors);
+  if (focus) lines.push(`  ${FOCUS_COMMENT}${safeId(focus.id)}`);
 
   for (const actor of [...model.actors].sort((a, b) => a.lane - b.lane)) {
-    lines.push(`  ${participantKeyword(actor)} ${safeId(actor.id)} as ${esc(actorLabel(actor))}`);
+    // 製品・サービス名は 2 段目に。Mermaid は <br/> の前後を別々の text.actor に描く
+    const product = actor.product ? `<br/>${esc(actor.product)}` : "";
+    lines.push(`  ${participantKeyword(actor)} ${safeId(actor.id)} as ${esc(actorLabel(actor))}${product}`);
   }
 
   const actors = [...model.actors].sort((a, b) => a.lane - b.lane);

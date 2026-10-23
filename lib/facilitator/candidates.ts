@@ -4,7 +4,7 @@ import { loadPrompt } from "@/lib/prompts";
 import type { FlowModel, IssueKind } from "@/lib/model/types";
 import type { Candidate } from "./pick";
 import { purposeMissing } from "./purpose";
-import { stakeholderGap, stakeholderViews } from "./stakeholders";
+import { isAbsent, stakeholderGap, stakeholderViews } from "./stakeholders";
 
 /**
  * gemma に「問いの候補」を書かせる。server 専用。
@@ -140,7 +140,7 @@ export async function suggestAnswer(
           content: JSON.stringify({
             question,
             scope: { title: model.scope.title, purpose: model.scope.purpose },
-            absent_actors: model.actors.filter((a) => a.present === false).map((a) => a.name),
+            absent_actors: model.actors.filter(isAbsent).map((a) => a.name),
             steps: model.steps
               .filter((s) => s.status !== "retracted")
               .sort((a, b) => a.order - b.order)

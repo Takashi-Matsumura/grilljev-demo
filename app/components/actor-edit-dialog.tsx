@@ -8,9 +8,22 @@ import { StakeholderEditor, type StakeholderRow } from "./stakeholder-editor";
 const toRows = (model: FlowModel): StakeholderRow[] =>
   [...model.actors]
     .sort((a, b) => a.lane - b.lane)
-    .map((a) => ({ key: a.id, name: a.name, kind: a.kind, role: a.role, present: a.present, members: a.members }));
+    .map((a) => ({
+      key: a.id,
+      name: a.name,
+      kind: a.kind,
+      role: a.role,
+      focus: a.focus,
+      present: a.present,
+      members: a.members,
+      aliases: a.aliases,
+      product: a.product,
+      note: a.note,
+    }));
 
 const sameList = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((x, i) => x === b[i]);
+/** 1 行の文字欄。空白をならし、空なら undefined */
+const text = (v: string | undefined) => v?.replace(/\s+/g, " ").trim() || undefined;
 
 /** 「部署に入れる」で、個人の列を部署にたたむ予約。保存するまで図は変えない */
 export type Fold = { from: string; into: string };
@@ -42,8 +55,12 @@ export function editOps(model: FlowModel, rows: StakeholderRow[], folds: Fold[] 
     if (name !== "" && name !== a.name) patch.name = name;
     if (r.kind !== a.kind) patch.kind = r.kind;
     if (r.role !== a.role) patch.role = r.role ?? null;
-    if (r.present !== undefined && r.present !== a.present) patch.present = r.present;
+    if (r.focus !== a.focus) patch.focus = r.focus ?? null;
+    if (r.present !== a.present) patch.present = r.present ?? null;
     if (!sameList(r.members, a.members)) patch.members = r.members ?? [];
+    if (!sameList(r.aliases, a.aliases)) patch.aliases = r.aliases ?? [];
+    if (text(r.product) !== a.product) patch.product = text(r.product) ?? null;
+    if (text(r.note) !== a.note) patch.note = text(r.note) ?? null;
     if (Object.keys(patch).length > 0) ops.push({ op: "actor.update", id: a.id, patch });
   }
 
@@ -56,10 +73,13 @@ export function editOps(model: FlowModel, rows: StakeholderRow[], folds: Fold[] 
     seq += 1;
     const id = `A${seq}`;
     idOf.set(r.key, id);
-    const actor: Omit<Actor, "lane" | "addedAtRev"> = { id, name: r.name.trim(), kind: r.kind, aliases: [] };
+    const actor: Omit<Actor, "lane" | "addedAtRev"> = { id, name: r.name.trim(), kind: r.kind, aliases: r.aliases ?? [] };
     if (r.role) actor.role = r.role;
+    if (r.focus) actor.focus = true;
     if (r.present !== undefined) actor.present = r.present;
     if (r.members && r.members.length > 0) actor.members = r.members;
+    if (text(r.product)) actor.product = text(r.product);
+    if (text(r.note)) actor.note = text(r.note);
     ops.push({ op: "actor.add", actor });
   }
 
@@ -137,7 +157,7 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
         title={
           empty
             ? "業務に関わる人・部署・システムを、会話の前に登録します"
-            : "登場人物を追加したり、名前・種別・起点/終点・出席・並び順を直したりします"
+            : "登場人物を追加したり、名前・種別・製品名・呼び方・起点/終点・出席・並び順を直したりします"
         }
       >
         <svg

@@ -7,6 +7,7 @@ import {
   PURPOSE_Y,
   SELF_OUT,
   TITLE_Y,
+  type LaidActor,
   layoutDiagram,
 } from "./layout";
 
@@ -41,6 +42,13 @@ function attrEscape(s: string): string {
 
 /** 図形の value（HTML として解釈される）。 */
 const val = (s: string): string => attrEscape(htmlEscape(s.replace(INVALID_XML, "")));
+/** ライフラインの頭の value。製品・サービス名は、名前の下に小さく 2 段目で添える */
+const actorValue = (a: LaidActor): string => {
+  const name = htmlEscape(a.name.replace(INVALID_XML, ""));
+  if (!a.product) return attrEscape(name);
+  const product = htmlEscape(a.product.replace(INVALID_XML, ""));
+  return attrEscape(`${name}<br><span style="font-size:10px;color:#666666">${product}</span>`);
+};
 /** HTML として解釈されない属性（ページ名など）。 */
 const plain = (s: string): string => attrEscape(s.replace(INVALID_XML, ""));
 
@@ -52,6 +60,8 @@ const BOX_LIFELINE = `${LIFELINE_COMMON}whiteSpace=wrap;size=${HEAD_H};`;
 // 人型の図形は幅が 20px しかない。折り返し（wrap）を許すと名前が 1 文字ずつ縦に折れるので、
 // nowrap にする。名前は人型の下に出す（spacingTop は人型の高さ 40 を超えないと足に重なる）。
 const ACTOR_LIFELINE = `${LIFELINE_COMMON}participant=umlActor;whiteSpace=nowrap;verticalAlign=top;spacingTop=46;`;
+/** この業務の中心の登場人物（画面の図と同じ橙）。名前は太字 */
+const FOCUS_LIFELINE = "strokeColor=#d97706;strokeWidth=2;fillColor=#fdecc8;fontStyle=1;";
 
 const MESSAGE_STYLE: Record<MessageKind, string> = {
   sync: "html=1;verticalAlign=bottom;endArrow=block;rounded=0;",
@@ -110,7 +120,7 @@ export function toDrawio(model: FlowModel, at: string = new Date().toISOString()
   const lifeH = lay.height - HEAD_Y - 24;
   for (const a of lay.actors) {
     cells.push(
-      `<mxCell id="${id()}" value="${val(a.name)}" style="${a.asActor ? ACTOR_LIFELINE : BOX_LIFELINE}" vertex="1" parent="1">` +
+      `<mxCell id="${id()}" value="${actorValue(a)}" style="${a.asActor ? ACTOR_LIFELINE : BOX_LIFELINE}${a.focus ? FOCUS_LIFELINE : ""}" vertex="1" parent="1">` +
         `<mxGeometry x="${num(a.x)}" y="${HEAD_Y}" width="${num(a.w)}" height="${num(lifeH)}" as="geometry"/></mxCell>`,
     );
   }

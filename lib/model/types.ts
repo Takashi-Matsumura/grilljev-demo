@@ -18,14 +18,32 @@ export type Actor = {
   id: ActorId;
   name: string;
   kind: ActorKind;
-  /** 会話中の言い方のゆらぎ（「経理」「経理担当」）。whisper のヒントにも使う */
+  /**
+   * 会話中の言い方のゆらぎ（「経理」「経理担当」）と、その会社だけの呼び方（「基幹」「共有フォルダ」）。
+   * 会話からこの人を見つける手がかりで、whisper のヒントにも使う。改名した元の名前もここに残る
+   */
   aliases: string[];
   /** ライフラインの並び順（左から） */
   lane: number;
   addedAtRev: number;
   role?: ActorRole;
-  /** 会議に出席しているか。false の登場人物の作業は、会話からは推測しかできない（未確認として扱う） */
+  /**
+   * この業務の中心となる登場人物（図で強調する）。全体で 1 人だけ。
+   * 誰にも付いていなければ終点の人を中心とみなす（focusActorOf）
+   */
+  focus?: true;
+  /**
+   * 会議に出席しているか。false の登場人物の作業は、会話からは推測しかできない（未確認として扱う）。
+   * 未設定は undefined。システムは出席しないので見ない（isAbsent）
+   */
   present?: boolean;
+  /**
+   * 具体的な名前。システムなら製品・サービス名（「freee会計」）、社外なら会社名、部署なら正式名称。
+   * 図では名前の下に 2 段目で添える（toMermaid・drawio）
+   */
+  product?: string;
+  /** 補足（役割・使い方など）。図には出さず、編集画面と AI の材料にだけ使う */
+  note?: string;
   /**
    * 部署の中の人（「田中」「佐藤」）。個人はライフラインにせず、ここに持つ。
    * 列を役割で並べておくと、人が替わっても図が古くならず、同じ役割の仕事が 2 つの列に分かれない
@@ -146,7 +164,19 @@ export type ModelOp =
   | {
       op: "actor.update";
       id: ActorId;
-      patch: { name?: string; kind?: ActorKind; role?: ActorRole | null; present?: boolean; members?: string[] };
+      /** null は「外す（未設定に戻す）」 */
+      patch: {
+        name?: string;
+        kind?: ActorKind;
+        role?: ActorRole | null;
+        /** true で中心にする（前の人からは外す）。null で外す（終点が中心に戻る） */
+        focus?: true | null;
+        present?: boolean | null;
+        members?: string[];
+        aliases?: string[];
+        product?: string | null;
+        note?: string | null;
+      };
     }
   /**
    * 個人の列を部署にたたむ（「田中」→ 経理部のメンバー）。from が送り手のステップは into から出て、

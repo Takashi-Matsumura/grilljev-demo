@@ -2,14 +2,17 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import type { ActorKind, ActorRole } from "@/lib/model/types";
+import { focusActorOf } from "@/lib/render/mermaid";
 import {
   MAX_ACTOR_CHARS,
+  MAX_ALIASES,
   MAX_MEMBERS,
+  MAX_NOTE_CHARS,
+  MAX_PRODUCT_CHARS,
   MAX_SEED_ACTORS,
   splitNames,
   type SeedActor,
 } from "@/lib/store/session-types";
-import { ToggleSwitch } from "./toggle-switch";
 
 /**
  * 編集中の 1 行。key は並べ替え・削除で React の行を取り違えないためのもの（会議画面ではアクターの id）。
@@ -20,9 +23,17 @@ export type StakeholderRow = {
   name: string;
   kind: ActorKind;
   role?: ActorRole;
+  /** この業務の中心（図で強調する）。誰にも無ければ終点の人 */
+  focus?: true;
   present?: boolean;
   /** 部署の中の人（担当者の候補）。個人は列にせず、ここに書く */
   members?: string[];
+  /** その会社での呼び方・別名（会話からこの人を見つける手がかり） */
+  aliases?: string[];
+  /** 製品・サービス名、会社名、正式名称（図では名前の下に 2 段目で添える） */
+  product?: string;
+  /** 補足（図には出さない） */
+  note?: string;
 };
 
 /** メンバーを書ける種別。個人・システムは、それ自体が 1 人（1 つ）なので持たない */
@@ -33,6 +44,29 @@ const KIND_OPTIONS: { value: Exclude<ActorKind, "unknown">; label: string; short
   { value: "person", label: "個人", short: "個人" },
   { value: "system", label: "システム", short: "システム" },
   { value: "external", label: "社外", short: "社外" },
+];
+
+/** 具体的な名前の欄の見出しと例。個人は名前そのものが具体的なので出さない */
+const PRODUCT_TEXT: Partial<Record<ActorKind, { label: string; placeholder: string }>> = {
+  system: { label: "製品・サービス名", placeholder: "例: freee会計、kintone、社内の NAS" },
+  external: { label: "会社名・団体名", placeholder: "例: 〇〇株式会社" },
+  role: { label: "正式名称", placeholder: "例: 財務経理課" },
+  unknown: { label: "正式名称・製品名", placeholder: "例: 財務経理課、freee会計" },
+};
+
+const ALIAS_PLACEHOLDER: Record<ActorKind, string> = {
+  system: "例: 基幹、会計ソフト、共有フォルダ",
+  external: "例: お客さん、取引先",
+  role: "例: 経理、経理さん",
+  person: "例: 田中さん、部長",
+  unknown: "例: 経理、基幹",
+};
+
+/** 出席の 3 択。undefined は未設定（会話の中で出てきた人は、まず未設定になる） */
+const PRESENCE_OPTIONS: { value: boolean | undefined; label: string }[] = [
+  { value: true, label: "出席" },
+  { value: false, label: "欠席" },
+  { value: undefined, label: "未設定" },
 ];
 
 const ROLE_TEXT: Record<ActorRole, { label: string; hint: string }> = {
@@ -51,16 +85,23 @@ export const newStakeholderRow = (name: string, kind: ActorKind = "role"): Stake
   key: newKey(),
   name,
   kind,
-  present: true,
+  // システムは会議に出席するものではない
+  present: kind === "system" ? undefined : true,
 });
+
+const text = (v: string | undefined) => v?.replace(/\s+/g, " ").trim() ?? "";
 
 export const toSeedActors = (rows: StakeholderRow[]): SeedActor[] =>
   rows.map((r) => ({
     name: r.name,
     kind: r.kind === "unknown" ? "role" : r.kind,
     role: r.role,
-    present: r.present ?? true,
+    ...(r.focus ? { focus: true as const } : {}),
+    present: r.kind === "system" ? null : (r.present ?? null),
     ...(r.members && r.members.length > 0 ? { members: r.members } : {}),
+    ...(r.aliases && r.aliases.length > 0 ? { aliases: r.aliases } : {}),
+    ...(text(r.product) ? { product: text(r.product) } : {}),
+    ...(text(r.note) ? { note: text(r.note) } : {}),
   }));
 
 /** 「田中、佐藤」→ ["田中", "佐藤"]。空・重複・長すぎる名前は除く */
@@ -68,6 +109,54 @@ const parseMembers = (text: string): string[] =>
   [...new Set(splitNames(text).map((n) => n.replace(/(さん|様|氏)$/, "").slice(0, MAX_ACTOR_CHARS)))]
     .filter((n) => n !== "")
     .slice(0, MAX_MEMBERS);
+
+/** 「基幹、会計ソフト」→ ["基幹", "会計ソフト"]。呼び方そのものなので「さん」は残す。自分の名前は除く */
+const parseAliases = (text: string, name: string): string[] =>
+  [...new Set(splitNames(text).map((n) => n.slice(0, MAX_ACTOR_CHARS)))]
+    .filter((n) => n !== "" && n !== name.trim())
+    .slice(0, MAX_ALIASES);
+
+/**
+ * 「、」区切りで名前を並べる 1 行の欄。打っている間は文字のまま持ち、離れたとき・Enter で配列にする
+ * （打ちかけの「、」で項目が消えないように）。行を切り替えたら key で作り直す
+ */
+function NameListInput({
+  value,
+  parse,
+  onCommit,
+  placeholder,
+  className,
+}: {
+  value: string[];
+  parse: (text: string) => string[];
+  onCommit: (list: string[]) => void;
+  placeholder: string;
+  className: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    onCommit(parse(draft));
+    setDraft(null);
+  };
+  return (
+    <input
+      className={className}
+      value={draft ?? value.join("、")}
+      placeholder={placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.nativeEvent.isComposing) return;
+        // Enter でフォーム全体（会議の開始）が送信されないようにする
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        }
+      }}
+    />
+  );
+}
 
 /** 種別のアイコン（カードの名前の前に出す） */
 function KindIcon({ kind }: { kind: ActorKind }) {
@@ -126,7 +215,7 @@ function KindIcon({ kind }: { kind: ActorKind }) {
  * 自分の作業の前後にいる人を先に置いておくと、会話が「その間をどうつなぐか」に向かう。
  *
  * 図の頭と同じ形のカードを左から並べ、そのカードを直接いじる（見たままが図の並びになる）。
- * 名前・種別・出席・削除・並べ替えは、カードを押すと開くパネルで。起点・終点は全体で 1 人ずつなので下のセレクトで選ぶ。
+ * 名前・種別・製品名・呼び方・出席・削除・並べ替えは、カードを押すと開くパネルで。起点・終点は全体で 1 人ずつなので下のセレクトで選ぶ。
  */
 export function StakeholderEditor({
   rows,
@@ -156,8 +245,6 @@ export function StakeholderEditor({
   const [draft, setDraft] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
-  // メンバーの書きかけ（「、」で区切った 1 行）。カードを切り替えたら、そのカードの今のメンバーから書き直す
-  const [membersDraft, setMembersDraft] = useState<{ key: string; text: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   /** 名前を登場人物にする。既出の名前は足さない。上限を超えた分も足さない（既存は削らない） */
@@ -197,6 +284,9 @@ export function StakeholderEditor({
         return r.role === role ? { ...r, role: undefined } : r;
       }),
     );
+  // 中心は 1 人だけ。key が null なら外す（終点の人が中心に戻る）
+  const setFocus = (key: string | null) =>
+    onChange(rows.map((r) => (r.key === key ? { ...r, focus: true as const } : r.focus ? { ...r, focus: undefined } : r)));
   /** from 番目の人を to 番目へ動かす（ドラッグと ←→ で共通） */
   const moveTo = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= rows.length || to >= rows.length) return;
@@ -209,21 +299,17 @@ export function StakeholderEditor({
   const current = rows.find((r) => r.key === selected);
   const blocked = current ? removeBlocked(current) : null;
   const notice = current ? removeNotice(current) : null;
-  const membersText =
-    current && membersDraft?.key === current.key ? membersDraft.text : (current?.members ?? []).join("、");
-  const commitMembers = () => {
-    if (!current || membersDraft?.key !== current.key) return;
-    update(current.key, { members: parseMembers(membersDraft.text) });
-    setMembersDraft(null);
-  };
   // たたみ先の候補: 部署・社外（メンバーを持てる人）
   const foldTargets = current ? rows.filter((r) => r.key !== current.key && (r.kind === "role" || r.kind === "external")) : [];
   const currentIndex = current ? rows.indexOf(current) : -1;
   const trigger = rows.find((r) => r.role === "trigger");
   const end = rows.find((r) => r.role === "end");
+  const focus = focusActorOf(rows);
 
   const select =
     "rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20 dark:bg-zinc-900";
+  const field =
+    "rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm text-foreground dark:border-white/20";
   const small =
     "rounded-md border border-black/15 px-2.5 py-1 text-sm hover:bg-black/5 disabled:opacity-30 dark:border-white/20 dark:hover:bg-white/10";
 
@@ -242,16 +328,20 @@ export function StakeholderEditor({
         <ol aria-label="登場人物（左から図のライフラインの順）" className="flex gap-3 overflow-x-auto p-3">
           {rows.map((r, i) => {
             const isSelected = r.key === selected;
-            const absent = r.present === false;
-            // 2 行目: 出席の状態（欠席・未設定）を優先し、なければ種別。起点・終点はその前にバッジで出す
-            const sub =
-              r.present === undefined
+            const system = r.kind === "system";
+            const absent = r.present === false && !system;
+            const what = text(r.product) || (KIND_OPTIONS.find((o) => o.value === r.kind)?.label ?? "種別は未設定");
+            // 2 行目: 出席の状態（欠席・未設定）を優先し、なければ製品名か種別。起点・終点はその前にバッジで出す。
+            // システムは出席を聞かない
+            const sub = system
+              ? what
+              : r.present === undefined
                 ? "出席は未設定"
                 : absent
                   ? "欠席"
                   : r.role
                     ? ""
-                    : (KIND_OPTIONS.find((o) => o.value === r.kind)?.label ?? "種別は未設定");
+                    : what;
             return (
               <li
                 key={r.key}
@@ -277,7 +367,7 @@ export function StakeholderEditor({
                 <button
                   type="button"
                   aria-expanded={isSelected}
-                  aria-label={`${i + 1} 人目: ${r.name || "（未入力）"}（${[r.role && ROLE_TEXT[r.role].label, sub].filter(Boolean).join("・")}）`}
+                  aria-label={`${i + 1} 人目: ${r.name || "（未入力）"}（${[r.role && ROLE_TEXT[r.role].label, r === focus && "中心", sub].filter(Boolean).join("・")}）`}
                   onClick={() => setSelected(isSelected ? null : r.key)}
                   className={`flex h-14 w-full cursor-grab flex-col items-center justify-center gap-0.5 rounded-lg border px-1.5 active:cursor-grabbing ${
                     isSelected
@@ -291,10 +381,15 @@ export function StakeholderEditor({
                     <KindIcon kind={r.kind} />
                     <span className="truncate">{r.name || "（未入力）"}</span>
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] leading-4 text-zinc-500">
+                  <span className="flex max-w-full items-center gap-1 truncate text-[11px] leading-4 text-zinc-500">
                     {r.role && (
                       <span className="rounded bg-sky-100 px-1.5 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300">
                         {ROLE_TEXT[r.role].label}
+                      </span>
+                    )}
+                    {r === focus && (
+                      <span className="rounded bg-amber-100 px-1.5 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                        中心
                       </span>
                     )}
                     {sub}
@@ -376,7 +471,10 @@ export function StakeholderEditor({
                       type="button"
                       aria-pressed={current.kind === o.value}
                       title={o.label}
-                      onClick={() => update(current.key, { kind: o.value })}
+                      // システムは会議に出席しないので、出席を未設定に戻す
+                      onClick={() =>
+                        update(current.key, { kind: o.value, ...(o.value === "system" ? { present: undefined } : {}) })
+                      }
                       className={`px-2.5 py-1.5 text-xs ${j > 0 ? "border-l border-black/15 dark:border-white/20" : ""} ${
                         current.kind === o.value
                           ? "bg-sky-600 text-white dark:bg-sky-500"
@@ -389,26 +487,54 @@ export function StakeholderEditor({
                 </div>
               </div>
             </div>
+            <div className="flex flex-wrap gap-3">
+              {PRODUCT_TEXT[current.kind] && (
+                <label className="flex min-w-40 flex-1 flex-col gap-1 text-xs text-zinc-500">
+                  {PRODUCT_TEXT[current.kind]?.label}（図では名前の下に添えます）
+                  <input
+                    className={field}
+                    value={current.product ?? ""}
+                    maxLength={MAX_PRODUCT_CHARS}
+                    placeholder={PRODUCT_TEXT[current.kind]?.placeholder}
+                    onChange={(e) => update(current.key, { product: e.target.value })}
+                  />
+                </label>
+              )}
+              <label className="flex min-w-40 flex-1 flex-col gap-1 text-xs text-zinc-500">
+                社内での呼び方・別名（「、」区切り）
+                <NameListInput
+                  key={current.key}
+                  className={field}
+                  value={current.aliases ?? []}
+                  parse={(t) => parseAliases(t, current.name)}
+                  onCommit={(aliases) => update(current.key, { aliases })}
+                  placeholder={ALIAS_PLACEHOLDER[current.kind]}
+                />
+              </label>
+            </div>
             {hasMembers(current.kind) && (
               <label className="flex flex-col gap-1 text-xs text-zinc-500">
                 メンバー（担当者の候補。「、」区切り）
-                <input
-                  className="rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm text-foreground dark:border-white/20"
-                  value={membersText}
+                <NameListInput
+                  key={current.key}
+                  className={field}
+                  value={current.members ?? []}
+                  parse={parseMembers}
+                  onCommit={(members) => update(current.key, { members })}
                   placeholder="例: 田中、佐藤"
-                  onChange={(e) => setMembersDraft({ key: current.key, text: e.target.value })}
-                  onBlur={commitMembers}
-                  onKeyDown={(e) => {
-                    if (e.nativeEvent.isComposing) return;
-                    // Enter でフォーム全体（会議の開始）が送信されないようにする
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitMembers();
-                    }
-                  }}
                 />
               </label>
             )}
+            <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              補足（図には出しません）
+              <input
+                className={field}
+                value={current.note ?? ""}
+                maxLength={MAX_NOTE_CHARS}
+                placeholder={current.kind === "system" ? "例: 請求書の登録と支払いに使う" : "例: 月末だけ請求書の確認を手伝う"}
+                onChange={(e) => update(current.key, { note: e.target.value })}
+              />
+            </label>
             {onFold && current.kind === "person" && foldTargets.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 rounded-md bg-sky-50 px-3 py-2 text-xs dark:bg-sky-500/10">
                 <span className="text-zinc-600 dark:text-zinc-300">
@@ -433,14 +559,49 @@ export function StakeholderEditor({
                 </select>
               </div>
             )}
+            {current.kind !== "system" && (
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-zinc-500" id={`presence-${current.key}`}>
+                    この会議に
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby={`presence-${current.key}`}
+                    className="flex overflow-hidden rounded-md border border-black/15 dark:border-white/20"
+                  >
+                    {PRESENCE_OPTIONS.map((o, j) => (
+                      <button
+                        key={o.label}
+                        type="button"
+                        role="radio"
+                        aria-checked={current.present === o.value}
+                        onClick={() => update(current.key, { present: o.value })}
+                        className={`px-2.5 py-1 text-xs ${j > 0 ? "border-l border-black/15 dark:border-white/20" : ""} ${
+                          current.present === o.value
+                            ? o.value === false
+                              ? "bg-amber-600 text-white dark:bg-amber-500"
+                              : o.value === undefined
+                                ? "bg-zinc-500 text-white"
+                                : "bg-sky-600 text-white dark:bg-sky-500"
+                            : "hover:bg-black/5 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-xs text-zinc-500 [word-break:auto-phrase]">
+                  {current.present === false
+                    ? "欠席の人の中の作業は、AI が質問せず「次回確認」に回します。出席者には、この人との受け渡しだけを聞きます。"
+                    : current.present === undefined
+                      ? "未設定のときは、AI は出席しているか分からないものとして扱います。"
+                      : "欠席にすると、AI はこの人の中の作業を質問せず「次回確認」に回します。"}
+                </p>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2 border-t border-black/5 pt-3 dark:border-white/10">
-              <ToggleSwitch
-                checked={current.present === true}
-                onChange={(present) => update(current.key, { present })}
-                label={current.present === undefined ? "会議に出席（未設定）" : "会議に出席"}
-                title="この会議に出席しているか"
-                onColorClass="bg-sky-600"
-              />
               <span className="flex-1" />
               <button
                 type="button"
@@ -502,6 +663,24 @@ export function StakeholderEditor({
               </label>
             );
           })}
+          <label
+            className="flex items-center gap-2"
+            title="この業務の中心となる登場人物です。図で色を付けて強調します。選ばなければ終点の人が中心になります"
+          >
+            中心
+            <select
+              className={select}
+              value={rows.find((r) => r.focus)?.key ?? ""}
+              onChange={(e) => setFocus(e.target.value || null)}
+            >
+              <option value="">{end ? `終点と同じ（${end.name || "未入力"}）` : "終点と同じ（終点は未設定）"}</option>
+              {rows.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.name || "（未入力）"}
+                </option>
+              ))}
+            </select>
+          </label>
           {(!trigger || !end) && (
             <span className="text-xs text-amber-700 dark:text-amber-400">
               {!trigger && "業務を始める人"}
