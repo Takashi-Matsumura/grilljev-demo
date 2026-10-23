@@ -193,8 +193,11 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
         : { mode: "edit", stepId: id },
     );
   };
-  const moveStep = (index: number, insertAt: number) => {
-    const ops = moveStepOps(steps, index, insertAt);
+  /** inside = 落とした点のある枠（図の上から何番目か）と場合（枠の中で何番目か）。null = どの枠の外 */
+  const moveStep = (index: number, insertAt: number, inside?: { frame: number; arm: number } | null) => {
+    const target =
+      inside === undefined ? undefined : inside === null ? null : drawnFrames(model, foldedSet)[inside.frame]?.[inside.arm];
+    const ops = moveStepOps(steps, index, insertAt, target);
     if (ops.length === 0) return;
     commit(ops);
     setPanel({ mode: "edit", stepId: steps[index].id });

@@ -320,7 +320,8 @@ export function FromToPicker({
   artifact?: string;
   onFrom: (id: string) => void;
   onTo: (id: string) => void;
-  onSwap: () => void;
+  /** 渡すと、送り手と受け手の入れ替えボタンを出す（手直しのパネルだけ） */
+  onSwap?: () => void;
 }) {
   const self = from === to;
   const picker = (side: "from" | "to") => (
@@ -355,16 +356,18 @@ export function FromToPicker({
           {picker("from")}
           {picker("to")}
         </div>
-        <button
-          type="button"
-          className={iconBtn}
-          aria-label="送り手と受け手を入れ替える"
-          title="送り手と受け手を入れ替える（矢印の向きが逆になります）"
-          disabled={self}
-          onClick={onSwap}
-        >
-          ⇅
-        </button>
+        {onSwap && (
+          <button
+            type="button"
+            className={iconBtn}
+            aria-label="送り手と受け手を入れ替える"
+            title="送り手と受け手を入れ替える（矢印の向きが逆になります）"
+            disabled={self}
+            onClick={onSwap}
+          >
+            ⇅
+          </button>
+        )}
       </div>
       <LaneStrip actors={actors} from={from} to={to} number={number} artifact={artifact?.trim() || undefined} />
     </div>

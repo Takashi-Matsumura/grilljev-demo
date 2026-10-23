@@ -119,10 +119,6 @@ export function StepAddPanel({
               artifact={artifact}
               onFrom={setFrom}
               onTo={setTo}
-              onSwap={() => {
-                setFrom(to);
-                setTo(from);
-              }}
             />
 
             <label className="grid grid-cols-[4.5rem_1fr] items-center gap-2">
