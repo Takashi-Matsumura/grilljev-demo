@@ -110,7 +110,9 @@ export type MermaidOptions = {
   placeholders?: boolean;
   /**
    * 畳む枠（Branch.groupId）。畳んだ枠は中身を描かず、「▸ alt 条件／条件（3 手順）」の注記 1 つにする。/editor の画面用。
-   * 後ろの手順の番号は詰めずに、元の番号のまま描く（autonumber を振り直す）
+   * ただし中心の登場人物（focusActorOf）が関わる手順がある枠は、枠を残してその手順だけを描き、
+   * ほかの手順を「▸ …」の注記 1 つにまとめる（frameStates）。
+   * 隠した手順の番号は詰めずに、元の番号のまま描く（autonumber を振り直す）
    */
   collapsed?: ReadonlySet<string>;
 };
@@ -128,6 +130,31 @@ function armsOf(model: FlowModel, groupId: string): Branch[] {
 function collapsedText(arms: Branch[], steps: number): string {
   const conditions = arms.map((a) => a.condition.trim() || "（未入力）").join("／");
   return `${COLLAPSED_MARK} ${arms[0].kind} ${conditions}（${steps} 手順）`;
+}
+
+/**
+ * 畳むよう指定された枠の描き方。folded = 注記 1 つ / narrowed = 枠を残し、中心の人が関わる手順だけ描く /
+ * open = ふつうに描く（畳む指定が無い枠と、畳んでも隠す手順が無い枠）
+ */
+export type FrameState = "open" | "narrowed" | "folded";
+
+/** 手順に中心の登場人物が関わるか */
+const involves = (step: Step, focusId: string | undefined) =>
+  focusId !== undefined && (step.from === focusId || step.to === focusId);
+
+/** 畳むよう指定された枠ごとの描き方（指定の無い枠は入れない＝open） */
+function frameStates(model: FlowModel, collapsed: ReadonlySet<string>): Map<string, FrameState> {
+  const focusId = focusActorOf(model.actors)?.id;
+  const states = new Map<string, FrameState>();
+  if (collapsed.size === 0) return states;
+  const branchById = new Map(model.branches.map((b) => [b.id, b]));
+  const steps = visibleSteps(model);
+  for (const groupId of collapsed) {
+    const inside = steps.filter((s) => s.branchId !== null && branchById.get(s.branchId)?.groupId === groupId);
+    const shown = inside.filter((s) => involves(s, focusId)).length;
+    states.set(groupId, shown === 0 ? "folded" : shown < inside.length ? "narrowed" : "open");
+  }
+  return states;
 }
 
 /** 空の場合に描く注記の文言。図の上でこの注記を押すと、その場合にステップを足す（mermaid-diagram.tsx） */
@@ -185,17 +212,26 @@ export function frameIds(model: FlowModel): string[] {
 }
 
 /**
- * 図に描かれる枠を、図の上から順に（場合を index 順に）。畳んだ枠は枠として描かれない（注記になる）ので除く
+ * 図に描かれる枠を、図の上から順に（場合を index 順に）。注記 1 つに畳んだ枠は枠として描かれないので除く
+ * （中心の人の手順だけを残した枠は、枠として描かれるので入る）
  */
 export function drawnFrames(model: FlowModel, collapsed: ReadonlySet<string> = NO_FRAMES): Branch[][] {
+  const states = frameStates(model, collapsed);
   return frameIds(model)
-    .filter((g) => !collapsed.has(g))
+    .filter((g) => states.get(g) !== "folded")
     .map((g) => armsOf(model, g));
 }
 
-/** 畳んだ枠を、図の上から順に。k 番目の「▸ …」の注記が、k 番目の枠 */
+/**
+ * 「▸ …」の注記を描く枠を、図の上から順に。k 番目の注記が、k 番目の枠（押すと開く）。
+ * 注記 1 つに畳んだ枠と、中心の人の手順だけを残した枠（隠した手順の注記）の両方
+ */
 export function collapsedFrames(model: FlowModel, collapsed: ReadonlySet<string>): string[] {
-  return frameIds(model).filter((g) => collapsed.has(g));
+  const states = frameStates(model, collapsed);
+  return frameIds(model).filter((g) => {
+    const state = states.get(g);
+    return state === "folded" || state === "narrowed";
+  });
 }
 
 /**
@@ -234,7 +270,22 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
   let openGroup: string | null = null;
   let openBranch: string | null = null;
   const collapsed = options.collapsed ?? NO_FRAMES;
+  const states = frameStates(model, collapsed);
+  /** 枠として描いた（end で閉じる）か */
+  const framed = (g: string | null): g is string => g !== null && states.get(g) !== "folded";
   const items = flowItems(model);
+  /** 隠した手順の注記は、その手順に出てくる登場人物の左端から右端までにかける（関係ないレーンにはかけない） */
+  const overOf = (hidden: Step[]) => {
+    const ids = new Set(hidden.flatMap((h) => [h.from, h.to]));
+    const lanes = actors.filter((a) => ids.has(a.id));
+    return lanes.length === 0
+      ? span
+      : lanes.length === 1
+        ? safeId(lanes[0].id)
+        : `${safeId(lanes[0].id)},${safeId(lanes[lanes.length - 1].id)}`;
+  };
+  const stepsIn = (groupId: string) =>
+    items.flatMap((item) => (item.step && item.branch?.groupId === groupId ? [item.step] : []));
   // 描いたかどうかに関わらず数えた、ステップの番号（autonumber と同じ 1 始まり）
   let number = 0;
   /** 畳んだ枠で番号を飛ばしたので、次に描くステップの前で振り直す */
@@ -243,19 +294,11 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
   for (const { step, branch } of items) {
     const groupId = branch?.groupId ?? null;
 
-    if (groupId !== null && collapsed.has(groupId)) {
+    if (groupId !== null && states.get(groupId) === "folded") {
       if (groupId !== openGroup) {
-        if (openGroup !== null && !collapsed.has(openGroup)) lines.push("  end");
-        const hidden = items.flatMap((item) => (item.step && item.branch?.groupId === groupId ? [item.step] : []));
-        // 注記は、中の手順に出てくる登場人物の左端から右端までにかける（関係ないレーンにはかけない）
-        const ids = new Set(hidden.flatMap((h) => [h.from, h.to]));
-        const lanes = actors.filter((a) => ids.has(a.id));
-        const over =
-          lanes.length === 0
-            ? span
-            : lanes.length === 1
-              ? safeId(lanes[0].id)
-              : `${safeId(lanes[0].id)},${safeId(lanes[lanes.length - 1].id)}`;
+        if (framed(openGroup)) lines.push("  end");
+        const hidden = stepsIn(groupId);
+        const over = overOf(hidden);
         if (over) lines.push(`  Note over ${over}: ${esc(collapsedText(armsOf(model, groupId), hidden.length))}`);
         openGroup = groupId;
         openBranch = null;
@@ -267,11 +310,19 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
       continue;
     }
 
+    const narrowed = groupId !== null && states.get(groupId) === "narrowed";
     if (groupId !== openGroup) {
-      if (openGroup !== null && !collapsed.has(openGroup)) lines.push("  end");
+      if (framed(openGroup)) lines.push("  end");
       if (branch) lines.push(`  ${branch.kind} ${escCondition(branch.condition)}`);
       openGroup = groupId;
       openBranch = branch?.id ?? null;
+      // 中心の人の手順だけを残した枠。隠した手順は、枠の頭の注記 1 つにまとめる（押すと開く）
+      if (narrowed && focus) {
+        const hidden = stepsIn(groupId).filter((s) => !involves(s, focus.id));
+        lines.push(
+          `    Note over ${overOf(hidden)}: ${esc(`${COLLAPSED_MARK} ${focus.name}が関わらない ${hidden.length} 手順を隠しています`)}`,
+        );
+      }
     } else if (branch && branch.id !== openBranch) {
       // 同じ group の別の枝。else を持てるのは alt だけ
       if (branch.kind === "alt") lines.push(`  else ${escCondition(branch.condition)}`);
@@ -280,10 +331,17 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
 
     const indent = openGroup !== null ? "    " : "  ";
     if (step === null) {
-      if (options.placeholders && span) lines.push(`${indent}Note over ${span}: ${PLACEHOLDER_TEXT}`);
+      // 畳むよう指定された枠には描かない（emptyArms と揃える）
+      if (options.placeholders && span && !collapsed.has(groupId ?? "")) {
+        lines.push(`${indent}Note over ${span}: ${PLACEHOLDER_TEXT}`);
+      }
       continue;
     }
     number += 1;
+    if (narrowed && !involves(step, focus?.id)) {
+      renumber = true;
+      continue;
+    }
     if (renumber) {
       lines.push(`  autonumber ${number}`);
       renumber = false;
@@ -306,6 +364,6 @@ export function toMermaid(model: FlowModel, options: MermaidOptions = {}): strin
     }
   }
 
-  if (openGroup !== null && !collapsed.has(openGroup)) lines.push("  end");
+  if (framed(openGroup)) lines.push("  end");
   return lines.join("\n");
 }

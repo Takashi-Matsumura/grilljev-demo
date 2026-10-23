@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FromToPicker, PanelSection } from "@/app/components/step-panel";
+import { artifactField, FromToPicker, PanelSection } from "@/app/components/step-panel";
 import type { StepInput } from "@/lib/model/add-step";
 import type { Branch, FlowModel } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
@@ -53,6 +53,8 @@ export function StepAddPanel({
     : afterIndex >= 0
       ? `${afterIndex + 1} 番の後に入れます`
       : "最後に入れます";
+  // 足したときの図の番号。分岐の中に足すときは、場合の中の位置で決まるので出さない
+  const number = into ? undefined : afterIndex >= 0 ? afterIndex + 2 : steps.length + 1;
   // 空の場合なら、やめられるようにする（枠の最後の場合なら、枠ごと消える）
   const intoEmpty = into !== undefined && !steps.some((s) => s.branchId === into.id);
   const lastArm = into !== undefined && model.branches.filter((b) => b.groupId === into.groupId).length === 1;
@@ -113,6 +115,8 @@ export function StepAddPanel({
               actors={actors}
               from={from}
               to={to}
+              number={number}
+              artifact={artifact}
               onFrom={setFrom}
               onTo={setTo}
               onSwap={() => {
@@ -124,7 +128,7 @@ export function StepAddPanel({
             <label className="grid grid-cols-[4.5rem_1fr] items-center gap-2">
               <span className="text-xs text-zinc-500">渡すもの</span>
               <input
-                className={field}
+                className={artifactField(artifact.trim() !== "")}
                 value={artifact}
                 placeholder="なし（書類・データ）"
                 title="図の帯になります"
@@ -133,6 +137,8 @@ export function StepAddPanel({
             </label>
           </PanelSection>
 
+          {/* ここより上がステップに要る最低限（内容・誰が・誰に・渡すもの）。下は必要なときだけ */}
+          <hr className="border-black/10 dark:border-white/15" />
           <PanelSection title="状態">
             <div className="flex items-center gap-3">
               <div
