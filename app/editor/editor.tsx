@@ -147,10 +147,13 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
     if (groupId) setCollapsed(new Set([...collapsed].filter((g) => g !== groupId)));
   };
 
+  // 手直しのパネルで書きかけの名前・渡すもの・担当者。確定する前から画面の図に映す（モデルには入れない）
+  const [preview, setPreview] = useState<ModelOp[] | null>(null);
+  const shownModel = useMemo(() => (preview ? applyOps(model, preview, model.updatedAt) : model), [model, preview]);
   // 画面の図には、空の場合に「＋ ここにステップを追加」を描く（書き出す .svg からは外す）
   const displayCode = useMemo(
-    () => toMermaid(model, { assignees: showAssignees, placeholders: true, collapsed: foldedSet }),
-    [model, showAssignees, foldedSet],
+    () => toMermaid(shownModel, { assignees: showAssignees, placeholders: true, collapsed: foldedSet }),
+    [shownModel, showAssignees, foldedSet],
   );
   // .svg は畳んだ枠も開いて、全部の手順で書き出す。畳んでいなければ画面の図をそのまま使う
   const exportCode = useMemo(
@@ -400,7 +403,13 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
         </div>
 
         {panel?.mode === "edit" && editingIndex >= 0 && (
-          <StepPanel model={model} stepId={panel.stepId} onClose={() => setPanel(null)} onCommit={commit}>
+          <StepPanel
+            model={model}
+            stepId={panel.stepId}
+            onClose={() => setPanel(null)}
+            onCommit={commit}
+            onPreview={setPreview}
+          >
             <BranchSection model={model} stepId={panel.stepId} onCommit={commit} onAddInto={openAddInto} />
           </StepPanel>
         )}
