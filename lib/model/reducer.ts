@@ -55,6 +55,8 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
                   aliases,
                   role: a.role ?? from.role,
                   present: a.present ?? from.present,
+                  product: a.product ?? from.product,
+                  note: a.note ?? from.note,
                   ...(into.members || from.members
                     ? { members: [...new Set([...(into.members ?? []), ...(from.members ?? [])])] }
                     : {}),
@@ -115,15 +117,21 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
     case "actor.update": {
       const target = m.actors.find((a) => a.id === op.id);
       if (!target) return null;
-      const { name: rawName, role, ...rest } = op.patch;
+      const { name: rawName, role, present, product, note, aliases, ...rest } = op.patch;
       const name = rawName?.replace(/\s+/g, " ").trim();
       // 空の名前・他の人と同じ名前への改名は無視する（名前で人を見分けているため）
       const renamed =
         name !== undefined && name !== "" && name !== target.name && !m.actors.some((a) => a.name === name);
       const next: Actor = { ...target, ...rest };
-      if (renamed) {
-        next.name = name;
-        next.aliases = [...new Set([...target.aliases, target.name])].filter((n) => n !== name);
+      if (renamed) next.name = name;
+      // 改名した元の名前は別名に残す。別名に自分の名前は入れない
+      const base = aliases ?? target.aliases;
+      next.aliases = [...new Set(renamed ? [...base, target.name] : base)].filter((n) => n !== next.name);
+      const optional = { present, product, note } as const;
+      for (const key of ["present", "product", "note"] as const) {
+        const v = optional[key];
+        if (v === null || v === "") delete next[key];
+        else if (v !== undefined) (next as Record<typeof key, unknown>)[key] = v;
       }
       if (role === null) delete next.role;
       else if (role !== undefined) next.role = role;
@@ -302,8 +310,11 @@ export function modelFromSeed(seed: SessionSeed, at: string): FlowModel {
     lane: i,
     addedAtRev: 0,
     ...(s.role ? { role: s.role } : {}),
-    present: s.present,
+    ...(typeof s.present === "boolean" ? { present: s.present } : {}),
     ...(s.members && s.members.length > 0 ? { members: s.members } : {}),
+    ...(s.aliases && s.aliases.length > 0 ? { aliases: s.aliases } : {}),
+    ...(s.product ? { product: s.product } : {}),
+    ...(s.note ? { note: s.note } : {}),
   }));
   return { ...emptyModel({ title: seed.title }, at), actors };
 }

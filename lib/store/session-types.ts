@@ -13,10 +13,16 @@ export type SeedActor = {
   name: string;
   kind: Exclude<ActorKind, "unknown">;
   role?: ActorRole;
-  /** 会議に出席しているか */
-  present: boolean;
+  /** 会議に出席しているか。null は未設定（システムなど） */
+  present: boolean | null;
   /** 部署の中の人（担当者の候補） */
   members?: string[];
+  /** 社内での呼び方・別名 */
+  aliases?: string[];
+  /** 製品・サービス名、会社名、正式名称 */
+  product?: string;
+  /** 補足 */
+  note?: string;
 };
 
 /** 開始時の初期設定＝共通認識。「リセット」の戻り先にもなる。 */
@@ -76,6 +82,9 @@ export const MAX_NAME_CHARS = 60;
 export const MAX_SEED_ACTORS = 20;
 export const MAX_ACTOR_CHARS = 30;
 export const MAX_MEMBERS = 20;
+export const MAX_ALIASES = 10;
+export const MAX_PRODUCT_CHARS = 40;
+export const MAX_NOTE_CHARS = 200;
 export const SEED_ACTOR_KINDS: SeedActor["kind"][] = ["role", "person", "system", "external"];
 export const MAX_ARCHIVES = 50;
 export const MAX_LINES = 2_000;
@@ -112,11 +121,20 @@ export function parseSeed(title: unknown, actors: unknown, departments?: unknown
     seen.add(name);
     const kind = SEED_ACTOR_KINDS.find((k) => k === a.kind) ?? "role";
     const role = a.role === "trigger" || a.role === "end" ? a.role : undefined;
-    const actor: SeedActor = { name, kind, present: a.present !== false };
-    const members = Array.isArray(a.members)
-      ? [...new Set(a.members.map(clean).filter((n) => n !== "" && n.length <= MAX_ACTOR_CHARS))].slice(0, MAX_MEMBERS)
-      : [];
+    // 出席は、書いていなければ出席とみなす（出席の有無を持つ前の保存形式）。null は未設定
+    const actor: SeedActor = { name, kind, present: a.present === null ? null : a.present !== false };
+    const names = (v: unknown, max: number) =>
+      Array.isArray(v)
+        ? [...new Set(v.map(clean).filter((n) => n !== "" && n !== name && n.length <= MAX_ACTOR_CHARS))].slice(0, max)
+        : [];
+    const members = names(a.members, MAX_MEMBERS);
     if (members.length > 0) actor.members = members;
+    const aliases = names(a.aliases, MAX_ALIASES);
+    if (aliases.length > 0) actor.aliases = aliases;
+    const product = clean(a.product);
+    if (product !== "" && product.length <= MAX_PRODUCT_CHARS) actor.product = product;
+    const note = clean(a.note);
+    if (note !== "" && note.length <= MAX_NOTE_CHARS) actor.note = note;
     if (role && !roles.has(role)) {
       roles.add(role);
       actor.role = role;

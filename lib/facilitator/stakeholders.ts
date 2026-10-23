@@ -8,8 +8,16 @@ import type { Actor, FlowModel } from "@/lib/model/types";
  * そこが業務フローの切れ目なので、そこをつなぐ問いを出す。
  */
 
+/** 会議に出席していない登場人物か。システムは出席するものではないので、欠席とは数えない */
+export const isAbsent = (a: Pick<Actor, "present" | "kind">): boolean => a.present === false && a.kind !== "system";
+
 export type StakeholderView = {
   name: string;
+  /** 製品・サービス名、会社名、正式名称 */
+  product: string | null;
+  /** その会社だけの呼び方・別名 */
+  aliases: string[];
+  note: string | null;
   role: "起点" | "終点" | null;
   /** 会議に出席しているか。登録していない（会話の中で出てきた）人は null */
   present: boolean | null;
@@ -23,15 +31,20 @@ export function stakeholderViews(model: FlowModel): StakeholderView[] {
     .sort((a, b) => a.lane - b.lane)
     .map((a) => ({
       name: a.name,
+      product: a.product ?? null,
+      aliases: a.aliases,
+      note: a.note ?? null,
       role: a.role === "trigger" ? "起点" : a.role === "end" ? "終点" : null,
-      present: a.present ?? null,
+      present: a.kind === "system" ? null : (a.present ?? null),
       connected: steps.some((s) => s.from === a.id || s.to === a.id),
     }));
 }
 
-/** Jev への state 用の 1 行表記。「経理（終点・出席なし・図にまだ出ていない）」 */
+/** Jev への state 用の 1 行表記。「会計システム（freee会計・別名: 基幹・図にまだ出ていない）」 */
 export function stakeholderLine(v: StakeholderView): string {
   const notes = [
+    v.product,
+    v.aliases.length > 0 ? `別名: ${v.aliases.join("／")}` : null,
     v.role,
     v.present === false ? "出席なし" : null,
     v.connected ? null : "図にまだ出ていない",

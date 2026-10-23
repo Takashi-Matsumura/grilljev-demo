@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ReadinessItem } from "@/lib/model/attention";
+import { isAbsent } from "@/lib/facilitator/stakeholders";
 import type { Actor, FlowModel, ModelOp } from "@/lib/model/types";
 import { ActorEditDialog } from "./actor-edit-dialog";
 import type { UpdateSource } from "./diagram-pane";
@@ -60,7 +61,7 @@ function ActorChips({ actors }: { actors: Actor[] }) {
   const ordered = [...actors].sort((a, b) => a.lane - b.lane);
   const trigger = ordered.find((a) => a.role === "trigger");
   const end = ordered.find((a) => a.role === "end");
-  const absent = ordered.filter((a) => a.present === false);
+  const absent = ordered.filter(isAbsent);
   return (
     <>
       {trigger && (

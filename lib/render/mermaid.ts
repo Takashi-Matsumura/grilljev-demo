@@ -51,11 +51,16 @@ export function flagSuffix(step: Step): string {
   return marks.join("");
 }
 
-/** 起点・終点の登場人物は、ライフラインの名前の末尾に印を付ける。Mermaid と drawio で共通。 */
+/**
+ * ライフラインの名前。製品・サービス名があれば括弧で添え（「会計システム（freee会計）」）、
+ * 起点・終点の登場人物は末尾に印を付ける。Mermaid と drawio で共通。
+ * 1 行のままにする（再生の強調は、この文字と図の文字の一致で見つけるため。mermaid-diagram.tsx）
+ */
 export function actorLabel(actor: Actor): string {
-  if (actor.role === "trigger") return `${actor.name}［起点］`;
-  if (actor.role === "end") return `${actor.name}［終点］`;
-  return actor.name;
+  const name = actor.product ? `${actor.name}（${actor.product}）` : actor.name;
+  if (actor.role === "trigger") return `${name}［起点］`;
+  if (actor.role === "end") return `${name}［終点］`;
+  return name;
 }
 
 function arrowFor(step: Step): string {
