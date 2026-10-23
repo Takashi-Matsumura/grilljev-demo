@@ -7,6 +7,9 @@ import { actorLabel, flowItems } from "@/lib/render/mermaid";
  * 場面は、はじめに → ステップ（分岐の入口・各場合・合流をはさむ）→ おわり の順。
  * キャプションはここでコードから作る（AI が無くても再生できる）。AI の言い回し（lib/preview/narrate.ts）が
  * 届いたら、`key` の一致する場面だけ差し替える。分岐の説明は事実そのものなので差し替えない。
+ *
+ * 分岐の条件は、入口（と各場合）の場面で一度だけ読み上げる。中のステップでは条件を字幕の上の印に出すだけにし、
+ * 文にも声にも繰り返さない（同じ条件を何度も聞かされると、流れを追えなくなる）。
  */
 
 /** 図の上で強調するもの。描いた SVG に印を付けて示す（mermaid-diagram.tsx の markPlay） */
@@ -32,10 +35,14 @@ export type Scene = {
   /** 小さな見出し（「顧客 → 営業担当」「分岐」など） */
   heading: string;
   caption: string;
+  /** 読み上げる文。無ければ caption を読む。字幕は詳しく、声は短く、としたい場面で使う */
+  speech?: string;
   /** ステップの場面なら、図のステップ名（AI の言い回しに差し替えたあとも、図との対応が分かるように出す） */
   label?: string;
   /** 分岐の中なら、どの場合か（「請求書の内容に不備あり の場合」） */
   context?: string;
+  /** 分岐の中のステップなら、その条件の文字そのもの。AI の文から条件の言い直しを取り除くのに使う */
+  condition?: string;
   /** 受け渡すもの（付箋） */
   artifact?: string;
   /** 種別・仮・例外などの小さな印 */
@@ -74,6 +81,12 @@ function branchCaption(arms: Branch[]): string {
   if (head.kind === "opt") return `${cond(head)}のときだけ、次の手順を行います。`;
   if (arms.length === 1) return `ここで流れが分かれます。${cond(head)}の場合の手順です。`;
   return `ここで流れが分かれます。${arms.map(cond).join("か、")}かで、この先の手順が変わります。`;
+}
+
+/** alt の入口で読み上げる文。条件は続く各場合の場面で読むので、ここでは数だけ言う */
+function branchSpeech(arms: Branch[]): string | undefined {
+  if (arms[0].kind !== "alt") return undefined;
+  return arms.length === 1 ? "ここで流れが分かれます。" : `ここで流れが ${arms.length} 通りに分かれます。`;
 }
 
 const JOIN_CAPTION: Record<Branch["kind"], string> = {
@@ -115,6 +128,7 @@ export function buildScenes(model: FlowModel, title: string): Scene[] {
   let openKind: Branch["kind"] | null = null;
   let openArm: string | null = null;
   let context: string | undefined;
+  let condition: string | undefined;
 
   items.forEach(({ step, branch }) => {
     const groupId = branch?.groupId ?? null;
@@ -124,13 +138,16 @@ export function buildScenes(model: FlowModel, title: string): Scene[] {
       openKind = branch?.kind ?? null;
       openArm = null;
       context = undefined;
+      condition = undefined;
       if (branch) {
         frame += 1;
         const arms = model.branches.filter((b) => b.groupId === branch.groupId).sort((a, b) => a.index - b.index);
+        const shown = branch.kind === "alt" ? arms : [branch];
         scenes.push({
           kind: "branch",
           heading: FRAME_HEADING[branch.kind],
-          caption: branchCaption(branch.kind === "alt" ? arms : [branch]),
+          caption: branchCaption(shown),
+          speech: branchSpeech(shown),
           badges: [],
           mark: { ...NO_MARK, frame, condition: { first: true } },
         });
@@ -140,6 +157,7 @@ export function buildScenes(model: FlowModel, title: string): Scene[] {
       const first = openArm === null;
       openArm = branch.id;
       context = armContext(branch);
+      condition = branch.condition.trim();
       // else を描くのは alt だけ（mermaid.ts）。opt・loop は入口の場面で条件を言っている
       if (branch.kind === "alt") {
         if (!first) elseIndex += 1;
@@ -155,6 +173,7 @@ export function buildScenes(model: FlowModel, title: string): Scene[] {
     if (step === null) {
       const last = scenes[scenes.length - 1];
       last.caption += "この場合の手順は、まだ書かれていません。";
+      if (last.speech) last.speech += "この場合の手順は、まだ書かれていません。";
       return;
     }
 
@@ -173,6 +192,7 @@ export function buildScenes(model: FlowModel, title: string): Scene[] {
       caption: step.label.trim() || "（ステップ名が未入力）",
       label: step.label.trim(),
       context,
+      condition,
       artifact: step.artifact?.trim() || undefined,
       badges,
       number: n,
@@ -196,8 +216,31 @@ export function buildScenes(model: FlowModel, title: string): Scene[] {
   return scenes;
 }
 
+/** 文頭の「〜の場合、」「〜の間は、」のような条件の言い直しとみなす、読点までの長さの上限（条件の文字数に足す） */
+const CONDITION_SLACK = 16;
+
+/**
+ * 分岐の中のステップの文から、文頭の条件の言い直し（「「メール送信」の場合、」など）を取り除く。
+ * 条件は分岐の場面で読み上げ、字幕の上の印にも出ているので、ステップごとに繰り返さない。
+ * 読点の前が「場合・とき・間・なら」で終わるときだけ取る（主語の「顧客が営業担当に、」などは残す）。
+ * 取ると空になるなら元のまま。
+ */
+export function dropCondition(sentence: string, condition: string | undefined): string {
+  if (condition === undefined) return sentence;
+  const comma = sentence.indexOf("、");
+  if (comma <= 0 || comma > condition.length + CONDITION_SLACK) return sentence;
+  if (!/(場合|とき|時|間|なら)(は|に|には|も)?$/.test(sentence.slice(0, comma))) return sentence;
+  const rest = sentence.slice(comma + 1).trim();
+  return rest === "" ? sentence : rest;
+}
+
 /** AI の言い回しを当てる。届いていない場面は、コードで作ったキャプションのまま */
 export function narrate(scenes: Scene[], narration: Narration | null): Scene[] {
   if (!narration) return scenes;
-  return scenes.map((s) => (s.key && narration[s.key] ? { ...s, caption: narration[s.key] } : s));
+  return scenes.map((s) =>
+    s.key && narration[s.key] ? { ...s, caption: dropCondition(narration[s.key], s.condition) } : s,
+  );
 }
+
+/** 場面で読み上げる文 */
+export const speechOf = (s: Scene): string => s.speech ?? s.caption;
