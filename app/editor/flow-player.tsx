@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MermaidDiagram } from "@/app/components/mermaid-diagram";
 import type { FlowModel } from "@/lib/model/types";
-import { buildScenes, narrate, type Narration, type Scene } from "@/lib/preview/scenes";
+import { buildScenes, narrate, speechOf, type Narration, type Scene } from "@/lib/preview/scenes";
 import { toMermaid } from "@/lib/render/mermaid";
 
 /** 1 場面を見せる時間（ミリ秒）。字幕が長いほど長く、ステップは矢印の丸が走る分を足す */
@@ -162,7 +162,7 @@ export function FlowPlayer({ name, model, onClose }: { name: string; model: Flow
       // 読み上げを止めて、字幕の長さで進む再生に切り替える（この効果が作り直される）
       setTts({ status: "error", message: e instanceof Error ? e.message : "読み上げに失敗しました" });
     };
-    speech(scene.caption)
+    speech(speechOf(scene))
       .then((url) => {
         if (cancelled) return;
         audio = new Audio(url);
@@ -175,7 +175,7 @@ export function FlowPlayer({ name, model, onClose }: { name: string; model: Flow
       })
       .catch(fail);
     // 次の場面の音声を先に作っておき、場面の切り替わりで待たせない
-    if (index < last) speech(scenes[index + 1].caption).catch(() => {});
+    if (index < last) speech(speechOf(scenes[index + 1])).catch(() => {});
     return () => {
       cancelled = true;
       clearTimeout(timer);
