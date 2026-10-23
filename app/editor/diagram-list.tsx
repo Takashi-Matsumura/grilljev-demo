@@ -17,6 +17,7 @@ export function DiagramList({ initial }: { initial: DiagramMeta[] }) {
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const [copying, setCopying] = useState<string | null>(null);
 
   async function create(name: string) {
     setBusy(true);
@@ -41,6 +42,25 @@ export function DiagramList({ initial }: { initial: DiagramMeta[] }) {
     const res = await fetch(`/api/diagrams/${slug}`, { method: "DELETE" });
     if (res.ok || res.status === 404) setDiagrams((d) => d.filter((x) => x.slug !== slug));
     else setError("削除に失敗しました");
+  }
+
+  /** コピーを作り、一覧の先頭に足す。名前は「〇〇のコピー」なので、そのまま名前の変更を始める */
+  async function copy(slug: string) {
+    setConfirming(null);
+    setError(null);
+    setCopying(slug);
+    try {
+      const res = await fetch(`/api/diagrams/${slug}/copy`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { diagram?: DiagramMeta; error?: string };
+      if (!res.ok || !data.diagram) throw new Error(data.error ?? "コピーに失敗しました");
+      const created = data.diagram;
+      setDiagrams((prev) => [created, ...prev]);
+      startEdit(created.slug, created.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "コピーに失敗しました");
+    } finally {
+      setCopying(null);
+    }
   }
 
   function startEdit(slug: string, name: string) {
@@ -165,6 +185,14 @@ export function DiagramList({ initial }: { initial: DiagramMeta[] }) {
                   <span className="flex shrink-0 gap-2">
                     <button className={btn} onClick={() => startEdit(d.slug, d.name)}>
                       名前を変更
+                    </button>
+                    <button
+                      className={btn}
+                      disabled={copying !== null}
+                      title="この図を写した新しい図を作ります（元の図はそのまま）"
+                      onClick={() => void copy(d.slug)}
+                    >
+                      {copying === d.slug ? "コピー中…" : "コピー"}
                     </button>
                     <button className={btn} onClick={() => setConfirming(d.slug)}>
                       削除

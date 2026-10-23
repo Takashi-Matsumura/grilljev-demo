@@ -1,7 +1,8 @@
 import { emptyModel } from "../model/reducer";
+import type { FlowModel } from "../model/types";
 import { isFlowModel } from "../model/guard";
 import { db } from "./db";
-import { isValidSlug, newSlug } from "./session-types";
+import { isValidSlug, MAX_NAME_CHARS, newSlug } from "./session-types";
 import { toDiagramMeta, type DiagramFile, type DiagramMeta, type DiagramPatch } from "./diagram-types";
 
 /**
@@ -28,20 +29,42 @@ function rowToFile(row: Row): DiagramFile | null {
   }
 }
 
-export async function createDiagram(name: string): Promise<DiagramFile> {
+/** 新しい slug で 1 行足す。model は呼び出し側が作る（作った時刻を受け取る） */
+function insertDiagram(name: string, makeModel: (at: string) => FlowModel): DiagramFile {
   const at = new Date().toISOString();
   const conn = db();
   // 同じ秒に作っても衝突しないよう、存在しない slug が出るまで引き直す
   for (let i = 0; i < 5; i += 1) {
     const slug = newSlug(new Date());
     if (conn.prepare("SELECT 1 FROM diagrams WHERE slug = ?").get(slug)) continue;
-    const file: DiagramFile = { slug, name, createdAt: at, updatedAt: at, model: emptyModel({ title: name }, at) };
+    const file: DiagramFile = { slug, name, createdAt: at, updatedAt: at, model: makeModel(at) };
     conn
       .prepare(`INSERT INTO diagrams (slug, name, created_at, updated_at, model) VALUES (?, ?, ?, ?, ?)`)
       .run(file.slug, file.name, file.createdAt, file.updatedAt, JSON.stringify(file.model));
     return file;
   }
   throw new Error("図の id を作れませんでした");
+}
+
+export async function createDiagram(name: string): Promise<DiagramFile> {
+  return insertDiagram(name, (at) => emptyModel({ title: name }, at));
+}
+
+/**
+ * 保存済みの図のコピーを作る。名前は「〇〇のコピー」（すでにあれば「〇〇のコピー 2」…）。
+ * 中身（登場人物・ステップ・分岐）はそのまま写し、業務名（model.scope.title）だけ新しい名前に揃える。
+ */
+export async function duplicateDiagram(slug: unknown): Promise<DiagramFile | null> {
+  const source = await readDiagram(slug);
+  if (!source) return null;
+  const taken = new Set((db().prepare("SELECT name FROM diagrams").all() as { name: string }[]).map((r) => r.name));
+  let name = "";
+  for (let n = 1; name === "" || taken.has(name); n += 1) {
+    const suffix = n === 1 ? "のコピー" : `のコピー ${n}`;
+    name = source.name.slice(0, MAX_NAME_CHARS - suffix.length) + suffix;
+  }
+  const model = structuredClone(source.model);
+  return insertDiagram(name, () => ({ ...model, scope: { ...model.scope, title: name } }));
 }
 
 export async function readDiagram(slug: unknown): Promise<DiagramFile | null> {
