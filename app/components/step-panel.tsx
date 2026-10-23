@@ -132,6 +132,8 @@ export function StepPanel({
             actors={actors}
             from={step.from}
             to={step.to}
+            number={index + 1}
+            artifact={artifact}
             onFrom={changeSender}
             onTo={(id) => update({ to: id })}
             onSwap={swap}
@@ -140,7 +142,7 @@ export function StepPanel({
           <label className={row}>
             <span className={rowLabel}>渡すもの</span>
             <input
-              className={field}
+              className={artifactField(artifact.trim() !== "")}
               value={artifact}
               placeholder="なし（書類・データ）"
               title="図の帯になります"
@@ -281,6 +283,16 @@ const iconBtn =
   "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black/15 hover:bg-black/5 disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/20 dark:hover:bg-white/10";
 const field = "w-full rounded-md border border-black/15 bg-transparent px-3 py-1.5 text-sm dark:border-white/20";
 const row = "grid grid-cols-[4.5rem_1fr] items-center gap-2";
+/**
+ * 渡すものの欄。図の付箋（Mermaid の Note の黄色い帯）と同じ色にして、図のどこに出るかを思い浮かべられるようにする。
+ * 空なら点線（帯は出ない）
+ */
+export const artifactField = (filled: boolean) =>
+  `w-full rounded-sm border px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-500 dark:text-amber-50 dark:placeholder:text-zinc-400 ${
+    filled
+      ? "border-[#aaaa33] bg-[#fff5ad] dark:border-amber-300/60 dark:bg-amber-300/20"
+      : "border-dashed border-[#aaaa33]/70 bg-[#fff5ad]/40 dark:border-amber-300/40 dark:bg-amber-300/5"
+  }`;
 const rowLabel = "text-xs text-zinc-500";
 
 /**
@@ -292,6 +304,8 @@ export function FromToPicker({
   actors,
   from,
   to,
+  number,
+  artifact,
   onFrom,
   onTo,
   onSwap,
@@ -300,6 +314,10 @@ export function FromToPicker({
   actors: Actor[];
   from: string;
   to: string;
+  /** 図でのステップの番号（黒丸に出す）。まだ決まらない（分岐の中に足す）なら無し */
+  number?: number;
+  /** 渡すもの。あれば帯の矢印の下に、図と同じ黄色の帯で出す */
+  artifact?: string;
   onFrom: (id: string) => void;
   onTo: (id: string) => void;
   onSwap: () => void;
@@ -311,17 +329,23 @@ export function FromToPicker({
         {side === "from" ? "誰が" : "誰に"}
         <span className="block text-[10px] text-zinc-400">{side === "from" ? "送り手" : "受け手"}</span>
       </span>
-      <select
-        className={`${field} min-w-0`}
-        value={side === "from" ? from : to}
-        onChange={(e) => (side === "from" ? onFrom(e.target.value) : onTo(e.target.value))}
-      >
-        {actors.map((a) => (
-          <option key={a.id} value={a.id}>
-            {side === "to" && a.id === from ? `${a.name}（自分）` : a.name}
-          </option>
-        ))}
-      </select>
+      {/* 図の矢印と同じく、送り手の側に番号の黒丸、受け手の側に矢じり */}
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span aria-hidden className="flex w-5 shrink-0 justify-center">
+          {side === "from" ? <StepDot number={number} /> : <ArrowHead />}
+        </span>
+        <select
+          className={`${field} min-w-0`}
+          value={side === "from" ? from : to}
+          onChange={(e) => (side === "from" ? onFrom(e.target.value) : onTo(e.target.value))}
+        >
+          {actors.map((a) => (
+            <option key={a.id} value={a.id}>
+              {side === "to" && a.id === from ? `${a.name}（自分）` : a.name}
+            </option>
+          ))}
+        </select>
+      </span>
     </label>
   );
   return (
@@ -342,7 +366,7 @@ export function FromToPicker({
           ⇅
         </button>
       </div>
-      <LaneStrip actors={actors} from={from} to={to} />
+      <LaneStrip actors={actors} from={from} to={to} number={number} artifact={artifact?.trim() || undefined} />
     </div>
   );
 }
@@ -351,7 +375,19 @@ export function FromToPicker({
  * 図での向きを示す、小さなレーンの帯。登場人物を図と同じ左右の順に並べ、送り手から受け手へ矢印を引く。
  * 送り手は塗り、受け手は枠で示す。自分の中の作業なら、その人に ↻ を付ける
  */
-function LaneStrip({ actors, from, to }: { actors: Actor[]; from: string; to: string }) {
+function LaneStrip({
+  actors,
+  from,
+  to,
+  number,
+  artifact,
+}: {
+  actors: Actor[];
+  from: string;
+  to: string;
+  number?: number;
+  artifact?: string;
+}) {
   const n = actors.length;
   const a = actors.findIndex((x) => x.id === from);
   const b = actors.findIndex((x) => x.id === to);
@@ -395,7 +431,10 @@ function LaneStrip({ actors, from, to }: { actors: Actor[]; from: string; to: st
           </span>
         ) : (
           <span className="absolute top-1/2 h-px bg-sky-600 dark:bg-sky-400" style={{ left: `${left}%`, width: `${width}%` }}>
-            {/* 矢じりは受け手の側に */}
+            {/* 番号の黒丸は送り手の側に、矢じりは受け手の側に（図と同じ） */}
+            <span className={`absolute top-1/2 -translate-y-1/2 ${toRight ? "left-0 -translate-x-1/2" : "right-0 translate-x-1/2"}`}>
+              <StepDot number={number} small />
+            </span>
             <span
               className={`absolute top-1/2 h-0 w-0 -translate-y-1/2 border-y-4 border-y-transparent ${
                 toRight
@@ -406,8 +445,42 @@ function LaneStrip({ actors, from, to }: { actors: Actor[]; from: string; to: st
           </span>
         )}
       </div>
+      {artifact && (
+        // 図の付箋と同じく、送り手から受け手までの幅に（自分の作業なら、その人の右に）
+        <div aria-hidden className="relative mt-1 h-4">
+          <span
+            className="absolute truncate rounded-sm border border-[#aaaa33] bg-[#fff5ad] px-1 text-center text-[10px] leading-[14px] text-zinc-900 dark:border-amber-300/60 dark:bg-amber-300/20 dark:text-amber-50"
+            style={
+              a === b
+                ? { left: `${center(a)}%`, maxWidth: `${100 - center(a)}%` }
+                : { left: `${left}%`, width: `${width}%`, minWidth: "3rem" }
+            }
+            title={artifact}
+          >
+            {artifact}
+          </span>
+        </div>
+      )}
     </div>
   );
+}
+
+/** 図のステップの番号の黒丸（Mermaid の autonumber と同じ見た目）。番号が無ければ丸だけ */
+function StepDot({ number, small = false }: { number?: number; small?: boolean }) {
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-full bg-zinc-800 font-semibold text-white dark:bg-zinc-200 dark:text-zinc-900 ${
+        small ? "h-3.5 min-w-3.5 px-0.5 text-[8px]" : "h-5 min-w-5 px-1 text-[10px]"
+      }`}
+    >
+      {number}
+    </span>
+  );
+}
+
+/** 図の矢じり（受け手の側） */
+function ArrowHead() {
+  return <span className="h-0 w-0 border-y-[6px] border-l-[9px] border-y-transparent border-l-zinc-700 dark:border-l-zinc-300" />;
 }
 
 /** 編集パネルの中の一区切り（内容・状態・分岐など）。見出しを小さく出す */
