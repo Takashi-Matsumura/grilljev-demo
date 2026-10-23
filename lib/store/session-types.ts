@@ -13,6 +13,8 @@ export type SeedActor = {
   name: string;
   kind: Exclude<ActorKind, "unknown">;
   role?: ActorRole;
+  /** この業務の中心（図で強調する）。無ければ終点の人 */
+  focus?: true;
   /** 会議に出席しているか。null は未設定（システムなど） */
   present: boolean | null;
   /** 部署の中の人（担当者の候補） */
@@ -112,6 +114,7 @@ export function parseSeed(title: unknown, actors: unknown, departments?: unknown
       : [];
   const seen = new Set<string>();
   const roles = new Set<ActorRole>();
+  let focused = false;
   const out: SeedActor[] = [];
   for (const v of list) {
     if (typeof v !== "object" || v === null) continue;
@@ -135,6 +138,10 @@ export function parseSeed(title: unknown, actors: unknown, departments?: unknown
     if (product !== "" && product.length <= MAX_PRODUCT_CHARS) actor.product = product;
     const note = clean(a.note);
     if (note !== "" && note.length <= MAX_NOTE_CHARS) actor.note = note;
+    if (a.focus === true && !focused) {
+      focused = true;
+      actor.focus = true;
+    }
     if (role && !roles.has(role)) {
       roles.add(role);
       actor.role = role;

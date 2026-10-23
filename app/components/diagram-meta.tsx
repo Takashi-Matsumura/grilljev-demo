@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ReadinessItem } from "@/lib/model/attention";
 import { isAbsent } from "@/lib/facilitator/stakeholders";
+import { focusActorOf } from "@/lib/render/mermaid";
 import type { Actor, FlowModel, ModelOp } from "@/lib/model/types";
 import { ActorEditDialog } from "./actor-edit-dialog";
 import type { UpdateSource } from "./diagram-pane";
@@ -62,6 +63,8 @@ function ActorChips({ actors }: { actors: Actor[] }) {
   const trigger = ordered.find((a) => a.role === "trigger");
   const end = ordered.find((a) => a.role === "end");
   const absent = ordered.filter(isAbsent);
+  // 終点と違う人を中心にしたときだけ出す（同じなら「終点」で足りる）
+  const focus = focusActorOf(ordered);
   return (
     <>
       {trigger && (
@@ -72,6 +75,11 @@ function ActorChips({ actors }: { actors: Actor[] }) {
       {end && (
         <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${ACTOR_CHIP}`} title="最終的な成果を受け取る登場人物">
           終点: {end.name}
+        </span>
+      )}
+      {focus && focus !== end && (
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${ACTOR_CHIP}`} title="この業務の中心となる登場人物（図で強調しています）">
+          中心: {focus.name}
         </span>
       )}
       {absent.length > 0 && (

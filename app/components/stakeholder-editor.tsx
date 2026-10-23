@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import type { ActorKind, ActorRole } from "@/lib/model/types";
+import { focusActorOf } from "@/lib/render/mermaid";
 import {
   MAX_ACTOR_CHARS,
   MAX_ALIASES,
@@ -22,12 +23,14 @@ export type StakeholderRow = {
   name: string;
   kind: ActorKind;
   role?: ActorRole;
+  /** この業務の中心（図で強調する）。誰にも無ければ終点の人 */
+  focus?: true;
   present?: boolean;
   /** 部署の中の人（担当者の候補）。個人は列にせず、ここに書く */
   members?: string[];
   /** その会社での呼び方・別名（会話からこの人を見つける手がかり） */
   aliases?: string[];
-  /** 製品・サービス名、会社名、正式名称（図では名前の後ろに括弧で添える） */
+  /** 製品・サービス名、会社名、正式名称（図では名前の下に 2 段目で添える） */
   product?: string;
   /** 補足（図には出さない） */
   note?: string;
@@ -93,6 +96,7 @@ export const toSeedActors = (rows: StakeholderRow[]): SeedActor[] =>
     name: r.name,
     kind: r.kind === "unknown" ? "role" : r.kind,
     role: r.role,
+    ...(r.focus ? { focus: true as const } : {}),
     present: r.kind === "system" ? null : (r.present ?? null),
     ...(r.members && r.members.length > 0 ? { members: r.members } : {}),
     ...(r.aliases && r.aliases.length > 0 ? { aliases: r.aliases } : {}),
@@ -280,6 +284,9 @@ export function StakeholderEditor({
         return r.role === role ? { ...r, role: undefined } : r;
       }),
     );
+  // 中心は 1 人だけ。key が null なら外す（終点の人が中心に戻る）
+  const setFocus = (key: string | null) =>
+    onChange(rows.map((r) => (r.key === key ? { ...r, focus: true as const } : r.focus ? { ...r, focus: undefined } : r)));
   /** from 番目の人を to 番目へ動かす（ドラッグと ←→ で共通） */
   const moveTo = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= rows.length || to >= rows.length) return;
@@ -297,6 +304,7 @@ export function StakeholderEditor({
   const currentIndex = current ? rows.indexOf(current) : -1;
   const trigger = rows.find((r) => r.role === "trigger");
   const end = rows.find((r) => r.role === "end");
+  const focus = focusActorOf(rows);
 
   const select =
     "rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20 dark:bg-zinc-900";
@@ -359,7 +367,7 @@ export function StakeholderEditor({
                 <button
                   type="button"
                   aria-expanded={isSelected}
-                  aria-label={`${i + 1} 人目: ${r.name || "（未入力）"}（${[r.role && ROLE_TEXT[r.role].label, sub].filter(Boolean).join("・")}）`}
+                  aria-label={`${i + 1} 人目: ${r.name || "（未入力）"}（${[r.role && ROLE_TEXT[r.role].label, r === focus && "中心", sub].filter(Boolean).join("・")}）`}
                   onClick={() => setSelected(isSelected ? null : r.key)}
                   className={`flex h-14 w-full cursor-grab flex-col items-center justify-center gap-0.5 rounded-lg border px-1.5 active:cursor-grabbing ${
                     isSelected
@@ -377,6 +385,11 @@ export function StakeholderEditor({
                     {r.role && (
                       <span className="rounded bg-sky-100 px-1.5 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300">
                         {ROLE_TEXT[r.role].label}
+                      </span>
+                    )}
+                    {r === focus && (
+                      <span className="rounded bg-amber-100 px-1.5 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                        中心
                       </span>
                     )}
                     {sub}
@@ -477,7 +490,7 @@ export function StakeholderEditor({
             <div className="flex flex-wrap gap-3">
               {PRODUCT_TEXT[current.kind] && (
                 <label className="flex min-w-40 flex-1 flex-col gap-1 text-xs text-zinc-500">
-                  {PRODUCT_TEXT[current.kind]?.label}（図では名前の後ろに添えます）
+                  {PRODUCT_TEXT[current.kind]?.label}（図では名前の下に添えます）
                   <input
                     className={field}
                     value={current.product ?? ""}
@@ -650,6 +663,24 @@ export function StakeholderEditor({
               </label>
             );
           })}
+          <label
+            className="flex items-center gap-2"
+            title="この業務の中心となる登場人物です。図で色を付けて強調します。選ばなければ終点の人が中心になります"
+          >
+            中心
+            <select
+              className={select}
+              value={rows.find((r) => r.focus)?.key ?? ""}
+              onChange={(e) => setFocus(e.target.value || null)}
+            >
+              <option value="">{end ? `終点と同じ（${end.name || "未入力"}）` : "終点と同じ（終点は未設定）"}</option>
+              {rows.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.name || "（未入力）"}
+                </option>
+              ))}
+            </select>
+          </label>
           {(!trigger || !end) && (
             <span className="text-xs text-amber-700 dark:text-amber-400">
               {!trigger && "業務を始める人"}

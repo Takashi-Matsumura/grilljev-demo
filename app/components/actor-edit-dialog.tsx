@@ -13,6 +13,7 @@ const toRows = (model: FlowModel): StakeholderRow[] =>
       name: a.name,
       kind: a.kind,
       role: a.role,
+      focus: a.focus,
       present: a.present,
       members: a.members,
       aliases: a.aliases,
@@ -54,6 +55,7 @@ export function editOps(model: FlowModel, rows: StakeholderRow[], folds: Fold[] 
     if (name !== "" && name !== a.name) patch.name = name;
     if (r.kind !== a.kind) patch.kind = r.kind;
     if (r.role !== a.role) patch.role = r.role ?? null;
+    if (r.focus !== a.focus) patch.focus = r.focus ?? null;
     if (r.present !== a.present) patch.present = r.present ?? null;
     if (!sameList(r.members, a.members)) patch.members = r.members ?? [];
     if (!sameList(r.aliases, a.aliases)) patch.aliases = r.aliases ?? [];
@@ -73,6 +75,7 @@ export function editOps(model: FlowModel, rows: StakeholderRow[], folds: Fold[] 
     idOf.set(r.key, id);
     const actor: Omit<Actor, "lane" | "addedAtRev"> = { id, name: r.name.trim(), kind: r.kind, aliases: r.aliases ?? [] };
     if (r.role) actor.role = r.role;
+    if (r.focus) actor.focus = true;
     if (r.present !== undefined) actor.present = r.present;
     if (r.members && r.members.length > 0) actor.members = r.members;
     if (text(r.product)) actor.product = text(r.product);

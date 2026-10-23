@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayMark } from "@/lib/preview/scenes";
-import { COLLAPSED_MARK, PLACEHOLDER_TEXT, type ArmTarget } from "@/lib/render/mermaid";
+import { COLLAPSED_MARK, FOCUS_COMMENT, PLACEHOLDER_TEXT, type ArmTarget } from "@/lib/render/mermaid";
 
 type MermaidApi = typeof import("mermaid").default;
 
@@ -302,6 +302,101 @@ type Drop = { n: number } & DropAt;
 
 let renderSeq = 0;
 
+/** 登場人物の名前と 2 段目（製品・サービス名）の間に足す間隔（px） */
+const ACTOR_LINE_GAP = 6;
+
+/** 中心の登場人物の色。塗りは半透明にして、明るい・暗いどちらの配色でも名前が読めるようにする */
+const FOCUS_STROKE = "#d97706";
+const FOCUS_FILL = "rgba(245, 158, 11, 0.22)";
+
+/**
+ * 登場人物の 2 段目（製品・サービス名。toMermaid が <br/> で分ける）を、名前から離し、小さく薄くする。
+ * Mermaid は 1 段ずつ別の text.actor に描き、段の位置を tspan の dy で、大きさを style で直に書くので、
+ * CSS ではなく SVG そのものを直す。変えたら true
+ */
+function spaceActorLines(doc: Document): boolean {
+  let changed = false;
+  for (const first of doc.querySelectorAll("text.actor")) {
+    if (first.previousElementSibling?.matches("text.actor")) continue;
+    const lines = [first];
+    for (let el = first.nextElementSibling; el?.matches("text.actor"); el = el.nextElementSibling) lines.push(el);
+    if (lines.length < 2) continue;
+    lines.forEach((text, i) => {
+      const tspan = text.querySelector("tspan");
+      const dy = Number(tspan?.getAttribute("dy"));
+      if (tspan && Number.isFinite(dy)) tspan.setAttribute("dy", String(dy + (i - (lines.length - 1) / 2) * ACTOR_LINE_GAP));
+      if (i > 0 && text instanceof SVGElement) {
+        text.style.setProperty("font-size", "12px");
+        text.style.setProperty("opacity", "0.75");
+      }
+    });
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * この業務の中心の登場人物（toMermaid が `%% focus: A3` で示す）の、頭（上下とも）とライフラインを色で強調し、
+ * 名前を太字にする。Mermaid は登場人物の要素に name 属性で id を付けるので、それで見つける。
+ * 色は Mermaid の <style> に勝つよう style で書く（再生中の強調は !important なので、そちらが勝つ）。変えたら true
+ */
+function markFocus(doc: Document, id: string): boolean {
+  const named = `[name="${id}"]`;
+  const paint = (el: Element, fill: boolean) => {
+    if (!(el instanceof SVGElement)) return;
+    el.style.setProperty("stroke", FOCUS_STROKE);
+    el.style.setProperty("stroke-width", "2px");
+    if (fill) el.style.setProperty("fill", FOCUS_FILL);
+  };
+  const bold = (head: Element | null) => {
+    for (const t of head?.querySelectorAll("text.actor") ?? []) {
+      if (t instanceof SVGElement) t.style.setProperty("font-weight", "700");
+    }
+  };
+  let changed = false;
+  for (const line of doc.querySelectorAll(`line.actor-line${named}`)) {
+    paint(line, false);
+    changed = true;
+  }
+  // 箱の登場人物（システム・社外）
+  for (const rect of doc.querySelectorAll(`rect.actor${named}`)) {
+    paint(rect, true);
+    bold(rect.parentElement);
+    changed = true;
+  }
+  // 人型の登場人物（部署・個人）
+  for (const man of doc.querySelectorAll(`g.actor-man${named}`)) {
+    for (const part of man.querySelectorAll("line, circle")) paint(part, part.tagName === "circle");
+    bold(man);
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Mermaid の SVG を、Mermaid の書き方では出せない見た目に整える（登場人物の 2 段目・中心の強調）。
+ * 描くときに 1 回だけ直すので、画面にも、書き出す .svg にも同じように効く。読めなければ元のまま
+ */
+function polishSvg(svg: string, code: string): string {
+  const focus = code
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.startsWith(FOCUS_COMMENT))
+    ?.slice(FOCUS_COMMENT.length)
+    .trim();
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  if (doc.querySelector("parsererror")) return svg;
+  const spaced = spaceActorLines(doc);
+  const focused = focus !== undefined && /^\w+$/.test(focus) && markFocus(doc, focus);
+  return spaced || focused ? new XMLSerializer().serializeToString(doc.documentElement) : svg;
+}
+
+/** Mermaid で描き、見た目を整える */
+async function renderSvg(mermaid: MermaidApi, code: string): Promise<string> {
+  renderSeq += 1;
+  return polishSvg((await mermaid.render(`mermaid-${renderSeq}`, code)).svg, code);
+}
+
 /**
  * 画面に出さずに、Mermaid のコードを SVG にする（/editor で、枠を畳んでいても .svg は開いた図で書き出すため）。
  * 解釈できないコードなら null。
@@ -309,8 +404,7 @@ let renderSeq = 0;
 export async function renderMermaidSvg(code: string): Promise<string | null> {
   const mermaid = await loadMermaid();
   if (!(await mermaid.parse(code, { suppressErrors: true }))) return null;
-  renderSeq += 1;
-  return (await mermaid.render(`mermaid-${renderSeq}`, code)).svg;
+  return renderSvg(mermaid, code);
 }
 
 type Rendered = { for: string; svg: string };
@@ -400,8 +494,7 @@ export function MermaidDiagram({
           setFailed({ for: code, message: "Mermaid の構文として解釈できません" });
           return;
         }
-        renderSeq += 1;
-        const { svg } = await mermaid.render(`mermaid-${renderSeq}`, code);
+        const svg = await renderSvg(mermaid, code);
         if (cancelled) return;
         setRendered({ for: code, svg });
         setFailed(null);

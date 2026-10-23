@@ -54,6 +54,7 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
                   ...a,
                   aliases,
                   role: a.role ?? from.role,
+                  focus: a.focus ?? from.focus,
                   present: a.present ?? from.present,
                   product: a.product ?? from.product,
                   note: a.note ?? from.note,
@@ -117,7 +118,7 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
     case "actor.update": {
       const target = m.actors.find((a) => a.id === op.id);
       if (!target) return null;
-      const { name: rawName, role, present, product, note, aliases, ...rest } = op.patch;
+      const { name: rawName, role, focus, present, product, note, aliases, ...rest } = op.patch;
       const name = rawName?.replace(/\s+/g, " ").trim();
       // 空の名前・他の人と同じ名前への改名は無視する（名前で人を見分けているため）
       const renamed =
@@ -135,17 +136,17 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
       }
       if (role === null) delete next.role;
       else if (role !== undefined) next.role = role;
+      if (focus === null) delete next.focus;
+      else if (focus) next.focus = true;
       return {
         ...m,
         actors: m.actors.map((a) => {
           if (a.id === target.id) return next;
-          // 起点・終点はそれぞれ 1 人だけ。付け替えたら前の人からは外す
-          if (role && a.role === role) {
-            const without = { ...a };
-            delete without.role;
-            return without;
-          }
-          return a;
+          // 起点・終点・中心はそれぞれ 1 人だけ。付け替えたら前の人からは外す
+          const without = { ...a };
+          if (role && a.role === role) delete without.role;
+          if (focus && a.focus) delete without.focus;
+          return without.role === a.role && without.focus === a.focus ? a : without;
         }),
       };
     }
@@ -310,6 +311,7 @@ export function modelFromSeed(seed: SessionSeed, at: string): FlowModel {
     lane: i,
     addedAtRev: 0,
     ...(s.role ? { role: s.role } : {}),
+    ...(s.focus ? { focus: true as const } : {}),
     ...(typeof s.present === "boolean" ? { present: s.present } : {}),
     ...(s.members && s.members.length > 0 ? { members: s.members } : {}),
     ...(s.aliases && s.aliases.length > 0 ? { aliases: s.aliases } : {}),
