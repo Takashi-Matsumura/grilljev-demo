@@ -133,6 +133,8 @@ export function StepAddPanel({
             </label>
           </PanelSection>
 
+          {/* ここより上がステップに要る最低限（内容・誰が・誰に・渡すもの）。下は必要なときだけ */}
+          <hr className="border-black/10 dark:border-white/15" />
           <PanelSection title="状態">
             <div className="flex items-center gap-3">
               <div

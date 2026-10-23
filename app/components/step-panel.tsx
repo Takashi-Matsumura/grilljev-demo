@@ -176,6 +176,8 @@ export function StepPanel({
           )}
         </PanelSection>
 
+        {/* ここより上がステップの中身（内容・誰が・誰に・渡すもの）。下は状態・順番など */}
+        <hr className="border-black/10 dark:border-white/15" />
         <PanelSection title="状態">
           <div className="flex items-center gap-3">
             <div role="group" aria-label="確定か仮か" className="inline-flex rounded-md border border-black/15 p-0.5 dark:border-white/20">
@@ -282,8 +284,9 @@ const row = "grid grid-cols-[4.5rem_1fr] items-center gap-2";
 const rowLabel = "text-xs text-zinc-500";
 
 /**
- * 送り手と受け手。図と同じ左右の並び（ライフラインの順）に置き、矢印も図と同じ向きにする。
- * 右から左へ渡すステップは「受け手 ← 送り手」と並ぶ。同じ人なら自分の中の作業（自己ループ）
+ * 送り手と受け手。欄は向きに関わらず「誰が」「誰に」の順に上下で固定する（図の左右に合わせて欄を入れ替えると、
+ * 右から左へ渡すステップで、どちらがどちらか分からなくなる）。図での向きは、下の小さなレーンの帯で示す。
+ * 同じ人なら自分の中の作業（自己ループ）
  */
 export function FromToPicker({
   actors,
@@ -301,12 +304,13 @@ export function FromToPicker({
   onTo: (id: string) => void;
   onSwap: () => void;
 }) {
-  const lane = (id: string) => actors.findIndex((a) => a.id === id);
   const self = from === to;
-  const fromLeft = lane(from) <= lane(to);
   const picker = (side: "from" | "to") => (
-    <label className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="text-[11px] text-zinc-500">{side === "from" ? "送り手（誰が）" : "受け手（誰に）"}</span>
+    <label className={row}>
+      <span className={`${rowLabel} leading-tight`}>
+        {side === "from" ? "誰が" : "誰に"}
+        <span className="block text-[10px] text-zinc-400">{side === "from" ? "送り手" : "受け手"}</span>
+      </span>
       <select
         className={`${field} min-w-0`}
         value={side === "from" ? from : to}
@@ -321,26 +325,87 @@ export function FromToPicker({
     </label>
   );
   return (
-    <div className="flex items-end gap-1.5">
-      {fromLeft ? picker("from") : picker("to")}
-      <span
-        aria-hidden
-        className="flex h-8 shrink-0 items-center text-base text-zinc-500"
-        title={self ? "自分の中の作業" : undefined}
-      >
-        {self ? "↻" : fromLeft ? "→" : "←"}
-      </span>
-      {fromLeft ? picker("to") : picker("from")}
-      <button
-        type="button"
-        className={iconBtn}
-        aria-label="送り手と受け手を入れ替える"
-        title="送り手と受け手を入れ替える（矢印の向きが逆になります）"
-        disabled={self}
-        onClick={onSwap}
-      >
-        ⇄
-      </button>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {picker("from")}
+          {picker("to")}
+        </div>
+        <button
+          type="button"
+          className={iconBtn}
+          aria-label="送り手と受け手を入れ替える"
+          title="送り手と受け手を入れ替える（矢印の向きが逆になります）"
+          disabled={self}
+          onClick={onSwap}
+        >
+          ⇅
+        </button>
+      </div>
+      <LaneStrip actors={actors} from={from} to={to} />
+    </div>
+  );
+}
+
+/**
+ * 図での向きを示す、小さなレーンの帯。登場人物を図と同じ左右の順に並べ、送り手から受け手へ矢印を引く。
+ * 送り手は塗り、受け手は枠で示す。自分の中の作業なら、その人に ↻ を付ける
+ */
+function LaneStrip({ actors, from, to }: { actors: Actor[]; from: string; to: string }) {
+  const n = actors.length;
+  const a = actors.findIndex((x) => x.id === from);
+  const b = actors.findIndex((x) => x.id === to);
+  if (n === 0 || a < 0 || b < 0) return null;
+  const center = (i: number) => ((i + 0.5) / n) * 100;
+  const left = Math.min(center(a), center(b));
+  const width = Math.abs(center(a) - center(b));
+  const toRight = b > a;
+  const sender = actors[a].name;
+  const receiver = actors[b].name;
+  return (
+    <div
+      role="img"
+      aria-label={a === b ? `図では、${sender}の中の作業になります` : `図では、${sender}から${receiver}へ${toRight ? "右" : "左"}向きの矢印になります`}
+      className="rounded-md bg-zinc-50 px-1 pb-1.5 pt-1 dark:bg-white/5"
+    >
+      <div className="flex">
+        {actors.map((x, i) => (
+          <span
+            key={x.id}
+            title={x.name}
+            className={`mx-0.5 min-w-0 flex-1 truncate rounded px-0.5 text-center text-[10px] leading-4 ${
+              i === a
+                ? "bg-sky-600 font-semibold text-white dark:bg-sky-500"
+                : i === b
+                  ? "font-semibold text-sky-700 ring-1 ring-sky-600 ring-inset dark:text-sky-300 dark:ring-sky-400"
+                  : "text-zinc-400"
+            }`}
+          >
+            {x.name}
+          </span>
+        ))}
+      </div>
+      <div aria-hidden className="relative mt-1 h-3">
+        {a === b ? (
+          <span
+            className="absolute -translate-x-1/2 text-xs leading-3 text-sky-600 dark:text-sky-400"
+            style={{ left: `${center(a)}%` }}
+          >
+            ↻
+          </span>
+        ) : (
+          <span className="absolute top-1/2 h-px bg-sky-600 dark:bg-sky-400" style={{ left: `${left}%`, width: `${width}%` }}>
+            {/* 矢じりは受け手の側に */}
+            <span
+              className={`absolute top-1/2 h-0 w-0 -translate-y-1/2 border-y-4 border-y-transparent ${
+                toRight
+                  ? "right-0 border-l-[6px] border-l-sky-600 dark:border-l-sky-400"
+                  : "left-0 border-r-[6px] border-r-sky-600 dark:border-r-sky-400"
+              }`}
+            />
+          </span>
+        )}
+      </div>
     </div>
   );
 }

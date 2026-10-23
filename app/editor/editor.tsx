@@ -134,9 +134,13 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   const folded = [...collapsed].filter((g) => frames.includes(g) && !shownGroups.has(g)).sort();
   const foldedKey = folded.join(",");
   const foldedSet = useMemo(() => new Set(foldedKey ? foldedKey.split(",") : []), [foldedKey]);
+  // 枠の見出しを押すと畳む。中心の人の手順だけを残して畳んでいる枠なら、開く
   const collapseFrame = (frame: number) => {
-    const arms = drawnFrames(model, foldedSet)[frame];
-    if (arms) setCollapsed(new Set([...collapsed, arms[0].groupId]));
+    const groupId = drawnFrames(model, foldedSet)[frame]?.[0].groupId;
+    if (!groupId) return;
+    setCollapsed(
+      foldedSet.has(groupId) ? new Set([...collapsed].filter((g) => g !== groupId)) : new Set([...collapsed, groupId]),
+    );
   };
   const expandFrame = (k: number) => {
     const groupId = collapsedFrames(model, foldedSet)[k];
