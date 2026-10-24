@@ -20,7 +20,9 @@ export type PromptName =
   | "review-title"
   | "review-direction"
   | "review-fix-condition"
-  | "review-fix-label";
+  | "review-fix-label"
+  | "review-fix-premise"
+  | "review-fix-steps";
 
 const cache = new Map<PromptName, string>();
 
