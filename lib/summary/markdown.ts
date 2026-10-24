@@ -1,6 +1,7 @@
 import { notedTargets, noteState } from "../model/notes";
 import type { Actor, FlowModel, OpenIssue, Step } from "../model/types";
 import { flagSuffix, toMermaid, visibleSteps } from "../render/mermaid";
+import type { FlowText } from "./flow-text";
 import type { SummaryProse } from "./prose";
 
 /**
@@ -104,7 +105,7 @@ const mark = (n: number) => n.toFixed(2);
 export function buildSummaryMarkdown(
   model: FlowModel,
   prose: SummaryProse,
-  opts: { generatedAt: string; warnings?: string[]; flow: string[]; flowByAi: boolean },
+  opts: { generatedAt: string; warnings?: string[]; flow: FlowText; flowByAi: boolean },
 ): string {
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   const steps = visibleSteps(model);
@@ -151,16 +152,20 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 3. 業務の流れ（開始から終了までの文章。番号は図・ステップ一覧と同じ）
+  // 3. 業務の流れ（まとまりごとの箇条書き。番号は図・ステップ一覧と同じ）
   lines.push("## 3. 業務の流れ", "");
-  if (opts.flow.length === 0) {
+  if (opts.flow.blocks.length === 0) {
     lines.push("（ステップはまだありません）", "");
   } else {
     lines.push(
-      `（「手順 N」は図とステップ一覧の番号です。${opts.flowByAi ? "文は AI が図から書き起こしたものです" : "AI が使えなかったため、図の手順名をそのまま並べています"}）`,
+      `（番号は図とステップ一覧の番号です。${opts.flowByAi ? "文は AI が図から書き起こしたものです" : "AI が使えなかったため、図の手順名をそのまま並べています"}）`,
       "",
     );
-    for (const p of opts.flow) lines.push(p, "");
+    if (opts.flow.intro) lines.push(opts.flow.intro, "");
+    for (const b of opts.flow.blocks) {
+      lines.push(`### ${b.title}`, "", ...b.items.map((x) => `- ${x}`), "");
+    }
+    if (opts.flow.outro) lines.push(`**終了**: ${opts.flow.outro}`, "");
   }
 
   // 4. ステップ一覧

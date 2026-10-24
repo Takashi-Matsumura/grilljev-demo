@@ -1,6 +1,6 @@
 import { isFlowModel } from "@/lib/model/guard";
 import { generateNarration } from "@/lib/preview/narrate";
-import { flowParagraphs } from "@/lib/summary/flow-text";
+import { flowText } from "@/lib/summary/flow-text";
 import { buildSummaryMarkdown } from "@/lib/summary/markdown";
 import { generateProse } from "@/lib/summary/generate";
 import { dutiesReadiness } from "@/lib/summary/readiness";
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const markdown = buildSummaryMarkdown(model, prose, {
     generatedAt: new Date().toLocaleString("ja-JP", { hour12: false }),
     warnings: dutiesReadiness(model).warnings,
-    flow: flowParagraphs(model, model.scope.title, narration.n),
+    flow: flowText(model, narration.n),
     flowByAi: narration.n !== null && Object.keys(narration.n).length > 0,
   });
   return Response.json({ markdown, proseError: error ?? narration.error });
