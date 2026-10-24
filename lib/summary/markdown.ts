@@ -186,10 +186,10 @@ export function buildSummaryMarkdown(
     lines.push("（ステップはまだありません）", "");
   } else {
     lines.push(
-      "（**A** 承認する ／ **R** 行う ／ **C** 依頼を受けて応える ／ **I** 受け取る。図の手順から当てたもので、" +
-        "承認の手順が無いまとまりは A が空になります）",
+      "（**A** 承認する（ステップの「承認者」）／ **R** 行う ／ **C** 依頼を受けて応える ／ **I** 受け取る。" +
+        "承認者が決まっていないまとまりでは、「承認」などの手順名から推定した A を **A?** と書きます）",
       "",
-      ...table(["業務のまとまり", ...raci.columns], raci.rows.map((r) => [cell(r.label), ...r.cells.map((c) => (c === "A" ? "**A**" : c))])),
+      ...table(["業務のまとまり", ...raci.columns], raci.rows.map((r) => [cell(r.label), ...r.cells.map((c) => (c === "A" || c === "A?" ? `**${c}**` : c))])),
       "",
     );
   }
@@ -225,7 +225,7 @@ export function buildSummaryMarkdown(
   if (points.length === 0) {
     lines.push("（図から分かる確認点は見つかっていません）", "");
   } else {
-    lines.push("（手順名の言葉から当たりを付けたものです。実際の運用を確かめてください）", "", ...points.map((p) => `- ${p}`), "");
+    lines.push("（ステップの「承認者」と、手順名の言葉から当たりを付けたものです。実際の運用を確かめてください）", "", ...points.map((p) => `- ${p}`), "");
   }
 
   // 7. 未決事項と決まったこと（論点と付箋をまとめる。付箋も論点なので、対象が分かるものは対象を添える）
@@ -294,7 +294,7 @@ export function buildSummaryMarkdown(
   } else {
     lines.push(
       ...table(
-        ["#", "送り手", "担当", "受け手", "内容", "種別", "条件", "渡すもの", "確度"],
+        ["#", "送り手", "担当", "受け手", "内容", "種別", "条件", "渡すもの", "承認者", "確度"],
         steps.map((s, i) => {
           const b = branchOf(s.branchId);
           const certainty = s.status === "provisional" ? `**仮** ${mark(s.confidence)}` : mark(s.confidence);
@@ -307,6 +307,7 @@ export function buildSummaryMarkdown(
             MESSAGE_LABEL[s.kind],
             cell(b ? `${b.kind} ${b.condition}` : ""),
             cell(s.artifact ?? ""),
+            cell(s.approver ? nameOf(s.approver) : ""),
             certainty,
           ];
         }),

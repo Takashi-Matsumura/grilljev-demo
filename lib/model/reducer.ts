@@ -68,6 +68,7 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
           ...s,
           from: s.from === from.id ? into.id : s.from,
           to: s.to === from.id ? into.id : s.to,
+          ...(s.approver === from.id ? { approver: into.id } : {}),
         })),
         issues: moveActorNotes(m.issues, from.id, into.id),
       };
@@ -85,6 +86,8 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
           .filter((a) => a.id !== from.id)
           .map((a) => (a.id === into.id ? { ...a, members, role: a.role ?? from.role } : a)),
         steps: m.steps.map((s) => {
+          // 承認者だった個人は、たたんだ先の部署が承認者になる
+          if (s.approver === from.id) s = { ...s, approver: into.id };
           if (s.from !== from.id && s.to !== from.id) return s;
           const next: Step = {
             ...s,
@@ -107,7 +110,10 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
       return {
         ...m,
         actors: m.actors.filter((a) => a.id !== op.id),
-        steps: m.steps.filter((s) => !linked(s)),
+        // 承認者にしていた手順からは外す（手順そのものは残る）
+        steps: m.steps
+          .filter((s) => !linked(s))
+          .map((s) => (s.approver === op.id ? { ...s, approver: undefined } : s)),
         // 消したステップを指す論点の関連は外す（論点そのものは残す）
         issues: m.issues.map((i) =>
           i.relatedStepIds.some((id) => m.steps.some((s) => s.id === id && linked(s)))

@@ -66,18 +66,23 @@ export function dutiesOf(model: FlowModel): Duty[] {
     .sort((x, y) => x.lane - y.lane)
     .map((actor) => {
       const own = list.filter(({ s }) => s.from === actor.id);
+      // 承認者として決められた手順（送り手でなくても、その結果に責任を持つ）
+      const approving = list.filter(({ s }) => s.approver === actor.id);
       const tentative = (s: Step) => (s.status === "provisional" ? "・仮" : "");
       const assignees = new Map<string, number[]>();
       for (const { s, no } of own) if (s.assignee) assignees.set(s.assignee, [...(assignees.get(s.assignee) ?? []), no]);
       return {
         actor,
         tasks: own.map(({ s, no }) => `${s.label.trim()}（${no}${tentative(s)}）`),
-        decisions: (["承認", "差し戻しの判断", "確認"] as const).flatMap((kind) => {
-          const hit = own.filter(({ s }) => decisionOf(s) === kind);
-          if (hit.length === 0) return [];
-          const tent = hit.some(({ s }) => s.status === "provisional") ? "・仮を含む" : "";
-          return [`${kind}（${numberRange(hit.map(({ no }) => no))}${tent}）`];
-        }),
+        decisions: [
+          ...(approving.length > 0 ? [`**承認者**（${numberRange(approving.map(({ no }) => no))}）`] : []),
+          ...(["承認", "差し戻しの判断", "確認"] as const).flatMap((kind) => {
+            const hit = own.filter(({ s }) => decisionOf(s) === kind);
+            if (hit.length === 0) return [];
+            const tent = hit.some(({ s }) => s.status === "provisional") ? "・仮を含む" : "";
+            return [`${kind}（${numberRange(hit.map(({ no }) => no))}${tent}）`];
+          }),
+        ],
         received: uniq(
           list.filter(({ s }) => s.to === actor.id && s.from !== actor.id && s.artifact?.trim()).map(({ s }) => s.artifact!.trim()),
         ),
@@ -95,7 +100,7 @@ export function dutiesOf(model: FlowModel): Duty[] {
           .map((n) => `${n.prompt?.text ?? n.question} → ${n.answer ?? ""}`),
       };
     })
-    .filter((d) => d.tasks.length > 0 || d.received.length > 0);
+    .filter((d) => d.tasks.length > 0 || d.received.length > 0 || d.decisions.length > 0);
 }
 
 /** 統制上の確認点。図から言えることだけを、確認を促す文で出す */
@@ -104,10 +109,20 @@ export function controlPoints(model: FlowModel): string[] {
   const out: string[] = [];
   const holders = model.actors.filter((a) => a.kind !== "system");
 
-  // 職務分離: 同じ部署（担当者が分かれていると書かれていない）が、作る・登録する手順と承認する手順の両方を持つ
+  // 職務分離（決められた承認者）: 作業の手順（承認・判断・確認の手順ではない）を、行う部署自身が承認する
+  for (const a of holders) {
+    const self = list.filter(({ s }) => s.approver === a.id && s.from === a.id && decisionOf(s) === null);
+    if (self.length === 0) continue;
+    out.push(
+      `**職務分離**: 手順（${numberRange(self.map((x) => x.no))}）は、行う部署と承認者がどちらも${a.name}です。行う人と承認する人を分けているか確認してください。`,
+    );
+  }
+
+  // 職務分離（手順名からの推定）: 同じ部署（担当者が分かれていると書かれていない）が、作る・登録する手順と承認する手順の両方を持つ。
+  // 承認の手順の承認者を別の部署に決めてあれば、分かれているので数えない
   for (const a of holders) {
     const own = list.filter(({ s }) => s.from === a.id);
-    const approve = own.filter(({ s }) => APPROVE.test(s.label));
+    const approve = own.filter(({ s }) => APPROVE.test(s.label) && (!s.approver || s.approver === s.from));
     const make = own.filter(({ s }) => MAKE.test(s.label) && !APPROVE.test(s.label));
     if (approve.length === 0 || make.length === 0) continue;
     const people = (xs: typeof own) => new Set(xs.map(({ s }) => s.assignee).filter(Boolean));
@@ -120,9 +135,19 @@ export function controlPoints(model: FlowModel): string[] {
     );
   }
 
-  // 承認の手順が 1 つも無い
-  if (list.length > 0 && !list.some(({ s }) => APPROVE.test(s.label))) {
-    out.push("**承認**: 承認・決裁の手順がありません。誰が最終的に責任を持つのか（承認者）を確認してください。");
+  // 承認の手順も、承認者を決めた手順も 1 つも無い
+  if (list.length > 0 && !list.some(({ s }) => APPROVE.test(s.label) || s.approver)) {
+    out.push(
+      "**承認**: 承認・決裁の手順も、承認者を決めた手順もありません。誰が最終的に責任を持つのかを確認し、ステップの編集の「承認者」に入れてください。",
+    );
+  }
+
+  // 差し戻しの判断に、承認者（責任者）が決まっていない
+  const undecided = list.filter(({ s }) => REJECT.test(s.label) && !s.approver).map(({ no }) => no);
+  if (undecided.length > 0) {
+    out.push(
+      `**承認者**: 差し戻しの判断（${numberRange(undecided)}）に、責任を持つ人（承認者）が決まっていません。ステップの編集の「承認者」で決められます。`,
+    );
   }
 
   // 差し戻しの判断に、基準が決まっていない（判断した手順・前の手順の付箋が未決）
@@ -151,27 +176,31 @@ export function controlPoints(model: FlowModel): string[] {
   return out;
 }
 
-export type Raci = "A" | "R" | "C" | "I";
+/** A? は、承認者が決まっていないまとまりで、手順名（「承認」など）から推定した A */
+export type Raci = "A" | "A?" | "R" | "C" | "I";
 export type RaciTable = { columns: string[]; rows: { label: string; cells: (Raci | "")[] }[] };
 
 /**
  * 責任分担表（RACI）: 業務のまとまり × 部署。図から言える範囲で当てる。
- * A = そのまとまりで承認する（承認・決裁の手順の送り手）/ R = 手順を行う（送り手）/
+ * A = そのまとまりの手順の承認者（Step.approver）。まとまりに承認者が 1 人も決まっていなければ、
+ *     承認・決裁の手順の送り手を A?（推定）にする / R = 手順を行う（送り手）/
  * C = 依頼を受けて返す（依頼の受け手・返答の送り手）/ I = 受け取るだけ。強い順に 1 つだけ書く
  */
 export function raciTable(model: FlowModel, blocks: { label: string; stepIds: string[] }[]): RaciTable {
   const stepById = new Map(model.steps.map((s) => [s.id, s]));
   const holders = model.actors.filter((a) => a.kind !== "system").sort((x, y) => x.lane - y.lane);
-  const rank: Record<Raci, number> = { A: 3, R: 2, C: 1, I: 0 };
+  const rank: Record<Raci, number> = { A: 3, "A?": 3, R: 2, C: 1, I: 0 };
   const rows = blocks.map((b) => {
     const steps = b.stepIds.flatMap((id) => stepById.get(id) ?? []);
+    const decided = steps.some((s) => s.approver);
     const cells = holders.map((a): Raci | "" => {
       let best: Raci | "" = "";
       const put = (r: Raci) => {
         if (best === "" || rank[r] > rank[best]) best = r;
       };
       for (const s of steps) {
-        if (s.from === a.id) put(APPROVE.test(s.label) ? "A" : s.kind === "reply" ? "C" : "R");
+        if (s.approver === a.id) put("A");
+        if (s.from === a.id) put(!decided && APPROVE.test(s.label) ? "A?" : s.kind === "reply" ? "C" : "R");
         else if (s.to === a.id) put(s.kind === "sync" ? "C" : "I");
       }
       return best;
