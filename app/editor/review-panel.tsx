@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FlowModel, ModelOp, Scope } from "@/lib/model/types";
+import { codeFix, fixKindOf, type Fix } from "@/lib/review/fix";
 import { CATEGORY_LABEL, reviewRules, SEVERITY_LABEL, type Finding, type Severity } from "@/lib/review/rules";
 import { reviewKey, type AiReviewState } from "./use-ai-review";
 import { useReviewWidth } from "./use-review-width";
@@ -25,11 +26,20 @@ const PREMISE_FIELDS: { key: keyof Pick<Scope, "purpose" | "trigger" | "frequenc
   { key: "frequency", label: "頻度", placeholder: "例: 月末に 30 件ほど" },
 ];
 
+/** AI に頼んだ直す案。for は頼んだときの図（reviewKey）。図が変わったら作り直してもらう */
+type AiFix =
+  | { status: "loading"; for: string }
+  | { status: "done"; for: string; fix: Fix | null }
+  | { status: "error"; for: string; message: string };
+
 /**
  * 図の点検（/editor の右側のパネル）。チームで描いた図の、描いた本人たちが気づきにくい抜けを指摘する。
  * - 図の点検: コードで確実に言えるもの（lib/review/rules.ts）。開いたらすぐ出る
  * - AI の指摘: ローカル AI が図を読んで、抜けていそうな手順・例外・業務名との食い違いを挙げる（30〜60 秒）
  * 指摘の手順の番号を押すと、図のそのステップを強調する。業務の前提（目的・きっかけ・頻度）はここで書ける。
+ *
+ * 直せる指摘には「直す案」を添える（lib/review/fix.ts）。案は勝手には当てない:
+ * 「図で見る」で画面の図だけに映し（onPreview）、「この案で直す」で 1 回で当てる（元に戻す 1 回で戻る）。
  */
 export function ReviewPanel({
   model,
@@ -37,6 +47,7 @@ export function ReviewPanel({
   ai,
   onRunAi,
   onCommit,
+  onPreview,
   onFocusStep,
   focusStep,
   onClose,
@@ -47,6 +58,8 @@ export function ReviewPanel({
   /** AI の点検を頼む。already は図の点検で指摘済みの見出し（AI に重ねさせない） */
   onRunAi: (already: string[]) => void;
   onCommit: (ops: ModelOp[]) => void;
+  /** 直す案を、モデルを変えずに画面の図だけへ映す（null で外す） */
+  onPreview: (ops: ModelOp[] | null) => void;
   /** 指摘の手順の番号（1 始まり）を押したら、図で強調する。0 で外す */
   onFocusStep: (n: number) => void;
   focusStep: number;
@@ -56,6 +69,61 @@ export function ReviewPanel({
   const key = reviewKey(model, name);
   const stale = ai.status !== "idle" && ai.for !== key;
   const runAi = () => onRunAi(rules.map((f) => f.title));
+
+  // ── 直す案 ──
+  const [aiFixes, setAiFixes] = useState<Record<string, AiFix>>({});
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const [applied, setApplied] = useState<string | null>(null);
+  const fixCtrls = useRef(new Set<AbortController>());
+  const fixOf = (f: (typeof rules)[number]): Fix | null => {
+    const kind = fixKindOf(f);
+    if (kind === "code") return codeFix(model, f);
+    const got = aiFixes[f.id];
+    return kind === "ai" && got?.status === "done" && got.for === key ? got.fix : null;
+  };
+  const requestFix = (findingId: string) => {
+    const ctrl = new AbortController();
+    fixCtrls.current.add(ctrl);
+    const forKey = key;
+    const set = (v: AiFix) => setAiFixes((prev) => ({ ...prev, [findingId]: v }));
+    set({ status: "loading", for: forKey });
+    fetch("/api/review/fix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, title: name, findingId }),
+      signal: ctrl.signal,
+    })
+      .then(async (res) => {
+        const json = (await res.json().catch(() => ({}))) as { fix?: Fix | null; error?: string };
+        set(
+          res.ok && json.fix !== undefined
+            ? { status: "done", for: forKey, fix: json.fix }
+            : { status: "error", for: forKey, message: json.error ?? `HTTP ${res.status}` },
+        );
+      })
+      .catch((e) => {
+        if (ctrl.signal.aborted) return;
+        set({ status: "error", for: forKey, message: e instanceof Error ? e.message : "通信に失敗しました" });
+      })
+      .finally(() => fixCtrls.current.delete(ctrl));
+  };
+  useEffect(() => {
+    const ctrls = fixCtrls.current;
+    return () => ctrls.forEach((c) => c.abort());
+  }, []);
+  const apply = (f: (typeof rules)[number], fix: Fix) => {
+    onCommit(fix.ops);
+    setPreviewing(null);
+    setApplied(`「${f.title}」を直しました。「元に戻す」で戻せます。`);
+  };
+  // 図で見ている案を、画面の図へ映す。指摘が消えた（直った・図が変わった）ら外す
+  const previewFinding = rules.find((f) => f.id === previewing);
+  const previewOps = previewFinding ? (fixOf(previewFinding)?.ops ?? null) : null;
+  const previewJson = previewOps ? JSON.stringify(previewOps) : null;
+  useEffect(() => {
+    onPreview(previewJson ? (JSON.parse(previewJson) as ModelOp[]) : null);
+  }, [onPreview, previewJson]);
+  useEffect(() => () => onPreview(null), [onPreview]);
 
   // ── 幅を左端の境界のドラッグで調整（指摘を大きく読みたいとき）──
   const [width, setWidth] = useReviewWidth();
@@ -140,10 +208,34 @@ export function ReviewPanel({
 
         <section className="flex flex-col gap-2">
           <h3 className="text-xs font-medium text-zinc-500">図の点検（{rules.length} 件）</h3>
+          {applied && (
+            <p
+              role="status"
+              className="rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-200"
+            >
+              {applied}
+            </p>
+          )}
           {rules.length === 0 && <p className="text-xs text-zinc-500">気になる点は見つかりませんでした。</p>}
-          {rules.map((f) => (
-            <FindingCard key={f.id} finding={f} focusStep={focusStep} onFocusStep={onFocusStep} />
-          ))}
+          {rules.map((f) => {
+            const kind = fixKindOf(f);
+            const got = aiFixes[f.id];
+            return (
+              <FindingCard key={f.id} finding={f} focusStep={focusStep} onFocusStep={onFocusStep}>
+                {kind && (
+                  <FixBox
+                    kind={kind}
+                    fix={fixOf(f)}
+                    ai={got && got.for === key ? got : undefined}
+                    previewing={previewing === f.id}
+                    onRequest={() => requestFix(f.id)}
+                    onPreview={(on) => setPreviewing(on ? f.id : null)}
+                    onApply={(fix) => apply(f, fix)}
+                  />
+                )}
+              </FindingCard>
+            );
+          })}
         </section>
 
         <section className="flex flex-col gap-2">
@@ -199,10 +291,13 @@ function FindingCard({
   finding: f,
   focusStep,
   onFocusStep,
+  children,
 }: {
   finding: Finding;
   focusStep: number;
   onFocusStep: (n: number) => void;
+  /** 指摘の下に足すもの（直す案） */
+  children?: React.ReactNode;
 }) {
   return (
     <article className="flex flex-col gap-1 rounded-md border border-black/10 p-2.5 dark:border-white/15">
@@ -231,7 +326,97 @@ function FindingCard({
           ))}
         </div>
       )}
+      {children}
     </article>
+  );
+}
+
+const fixBtn =
+  "rounded-md border border-black/15 px-2 py-1 text-xs hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10";
+
+/**
+ * 指摘に添える「直す案」。コードの案はすぐ出す。AI の案は頼まれてから作る（10〜30 秒）。
+ * 「前 → 後」を並べ、図で見る（画面の図だけに映す）・この案で直す、を選ばせる
+ */
+function FixBox({
+  kind,
+  fix,
+  ai,
+  previewing,
+  onRequest,
+  onPreview,
+  onApply,
+}: {
+  kind: "code" | "ai";
+  fix: Fix | null;
+  /** AI に頼んだ結果（今の図に対するものだけ） */
+  ai?: AiFix;
+  previewing: boolean;
+  onRequest: () => void;
+  onPreview: (on: boolean) => void;
+  onApply: (fix: Fix) => void;
+}) {
+  const box = "mt-1.5 flex flex-col gap-1.5 rounded-md bg-sky-50 p-2 text-xs dark:bg-sky-500/10";
+  if (kind === "ai" && !fix) {
+    return (
+      <div className={box}>
+        {ai?.status === "loading" ? (
+          <p role="status" className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-sky-500 border-t-transparent motion-reduce:animate-none" />
+            ローカル AI が直す案を考えています…
+          </p>
+        ) : (
+          <>
+            {ai?.status === "done" && <p className="text-zinc-600 dark:text-zinc-300">AI から使える案が出ませんでした。</p>}
+            {ai?.status === "error" && <p className="text-amber-700 dark:text-amber-300">案を作れませんでした: {ai.message}</p>}
+            <div>
+              <button type="button" className={fixBtn} onClick={onRequest}>
+                {ai ? "もう一度 AI に案を作ってもらう" : "AI に直す案を作ってもらう"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+  if (!fix) return null;
+  return (
+    <div className={`${box} ${previewing ? "ring-2 ring-sky-500" : ""}`}>
+      <p className="font-medium text-sky-800 dark:text-sky-200">直す案{kind === "ai" ? "（AI）" : ""}</p>
+      <ul className="flex flex-col gap-1">
+        {fix.changes.map((c, i) => (
+          <li key={i} className="flex flex-wrap items-baseline gap-x-1.5">
+            <span className="text-zinc-500 line-through decoration-zinc-400">{c.before}</span>
+            <span aria-hidden className="text-zinc-400">→</span>
+            <span className="sr-only">を</span>
+            <span className="font-medium text-zinc-800 dark:text-zinc-100">{c.after}</span>
+            <span className="sr-only">に</span>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          aria-pressed={previewing}
+          className={`${fixBtn} aria-pressed:border-sky-600 aria-pressed:bg-sky-600 aria-pressed:text-white`}
+          onClick={() => onPreview(!previewing)}
+        >
+          {previewing ? "図で見るのをやめる" : "図で見る"}
+        </button>
+        <button
+          type="button"
+          className="rounded-md bg-sky-600 px-2 py-1 text-xs text-white hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600"
+          onClick={() => onApply(fix)}
+        >
+          この案で直す
+        </button>
+        {kind === "ai" && (
+          <button type="button" className="px-1 text-xs text-sky-700 hover:underline dark:text-sky-300" onClick={onRequest}>
+            別の案
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

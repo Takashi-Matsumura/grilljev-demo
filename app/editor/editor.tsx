@@ -436,6 +436,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
             ai={aiReview.state}
             onRunAi={(already) => aiReview.run(model, name, already)}
             onCommit={commit}
+            onPreview={setPreview}
             focusStep={panel.focus}
             onFocusStep={(n) => setPanel({ mode: "review", focus: n })}
             onClose={() => setPanel(null)}
