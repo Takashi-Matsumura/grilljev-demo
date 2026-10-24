@@ -16,6 +16,7 @@ export type PromptName =
   | "scope-shift"
   | "summary"
   | "narrate"
+  | "phase-names"
   | "review"
   | "review-title"
   | "review-direction"

@@ -150,3 +150,38 @@ export function controlPoints(model: FlowModel): string[] {
   if (pv.length > 0) out.push(`**仮の手順**: まだ確かではない手順があります（${numberRange(pv)}）。`);
   return out;
 }
+
+export type Raci = "A" | "R" | "C" | "I";
+export type RaciTable = { columns: string[]; rows: { label: string; cells: (Raci | "")[] }[] };
+
+/**
+ * 責任分担表（RACI）: 業務のまとまり × 部署。図から言える範囲で当てる。
+ * A = そのまとまりで承認する（承認・決裁の手順の送り手）/ R = 手順を行う（送り手）/
+ * C = 依頼を受けて返す（依頼の受け手・返答の送り手）/ I = 受け取るだけ。強い順に 1 つだけ書く
+ */
+export function raciTable(model: FlowModel, blocks: { label: string; stepIds: string[] }[]): RaciTable {
+  const stepById = new Map(model.steps.map((s) => [s.id, s]));
+  const holders = model.actors.filter((a) => a.kind !== "system").sort((x, y) => x.lane - y.lane);
+  const rank: Record<Raci, number> = { A: 3, R: 2, C: 1, I: 0 };
+  const rows = blocks.map((b) => {
+    const steps = b.stepIds.flatMap((id) => stepById.get(id) ?? []);
+    const cells = holders.map((a): Raci | "" => {
+      let best: Raci | "" = "";
+      const put = (r: Raci) => {
+        if (best === "" || rank[r] > rank[best]) best = r;
+      };
+      for (const s of steps) {
+        if (s.from === a.id) put(APPROVE.test(s.label) ? "A" : s.kind === "reply" ? "C" : "R");
+        else if (s.to === a.id) put(s.kind === "sync" ? "C" : "I");
+      }
+      return best;
+    });
+    return { label: b.label, cells };
+  });
+  // どのまとまりにも出てこない部署の列は出さない
+  const used = holders.map((_, i) => rows.some((r) => r.cells[i] !== ""));
+  return {
+    columns: holders.filter((_, i) => used[i]).map((a) => a.name),
+    rows: rows.map((r) => ({ label: r.label, cells: r.cells.filter((_, i) => used[i]) })),
+  };
+}

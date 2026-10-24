@@ -10,7 +10,14 @@ import { flowItems } from "../render/mermaid";
  * 手順の文は AI の言い回し（フローの再生と同じ lib/preview/narrate.ts）が届いていればそれを、無ければコードで作った文を使う。
  */
 
-export type FlowBlock = { title: string; items: string[] };
+export type FlowBlock = {
+  /** まとまりの形（「分岐: 「〜」の場合」「合流後」など）。コードが決める */
+  title: string;
+  /** 業務の名前（「請求書の受付」）。AI が付ける（lib/summary/phases.ts）。無ければ null */
+  name: string | null;
+  items: string[];
+  stepIds: string[];
+};
 export type FlowText = { intro: string | null; blocks: FlowBlock[]; outro: string | null };
 
 const cond = (b: Branch) => `「${b.condition.trim() || "（条件が未入力）"}」`;
@@ -22,7 +29,11 @@ function frameTitle(b: Branch): string {
   return `分岐: ${cond(b)}${/(場合|とき)$/.test(b.condition.trim()) ? "" : "の場合"}`;
 }
 
-export function flowText(model: FlowModel, narration: Narration | null): FlowText {
+export function flowText(
+  model: FlowModel,
+  narration: Narration | null,
+  names: (string | null)[] | null = null,
+): FlowText {
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? "（不明）";
   const blocks: FlowBlock[] = [];
   let armId: string | null | undefined; // undefined = まだまとまりが無い / null = 枠の外
@@ -41,16 +52,18 @@ export function flowText(model: FlowModel, narration: Narration | null): FlowTex
             : afterKind === "loop"
               ? "くり返しの後"
               : "その後";
-      blocks.push({ title, items: [] });
+      blocks.push({ title, name: names?.[blocks.length] ?? null, items: [], stepIds: [] });
       armId = id;
       if (branch) afterKind = branch.kind;
     }
-    const items = blocks[blocks.length - 1].items;
+    const block = blocks[blocks.length - 1];
+    const items = block.items;
     if (step === null) {
       items.push("（この場合の手順は、まだ書かれていません）");
       continue;
     }
     n += 1;
+    block.stepIds.push(step.id);
     const ai = narration?.[step.id];
     let text: string;
     if (ai) {
