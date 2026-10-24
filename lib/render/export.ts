@@ -1,11 +1,15 @@
+import type { FlowModel } from "@/lib/model/types";
 import { PLACEHOLDER_TEXT } from "./mermaid";
 
 /**
  * 書き出し用の小さな純関数（ファイル名と SVG の整形）。ダウンロード自体はブラウザ側（component）で行う。
  */
 
-/** svg11 = SVG 1.1 に揃えた .svg（Canva など、CSS を読まない取り込み先向け。app/components/svg11.ts） */
-export type ExportFormat = "drawio" | "mmd" | "svg" | "svg11" | "md";
+/**
+ * svg11 = SVG 1.1 に揃えた .svg（Canva など、CSS を読まない取り込み先向け。app/components/svg11.ts）
+ * json = 業務フローのデータそのもの（FlowModel）。別のアプリへ取り込むため（toFlowJson）
+ */
+export type ExportFormat = "drawio" | "mmd" | "svg" | "svg11" | "md" | "json";
 
 export const EXPORT_MIME: Record<ExportFormat, string> = {
   drawio: "application/vnd.jgraph.mxfile",
@@ -13,7 +17,28 @@ export const EXPORT_MIME: Record<ExportFormat, string> = {
   svg: "image/svg+xml;charset=utf-8",
   svg11: "image/svg+xml;charset=utf-8",
   md: "text/markdown;charset=utf-8",
+  json: "application/json;charset=utf-8",
 };
+
+/** .json の形式名。取り込む側はこれで grilljev の業務フローだと見分ける */
+export const FLOW_JSON_FORMAT = "grilljev-flow";
+/** .json の形式の版。model の形を互換性なく変えたら上げる */
+export const FLOW_JSON_VERSION = 1;
+
+/**
+ * 業務フローを、別のアプリへ取り込むための JSON にする。model は加工せずそのまま入れる
+ * （取り消したステップ・付箋も含む。図に出すかどうかは取り込む側が status などで決める）。
+ * 形式名と版で包むのは、取り込む側が中身を確かめ、将来の形の変更を見分けられるようにするため。
+ */
+export function toFlowJson(model: FlowModel, now: Date = new Date()): string {
+  const doc = {
+    format: FLOW_JSON_FORMAT,
+    version: FLOW_JSON_VERSION,
+    exportedAt: now.toISOString(),
+    model,
+  };
+  return `${JSON.stringify(doc, null, 2)}\n`;
+}
 
 const FORBIDDEN_IN_FILENAME = /[\\/:*?"<>|\u0000-\u001F\s]+/g;
 const MAX_NAME_CHARS = 40;
