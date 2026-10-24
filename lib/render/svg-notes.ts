@@ -52,26 +52,37 @@ export function addNotesToSvg(svg: string, model: FlowModel): string {
   const frames = drawnFrames(model);
   // 黒丸は、描いたときに番号ごとの円（.step-dot。mermaid-diagram.tsx の enlargeStepDots）になっている。
   // 円になっていなければ、Mermaid の素の形（番号の直前の線の端）から位置を取る
-  const dotOf = new Map<number, { x: number; y: number; r: number }>();
+  // left は、黒丸から出る矢印が左向きか（印は矢印が伸びない側に置く。上は手順名の文字にかかる）。
+  // Mermaid は 1 つの手順を「矢印の線 → 黒丸の線（長さ 0）→ 番号」の順に描く（自分の作業の矢印は右へ回る曲線）
+  const dotOf = new Map<number, { x: number; y: number; r: number; left: boolean }>();
+  const goesLeft = (zero: Element | null) => {
+    const arrow = zero?.previousElementSibling;
+    if (!arrow || arrow.tagName !== "line" || !arrow.getAttribute("class")?.includes("messageLine")) return false;
+    return Number(arrow.getAttribute("x2")) < Number(arrow.getAttribute("x1"));
+  };
   for (const num of doc.querySelectorAll(".sequenceNumber")) {
     const n = Number(num.textContent?.trim());
     if (!Number.isInteger(n)) continue;
-    const circle = num.parentElement?.classList.contains("step-dot") ? num.parentElement.querySelector("circle") : null;
-    if (circle) {
-      dotOf.set(n, { x: Number(circle.getAttribute("cx")), y: Number(circle.getAttribute("cy")), r: Number(circle.getAttribute("r")) });
+    const dot = num.parentElement?.classList.contains("step-dot") ? num.parentElement : null;
+    const circle = dot?.querySelector("circle");
+    if (dot && circle) {
+      const at = { x: Number(circle.getAttribute("cx")), y: Number(circle.getAttribute("cy")), r: Number(circle.getAttribute("r")) };
+      dotOf.set(n, { ...at, left: goesLeft(dot.previousElementSibling) });
       continue;
     }
     const line = num.previousElementSibling;
-    if (line && line.tagName === "line") dotOf.set(n, { x: Number(line.getAttribute("x1")), y: Number(line.getAttribute("y1")), r: 9 });
+    if (line && line.tagName === "line") {
+      dotOf.set(n, { x: Number(line.getAttribute("x1")), y: Number(line.getAttribute("y1")), r: 9, left: goesLeft(line) });
+    }
   }
   const labelBoxes = [...doc.querySelectorAll(".labelBox")];
 
-  // 同じ場所に複数の付箋があれば、横に並べる
+  // 同じ場所に複数の付箋があれば、横に並べる（step = -1 なら左へ）
   const placed = new Map<string, number>();
-  const put = (key: string, parent: Element, x: number, y: number, no: number, state: NoteState) => {
+  const put = (key: string, parent: Element, x: number, y: number, no: number, state: NoteState, step = 1) => {
     const i = placed.get(key) ?? 0;
     placed.set(key, i + 1);
-    parent.append(badge(x + i * 16, y, no, state));
+    parent.append(badge(x + step * i * 16, y, no, state));
   };
 
   noted.forEach(({ note }, i) => {
@@ -79,7 +90,9 @@ export function addNotesToSvg(svg: string, model: FlowModel): string {
     const state = noteState(note);
     steps.forEach((s, k) => {
       const dot = note.relatedStepIds.includes(s.id) ? dotOf.get(k + 1) : undefined;
-      if (dot) put(`s${k}`, root, dot.x + dot.r - 2, dot.y - dot.r - 12, no, state);
+      if (!dot) return;
+      if (dot.left) put(`s${k}`, root, dot.x + dot.r + 3, dot.y - 7, no, state);
+      else put(`s${k}`, root, dot.x - dot.r - 17, dot.y - 7, no, state, -1);
     });
     frames.forEach((arms, k) => {
       const box = labelBoxes[k];

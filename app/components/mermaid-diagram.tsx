@@ -145,6 +145,16 @@ function noteBadge(x: number, y: number, state: NoteState, what: string): SVGGEl
   return g;
 }
 
+/**
+ * 番号の黒丸から出る矢印が左向きか。Mermaid は 1 つの手順を「矢印の線 → 黒丸の線（長さ 0）→ 番号」の順に描くので、
+ * 黒丸の 2 つ前が矢印（自分の作業は右へ回る曲線の path）。分からなければ false
+ */
+function arrowGoesLeft(dot: Element): boolean {
+  const arrow = dot.previousElementSibling?.previousElementSibling;
+  if (!arrow || arrow.tagName !== "line" || !arrow.getAttribute("class")?.includes("messageLine")) return false;
+  return Number(arrow.getAttribute("x2")) < Number(arrow.getAttribute("x1"));
+}
+
 function markNotes(root: HTMLElement, notes: NoteMarks | undefined) {
   for (const el of root.querySelectorAll(`.${NOTE_CLASS}`)) el.remove();
   if (!notes) return;
@@ -152,10 +162,11 @@ function markNotes(root: HTMLElement, notes: NoteMarks | undefined) {
     const state = notes.steps.get(Number(dot.querySelector(".sequenceNumber")?.textContent?.trim()));
     const circle = dot.querySelector("circle");
     if (!state || !circle) continue;
-    // 黒丸（半径 STEP_DOT_R）の右上に、少し重ねて
+    // 黒丸の横の、矢印が伸びない側に（上は手順名の文字にかかる）
     const cx = Number(circle.getAttribute("cx"));
     const cy = Number(circle.getAttribute("cy"));
-    dot.append(noteBadge(cx + STEP_DOT_R - 4, cy - STEP_DOT_R - 9, state, "手順"));
+    const x = arrowGoesLeft(dot) ? cx + STEP_DOT_R + 3 : cx - STEP_DOT_R - 16;
+    dot.append(noteBadge(x, cy - 6.5, state, "手順"));
   }
   // 枠: 見出しの札（.labelBox）の順 = drawnFrames の順
   [...root.querySelectorAll(".labelBox")].forEach((box, i) => {
@@ -492,8 +503,8 @@ function markFocus(doc: Document, id: string): boolean {
 }
 
 /** 番号の黒丸の半径と、番号の文字の大きさ（Mermaid の既定より大きくして、手順の始まりを目立たせる） */
-const STEP_DOT_R = 12;
-const STEP_NUMBER_PX = 13;
+const STEP_DOT_R = 18;
+const STEP_NUMBER_PX = 19;
 
 /**
  * 番号の黒丸を、番号ごとの円にして大きくする。Mermaid は黒丸を全番号共通のマーカー（線の端の飾り）で
@@ -517,6 +528,7 @@ function enlargeStepDots(doc: Document): boolean {
     circle.setAttribute("r", String(STEP_DOT_R));
     circle.setAttribute("fill", fill);
     line.removeAttribute("marker-start");
+    reshapeSelfLoop(line.previousElementSibling, Number(cx), cy);
     num.setAttribute("y", String(cy + STEP_NUMBER_PX * 0.36));
     num.setAttribute("font-size", String(STEP_NUMBER_PX));
     num.setAttribute("font-weight", "700");
@@ -525,6 +537,21 @@ function enlargeStepDots(doc: Document): boolean {
     changed = true;
   }
   return changed;
+}
+
+/**
+ * 自分の中の作業の矢印（Mermaid は黒丸の中心から右へ 60・下へ 20 の小さな輪を描く）を、大きくした黒丸に
+ * 隠れないように描き直す。黒丸の右端から出て、黒丸の下でライフラインに戻る、ひと回り大きな輪にする。
+ * 矢じり（marker-end）は輪の終わりの向きで付くので、そのまま使える
+ */
+function reshapeSelfLoop(arrow: Element | null, cx: number, cy: number) {
+  if (!arrow || arrow.tagName !== "path" || !arrow.getAttribute("class")?.includes("messageLine")) return;
+  if (!/^M\s*[-\d.]+,[-\d.]+\s*C/.test(arrow.getAttribute("d") ?? "")) return;
+  const r = STEP_DOT_R;
+  const x0 = cx + r;
+  const x1 = cx + r + 56;
+  const end = cy + r + 12;
+  arrow.setAttribute("d", `M ${x0},${cy} C ${x1},${cy - 16} ${x1},${end + 14} ${cx + 3},${end}`);
 }
 
 /**

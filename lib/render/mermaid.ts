@@ -70,9 +70,13 @@ export function focusActorOf<A extends Pick<Actor, "focus" | "role">>(actors: A[
 /** 中心の登場人物を、図を描いたあと（mermaid-diagram.tsx）に強調するための印。`%% focus: A3` */
 export const FOCUS_COMMENT = "%% focus: ";
 
+/**
+ * 矢印の形。終端は手順の種類で決める: 依頼（返事を待つ）= 塗りの三角、通知（送るだけ）= 開いた山形、
+ * 返答 = 点線と塗りの三角。仮（未確認）は、種類の終端のまま線だけ点線にする（確信がないものを確信ありげに見せない。
+ * 以前は種類に関わらず返答と同じ形にしていて、仮の通知と返答が見分けられなかった）
+ */
 function arrowFor(step: Step): string {
-  // 未確認は点線で描き、確信がないものを確信ありげに見せない
-  if (step.status === "provisional") return "-->>";
+  if (step.status === "provisional") return step.kind === "async" ? "--)" : "-->>";
   switch (step.kind) {
     case "async":
       return "-)";

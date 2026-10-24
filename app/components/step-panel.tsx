@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { moveStepOps } from "@/lib/model/move";
-import type { Actor, FlowModel, ModelOp } from "@/lib/model/types";
+import type { Actor, FlowModel, MessageKind, ModelOp } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
 import { NotesSection } from "./notes-section";
 
@@ -166,6 +166,10 @@ export function StepPanel({
             onTo={(id) => update({ to: id })}
             onSwap={swap}
           />
+
+          {step.from !== step.to && (
+            <ArrowKindPicker kind={step.kind} onChange={(kind) => update({ kind })} />
+          )}
 
           <label className={row}>
             <span className={rowLabel}>渡すもの</span>
@@ -527,3 +531,69 @@ export function PanelSection({ title, children }: { title: string; children: Rea
   );
 }
 
+/**
+ * 矢印の種類（終端の形）。図では依頼 = 塗りの三角、通知 = 開いた山形、返答 = 点線と塗りの三角で描く
+ * （lib/render/mermaid.ts の arrowFor）。形の違いの意味が図だけでは分からないので、見本を添える。
+ * 自分の中の作業（送り手と受け手が同じ）には出さない
+ */
+const ARROW_KINDS: { kind: Exclude<MessageKind, "self">; label: string; hint: string }[] = [
+  { kind: "sync", label: "依頼", hint: "相手に頼んで、返事や結果を待つ" },
+  { kind: "async", label: "通知", hint: "送るだけで、返事は待たない" },
+  { kind: "reply", label: "返答", hint: "頼まれたことへの返事・結果を返す" },
+];
+
+function ArrowKindPicker({ kind, onChange }: { kind: MessageKind; onChange: (kind: MessageKind) => void }) {
+  // 自分の作業だった手順を別の人へ付け替えたあとは "self" のまま。図では依頼の形で描かれる
+  const current = kind === "self" ? "sync" : kind;
+  return (
+    <div className={row}>
+      <span className={rowLabel}>矢印</span>
+      <div className="flex flex-col gap-1">
+        <div
+          role="radiogroup"
+          aria-label="矢印の種類"
+          className="inline-flex w-fit rounded-md border border-black/15 p-0.5 dark:border-white/20"
+        >
+          {ARROW_KINDS.map((k) => (
+            <button
+              key={k.kind}
+              type="button"
+              role="radio"
+              aria-checked={current === k.kind}
+              title={k.hint}
+              // 見本の矢印を文字の上に（パネルが狭く、横に並べると文字が折れる）
+              className="flex flex-col items-center gap-0.5 whitespace-nowrap rounded px-2.5 py-1 text-xs text-zinc-600 aria-checked:bg-sky-600 aria-checked:text-white dark:text-zinc-300"
+              onClick={() => current !== k.kind && onChange(k.kind)}
+            >
+              <ArrowGlyph kind={k.kind} />
+              {k.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-zinc-500">{ARROW_KINDS.find((k) => k.kind === current)?.hint}</span>
+      </div>
+    </div>
+  );
+}
+
+/** 矢印の見本（図の終端の形と揃える） */
+function ArrowGlyph({ kind }: { kind: Exclude<MessageKind, "self"> }) {
+  return (
+    <svg viewBox="0 0 28 10" width="28" height="10" aria-hidden className="shrink-0">
+      <line
+        x1="1"
+        y1="5"
+        x2={kind === "async" ? 25 : 21}
+        y2="5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeDasharray={kind === "reply" ? "3 2" : undefined}
+      />
+      {kind === "async" ? (
+        <path d="M19 1 L26 5 L19 9" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      ) : (
+        <path d="M19 1 L27 5 L19 9 Z" fill="currentColor" />
+      )}
+    </svg>
+  );
+}
