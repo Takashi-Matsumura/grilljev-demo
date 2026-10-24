@@ -1,6 +1,7 @@
 import { notedTargets, noteState } from "../model/notes";
 import type { Actor, FlowModel, OpenIssue, Step } from "../model/types";
 import { flagSuffix, toMermaid, visibleSteps } from "../render/mermaid";
+import type { FlowText } from "./flow-text";
 import type { SummaryProse } from "./prose";
 
 /**
@@ -90,12 +91,13 @@ export function displayWidth(text: string): number {
  * 書き出した .md を素のエディタで開いたときにも読みやすくなる。
  */
 export function table(header: string[], rows: string[][]): string[] {
+  // 区切り行の `---` は 3 桁以上要るので、狭い列（「#」など）も 3 桁に揃える
   const widths = header.map((h, i) =>
-    Math.max(displayWidth(h), ...rows.map((r) => displayWidth(r[i] ?? ""))),
+    Math.max(3, displayWidth(h), ...rows.map((r) => displayWidth(r[i] ?? ""))),
   );
   const pad = (text: string, i: number) => text + " ".repeat(Math.max(0, widths[i] - displayWidth(text)));
   const row = (cells: string[]) => `| ${cells.map(pad).join(" | ")} |`;
-  return [row(header), `| ${widths.map((w) => "-".repeat(Math.max(3, w))).join(" | ")} |`, ...rows.map(row)];
+  return [row(header), `| ${widths.map((w) => "-".repeat(w)).join(" | ")} |`, ...rows.map(row)];
 }
 
 const mark = (n: number) => n.toFixed(2);
@@ -103,7 +105,7 @@ const mark = (n: number) => n.toFixed(2);
 export function buildSummaryMarkdown(
   model: FlowModel,
   prose: SummaryProse,
-  opts: { generatedAt: string },
+  opts: { generatedAt: string; warnings?: string[]; flow: FlowText; flowByAi: boolean },
 ): string {
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   const steps = visibleSteps(model);
@@ -112,10 +114,13 @@ export function buildSummaryMarkdown(
 
   lines.push(`# 業務分掌: ${model.scope.title || "（対象業務 未設定）"}`, "");
   lines.push(
-    `> 会議の音声から自動で作成した下書きです（${opts.generatedAt}）。` +
+    `> 業務フロー図から自動で作成した下書きです（${opts.generatedAt}）。` +
       `**「仮」の印は確信が低い項目**、「未確認」は答えが出ていない論点です。必ず参加者で確認してください。`,
     "",
   );
+  if (opts.warnings?.length) {
+    lines.push("> **まだ下書きの段階です。**", ...opts.warnings.map((w) => `> - ${w}`), "");
+  }
 
   // 1. 業務概要
   lines.push("## 1. 業務概要", "");
@@ -147,8 +152,24 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 3. ステップ一覧
-  lines.push("## 3. ステップ一覧", "");
+  // 3. 業務の流れ（まとまりごとの箇条書き。番号は図・ステップ一覧と同じ）
+  lines.push("## 3. 業務の流れ", "");
+  if (opts.flow.blocks.length === 0) {
+    lines.push("（ステップはまだありません）", "");
+  } else {
+    lines.push(
+      `（番号は図とステップ一覧の番号です。${opts.flowByAi ? "文は AI が図から書き起こしたものです" : "AI が使えなかったため、図の手順名をそのまま並べています"}）`,
+      "",
+    );
+    if (opts.flow.intro) lines.push(opts.flow.intro, "");
+    for (const b of opts.flow.blocks) {
+      lines.push(`### ${b.title}`, "", ...b.items.map((x) => `- ${x}`), "");
+    }
+    if (opts.flow.outro) lines.push(`**終了**: ${opts.flow.outro}`, "");
+  }
+
+  // 4. ステップ一覧
+  lines.push("## 4. ステップ一覧", "");
   if (steps.length === 0) {
     lines.push("（ステップはまだありません）", "");
   } else {
@@ -196,17 +217,17 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 4. フロー図
-  lines.push("## 4. フロー図", "");
+  // 5. フロー図
+  lines.push("## 5. フロー図", "");
   if (model.actors.length === 0) {
     lines.push("（図はまだありません）", "");
   } else {
     lines.push("```mermaid", toMermaid(model), "```", "");
   }
 
-  // 5. 例外・属人化・暗黙知
+  // 6. 例外・属人化・暗黙知
   const flagged = steps.filter((s) => s.flags.exception || s.flags.tacit || s.flags.personDependent);
-  lines.push("## 5. 例外・属人化・暗黙知", "");
+  lines.push("## 6. 例外・属人化・暗黙知", "");
   if (flagged.length === 0) {
     lines.push("（該当するステップは見つかっていません）", "");
   } else {
@@ -219,8 +240,8 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 6. 論点
-  lines.push("## 6. 論点", "");
+  // 7. 論点
+  lines.push("## 7. 論点", "");
   if (model.issues.length === 0) {
     lines.push("（論点はありません）", "");
   } else {
@@ -240,13 +261,14 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 7. 改善候補
-  lines.push("## 7. 改善候補", "");
+  // 8. 改善候補
+  lines.push("## 8. 改善候補", "");
   if (prose.improvements.length === 0) {
     lines.push("（改善候補は生成されていません）", "");
   } else {
-    lines.push("（AI の提案です。根拠は 3・5・6 の内容です）", "", ...prose.improvements.map((x) => `- ${x}`), "");
+    lines.push("（AI の提案です。根拠は 4・6・7 の内容です）", "", ...prose.improvements.map((x) => `- ${x}`), "");
   }
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }
+
