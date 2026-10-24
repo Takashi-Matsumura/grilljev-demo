@@ -1,4 +1,4 @@
-import { drawnFrames, visibleSteps } from "../render/mermaid";
+import { drawnFrames, hiddenByFold, visibleSteps } from "../render/mermaid";
 import type { ActorId, FlowModel, IssueKind, ModelOp, OpenIssue, StepId } from "./types";
 
 /**
@@ -37,11 +37,16 @@ function stateOf(notes: OpenIssue[]): NoteState | undefined {
   return notes.every((n) => noteState(n) === "answered") ? "answered" : "open";
 }
 
-/** 図に出す付箋の印。手順は図の番号（1 始まり）、枠は図に描いた枠の順（0 始まり。drawnFrames）、登場人物は id */
+/**
+ * 図に出す付箋の印。手順は図の番号（1 始まり）、枠は図に描いた枠の順（0 始まり。drawnFrames）、登場人物は id。
+ * folds は畳んだ枠の「▸ …」の注記の順（0 始まり。collapsedFrames）: 隠した手順の付箋と、
+ * 注記 1 つに畳んだ枠ならその枠の付箋（畳むと、それらの印が図から消えて気づけなくなるため）
+ */
 export type NoteMarks = {
   steps: ReadonlyMap<number, NoteState>;
   frames: ReadonlyMap<number, NoteState>;
   actors: ReadonlyMap<ActorId, NoteState>;
+  folds: ReadonlyMap<number, NoteState>;
 };
 
 export function noteMarks(model: FlowModel, collapsed?: ReadonlySet<string>): NoteMarks {
@@ -60,7 +65,20 @@ export function noteMarks(model: FlowModel, collapsed?: ReadonlySet<string>): No
     const st = stateOf(notesOn(model, { kind: "actor", id: a.id }));
     if (st) actors.set(a.id, st);
   }
-  return { steps, frames, actors };
+  const folds = new Map<number, NoteState>();
+  if (collapsed) {
+    hiddenByFold(model, collapsed).forEach(({ groupId, folded, stepIds }, k) => {
+      const notes = [
+        ...new Set([
+          ...(folded ? notesOn(model, { kind: "frame", id: groupId }) : []),
+          ...stepIds.flatMap((id) => notesOf(model, id)),
+        ]),
+      ];
+      const st = stateOf(notes);
+      if (st) folds.set(k, st);
+    });
+  }
+  return { steps, frames, actors, folds };
 }
 
 /** 次の論点の id（I1, I2, …） */

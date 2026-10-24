@@ -157,6 +157,14 @@ function markNotes(root: HTMLElement, notes: NoteMarks | undefined) {
     const b = box.getBBox();
     box.parentElement?.append(noteBadge(b.x + b.width + 3, b.y + 2, state, "枠"));
   });
+  // 畳んだ枠の注記（「▸ …」）。markFrames が上から何番目かの印を付けている（= collapsedFrames の順）
+  for (const folded of root.querySelectorAll(`[${COLLAPSED_ATTR}]`)) {
+    const state = notes.folds.get(Number(folded.getAttribute(COLLAPSED_ATTR)));
+    const rect = folded.querySelector("rect");
+    if (!state || !(rect instanceof SVGGraphicsElement)) continue;
+    const b = rect.getBBox();
+    folded.append(noteBadge(b.x + b.width - 8, b.y - 5, state, "畳んだ枠"));
+  }
   // 登場人物: 上の頭（Mermaid は要素に name 属性で id を付ける）
   for (const [id, state] of notes.actors) {
     const head = root.querySelector(`rect.actor-top[name="${id}"], g.actor-man.actor-top[name="${id}"]`);
@@ -628,7 +636,9 @@ export function MermaidDiagram({
 
   // 付箋の印は、中身（番号と状態）が変わったときだけ付け直す（Map は毎回作り直される）
   const notesKey = notes
-    ? [notes.steps, notes.frames, notes.actors].map((m) => [...m].map(([k, st]) => `${k}${st[0]}`).join(",")).join("|")
+    ? [notes.steps, notes.frames, notes.actors, notes.folds]
+        .map((m) => [...m].map(([k, st]) => `${k}${st[0]}`).join(","))
+        .join("|")
     : "";
   // 描き直すたびに SVG が入れ替わるので、そのつど印を付け直す
   useEffect(() => {
