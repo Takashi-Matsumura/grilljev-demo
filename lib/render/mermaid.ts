@@ -157,6 +157,25 @@ function frameStates(model: FlowModel, collapsed: ReadonlySet<string>): Map<stri
   return states;
 }
 
+/**
+ * 「▸ …」の注記ごとの、隠した手順（collapsedFrames と同じ順）。注記 1 つに畳んだ枠は中の手順すべて、
+ * 中心の人の手順だけを残した枠は、中心の人が関わらない手順。folded は注記 1 つに畳んだ枠か（枠が描かれない）
+ */
+export function hiddenByFold(
+  model: FlowModel,
+  collapsed: ReadonlySet<string>,
+): { groupId: string; folded: boolean; stepIds: string[] }[] {
+  const states = frameStates(model, collapsed);
+  const focusId = focusActorOf(model.actors)?.id;
+  const branchById = new Map(model.branches.map((b) => [b.id, b]));
+  const steps = visibleSteps(model);
+  return collapsedFrames(model, collapsed).map((groupId) => {
+    const folded = states.get(groupId) === "folded";
+    const inside = steps.filter((s) => s.branchId !== null && branchById.get(s.branchId)?.groupId === groupId);
+    return { groupId, folded, stepIds: inside.filter((s) => folded || !involves(s, focusId)).map((s) => s.id) };
+  });
+}
+
 /** 空の場合に描く注記の文言。図の上でこの注記を押すと、その場合にステップを足す（mermaid-diagram.tsx） */
 export const PLACEHOLDER_TEXT = "＋ ここにステップを追加";
 
