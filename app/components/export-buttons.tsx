@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { download } from "./download";
+import { notedTargets } from "@/lib/model/notes";
 import type { FlowModel } from "@/lib/model/types";
 import { toDrawio } from "@/lib/render/drawio";
+import { addNotesToSvg } from "@/lib/render/svg-notes";
 import { DisclosureIcon } from "./disclosure-icon";
 import { toSvg11 } from "./svg11";
 import { useCloseOnOutside } from "./use-close-on-outside";
@@ -42,15 +44,19 @@ const TRIGGER_BTN =
 /** 図の書き出し（.drawio / .mmd / .svg）。「書き出し ▾」の下に3形式を畳む。 */
 export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
   const [message, setMessage] = useState<string | null>(null);
+  // 付箋（手順・枠・登場人物に貼った、チームで決めること）を .svg に入れるか。付箋がある図では、既定で入れる
+  const noteCount = notedTargets(model).length;
+  const [withNotes, setWithNotes] = useState(true);
   const detailsRef = useCloseOnOutside();
 
   const run = (format: ExportFormat) => {
     try {
       const name = exportFileName(model.scope.title, format);
+      const image = svg && withNotes && noteCount > 0 ? addNotesToSvg(svg, model) : svg;
       if (format === "drawio") download(name, EXPORT_MIME.drawio, toDrawio(model));
       else if (format === "mmd") download(name, EXPORT_MIME.mmd, `${mermaidCode}\n`);
-      else if (format === "svg11" && svg) download(name, EXPORT_MIME.svg11, toSvg11(svg));
-      else if (svg) download(name, EXPORT_MIME.svg, finalizeSvg(svg));
+      else if (format === "svg11" && image) download(name, EXPORT_MIME.svg11, toSvg11(image));
+      else if (image) download(name, EXPORT_MIME.svg, finalizeSvg(image));
       setMessage(`${name} を保存しました`);
     } catch (e) {
       setMessage(e instanceof Error ? `保存できませんでした: ${e.message}` : "保存できませんでした");
@@ -92,6 +98,15 @@ export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
               </button>
             );
           })}
+          {noteCount > 0 && (
+            <label
+              className="mt-1 flex items-center gap-1.5 border-t border-black/10 px-2 pb-1 pt-2 text-xs text-zinc-600 dark:border-white/15 dark:text-zinc-400"
+              title="図の横に番号付きの印を付け、図の下に付箋の一覧（決めること・決まったこと）を足します"
+            >
+              <input type="checkbox" checked={withNotes} onChange={(e) => setWithNotes(e.target.checked)} />
+              .svg に付箋を入れる（{noteCount} 件）
+            </label>
+          )}
         </div>
       </details>
       {message && (

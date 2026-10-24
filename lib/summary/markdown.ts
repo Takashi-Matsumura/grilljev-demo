@@ -1,4 +1,4 @@
-import { noteState } from "../model/notes";
+import { notedTargets, noteState } from "../model/notes";
 import type { Actor, FlowModel, OpenIssue, Step } from "../model/types";
 import { flagSuffix, toMermaid, visibleSteps } from "../render/mermaid";
 import type { SummaryProse } from "./prose";
@@ -249,35 +249,4 @@ export function buildSummaryMarkdown(
   }
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
-}
-
-/**
- * 付箋を、貼った先の言い方と組にする。複数の手順に貼った付箋は 1 行にまとめ、番号を並べる（「手順 5・6「…」／「…」」）。
- * 並びは手順（図の順）→ 枠（図の順）→ 登場人物（左から）。図から消えた先にだけ貼られた付箋は出さない（「6. 論点」には出る）
- */
-function notedTargets(model: FlowModel): { note: OpenIssue; where: string }[] {
-  const steps = visibleSteps(model);
-  const frames = [...new Set(model.branches.map((b) => b.groupId))];
-  const actors = [...model.actors].sort((a, b) => a.lane - b.lane);
-  const where = (n: OpenIssue): { rank: number; text: string } | null => {
-    const at = steps.flatMap((s, i) => (n.relatedStepIds.includes(s.id) ? [{ no: i + 1, label: s.label }] : []));
-    if (at.length > 0) {
-      return { rank: at[0].no, text: `手順 ${at.map((x) => x.no).join("・")}「${at.map((x) => x.label).join("」「")}」` };
-    }
-    const g = frames.find((id) => n.relatedFrameIds?.includes(id));
-    if (g) {
-      const arms = model.branches.filter((b) => b.groupId === g).sort((a, b) => a.index - b.index);
-      return { rank: 10_000 + frames.indexOf(g), text: `枠 ${arms[0].kind}［${arms.map((b) => b.condition).join("／")}］` };
-    }
-    const a = actors.find((x) => n.relatedActorIds?.includes(x.id));
-    if (a) return { rank: 20_000 + actors.indexOf(a), text: `登場人物 ${a.name}` };
-    return null;
-  };
-  return model.issues
-    .flatMap((note) => {
-      const w = where(note);
-      return w ? [{ note, ...w }] : [];
-    })
-    .sort((x, y) => x.rank - y.rank)
-    .map(({ note, text }) => ({ note, where: text }));
 }
