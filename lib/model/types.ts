@@ -210,4 +210,11 @@ export type ModelOp =
   /** 質問したのに答えないまま話が進んだ。回数を数え、SKIP_LIMIT 回で保留にする */
   | { op: "issue.skip"; id: string }
   | { op: "issue.resolve"; id: string; answer: string }
-  | { op: "issue.park"; id: string };
+  | { op: "issue.park"; id: string }
+  /**
+   * 付箋（ステップに結び付いた論点。lib/model/notes.ts）の手直し。answer を書くと決まった（answered）に、
+   * null で外すとまだ決まっていない（open）に戻す
+   */
+  | { op: "issue.update"; id: string; patch: { question?: string; answer?: string | null } }
+  /** 付箋を外す（論点ごと消す） */
+  | { op: "issue.remove"; id: string };

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FlowModel, ModelOp, Scope } from "@/lib/model/types";
+import { addNoteOp, findNote } from "@/lib/model/notes";
+import { visibleSteps } from "@/lib/render/mermaid";
 import { codeFix, fixKindOf, type Fix } from "@/lib/review/fix";
 import { CATEGORY_LABEL, reviewRules, SEVERITY_LABEL, type Finding, type Severity } from "@/lib/review/rules";
 import { reviewKey, type AiReviewState } from "./use-ai-review";
@@ -129,12 +131,34 @@ export function ReviewPanel({
     onPreview(previewJson ? (JSON.parse(previewJson) as ModelOp[]) : null);
   }, [onPreview, previewJson]);
   useEffect(() => () => onPreview(null), [onPreview]);
+  /**
+   * 手順を足しても応えられない指摘を、関係する手順の付箋（チームで決めること）にする。
+   * 付箋は論点として残り、次の会議で AI が聞く。同じ文の付箋がもうあれば貼らない
+   */
+  const noteFor = (f: Finding) => {
+    const question = f.detail || f.title;
+    const shown = visibleSteps(model);
+    const stepIds = f.steps.flatMap((n) => (shown[n - 1] ? [shown[n - 1].id] : []));
+    if (stepIds.length === 0) return null;
+    const done = findNote(model, question) !== undefined;
+    return {
+      done,
+      steps: f.steps,
+      onAdd: () => {
+        const op = addNoteOp(model, question, stepIds);
+        if (!op) return;
+        onCommit([op]);
+        setApplied(`手順 ${f.steps.join("・")} に付箋を貼りました。手順の番号を押すと、付箋に決まったことを書けます。`);
+      },
+    };
+  };
   const fixBoxFor = (f: Finding) => {
     const kind = fixKindOf(f);
     if (!kind) return null;
     const got = aiFixes[fixKey(f)];
     return (
       <FixBox
+        note={noteFor(f)}
         kind={kind}
         request={f.source === "ai" ? "steps" : f.id === "premise-missing" ? "premise" : "rewrite"}
         fix={fixOf(f)}
@@ -358,6 +382,7 @@ const REQUEST_LABEL = {
 
 function FixBox({
   kind,
+  note,
   request,
   fix,
   ai,
@@ -367,6 +392,8 @@ function FixBox({
   onApply,
 }: {
   kind: "code" | "ai";
+  /** 付箋にして残す（AI が「手順を足しても応えられない」と答えたとき）。関係する手順が無ければ null */
+  note: { done: boolean; steps: number[]; onAdd: () => void } | null;
   /** AI に頼む案の種類（言い換え・前提の下書き・足す手順） */
   request: keyof typeof REQUEST_LABEL;
   fix: Fix | null;
@@ -390,6 +417,19 @@ function FixBox({
           <p className="text-zinc-600 dark:text-zinc-300">
             この指摘は、手順を足すのではなく、チームで決めることのようです。
             {ai.declined && <span className="mt-0.5 block text-zinc-500">AI の見立て: {ai.declined}</span>}
+            {note &&
+              (note.done ? (
+                <span className="mt-1.5 block text-emerald-700 dark:text-emerald-300">
+                  手順 {note.steps.join("・")} に付箋を貼ってあります。
+                </span>
+              ) : (
+                <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <button type="button" className={fixBtn} onClick={note.onAdd}>
+                    付箋にして残す
+                  </button>
+                  <span className="text-zinc-500">次の会議で AI がチームに聞きます</span>
+                </span>
+              ))}
           </p>
         ) : (
           <>
