@@ -18,7 +18,9 @@ export type PromptName =
   | "narrate"
   | "review"
   | "review-title"
-  | "review-direction";
+  | "review-direction"
+  | "review-fix-condition"
+  | "review-fix-label";
 
 const cache = new Map<PromptName, string>();
 

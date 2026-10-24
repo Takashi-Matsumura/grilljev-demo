@@ -154,11 +154,9 @@ export function reviewRules(model: FlowModel): Finding[] {
 
   // 1 人だけが担当している手順（属人化の候補）
   for (const actor of model.actors) {
-    const own = steps.filter((s) => s.from === actor.id && s.assignee);
-    const names = new Set(own.map((s) => s.assignee));
-    const unflagged = own.filter((s) => !s.flags.personDependent);
-    if (names.size !== 1 || unflagged.length === 0 || (actor.members?.length ?? 0) > 1) continue;
-    const who = [...names][0];
+    const single = singlePersonSteps(model, actor.id);
+    if (!single) continue;
+    const { who, steps: unflagged } = single;
     out.push({
       id: `flow-single-person:${actor.id}`,
       severity: "low",
@@ -215,7 +213,7 @@ export function reviewRules(model: FlowModel): Finding[] {
     });
   }
 
-  const syncSends = steps.filter((s) => s.kind === "sync" && s.from !== s.to && SEND_LIKE.test(s.label));
+  const syncSends = syncSendSteps(model);
   if (syncSends.length > 0) {
     out.push({
       id: "notation-sync-send",
@@ -228,7 +226,7 @@ export function reviewRules(model: FlowModel): Finding[] {
     });
   }
 
-  const terse = steps.filter((s) => [...s.label.trim()].length <= 5);
+  const terse = terseSteps(model);
   if (terse.length > 0) {
     out.push({
       id: "notation-terse-label",
@@ -255,6 +253,30 @@ export function reviewRules(model: FlowModel): Finding[] {
   }
 
   return out.sort(bySeverity);
+}
+
+/** 送って終わり（返事を待たない）に読めるのに「依頼（返事を待つ）」になっている手順。直す案（fix.ts）でも使う */
+export function syncSendSteps(model: FlowModel): Step[] {
+  return visibleSteps(model).filter((s) => s.kind === "sync" && s.from !== s.to && SEND_LIKE.test(s.label));
+}
+
+/** 名前が短く、それだけでは意味が取りにくい手順 */
+export function terseSteps(model: FlowModel): Step[] {
+  return visibleSteps(model).filter((s) => [...s.label.trim()].length <= 5);
+}
+
+/**
+ * 登場人物の手順を 1 人だけが担っていて、まだ［属人］の印が無いもの。当てはまらなければ null。
+ * 部署のメンバーが 2 人以上いれば、たまたま 1 人が書かれているだけかもしれないので数えない
+ */
+export function singlePersonSteps(model: FlowModel, actorId: string): { who: string; steps: Step[] } | null {
+  const actor = model.actors.find((a) => a.id === actorId);
+  if (!actor || (actor.members?.length ?? 0) > 1) return null;
+  const own = visibleSteps(model).filter((s) => s.from === actorId && s.assignee);
+  const names = new Set(own.map((s) => s.assignee));
+  const unflagged = own.filter((s) => !s.flags.personDependent);
+  if (names.size !== 1 || unflagged.length === 0) return null;
+  return { who: [...names][0]!, steps: unflagged };
 }
 
 /** 分岐の条件が、状態ではなく動作の名前に読めるか */
