@@ -116,6 +116,10 @@ export type OpenIssue = {
   question: string;
   kind: IssueKind;
   relatedStepIds: StepId[];
+  /** 付箋（lib/model/notes.ts）を貼った枠（Branch.groupId）。分岐の判定の基準など、枠全体に関わること */
+  relatedFrameIds?: string[];
+  /** 付箋を貼った登場人物。その人・部署・システムについて決めておくこと */
+  relatedActorIds?: ActorId[];
   /** parked = 「答えが出ないので保留にして進む」（ライブロック防止） */
   status: IssueStatus;
   /** grill-me の規律: 各問に推奨回答を添える */

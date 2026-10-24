@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { NotesSection } from "@/app/components/notes-section";
 import { PanelSection } from "@/app/components/step-panel";
 import {
   addEmptyArmOps,
@@ -349,6 +350,8 @@ function InBranch({
           </div>
         </div>
       )}
+
+      <NotesSection model={model} target={{ kind: "frame", id: branch.groupId }} onCommit={onCommit} inline />
 
       <EnterFrame label="ほかの枠へ移す" model={model} stepId={stepId} exceptGroup={branch.groupId} onCommit={onCommit} />
 

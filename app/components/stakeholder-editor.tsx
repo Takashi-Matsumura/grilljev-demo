@@ -223,6 +223,7 @@ export function StakeholderEditor({
   removeBlocked = () => null,
   removeNotice = () => null,
   onFold,
+  extra,
   footer,
 }: {
   rows: StakeholderRow[];
@@ -239,6 +240,8 @@ export function StakeholderEditor({
    * その人のステップは部署から出るようになり、担当者がその人になる
    */
   onFold?: (fromKey: string, intoKey: string) => void;
+  /** 選んだ人の設定パネルの下に足すもの（会議画面・/editor の付箋）。無ければ出さない */
+  extra?: (row: StakeholderRow) => ReactNode;
   /** レーンの下端に置くもの（開始画面の AI 候補） */
   footer?: ReactNode;
 }) {
@@ -601,6 +604,7 @@ export function StakeholderEditor({
                 </p>
               </div>
             )}
+            {extra?.(current)}
             <div className="flex flex-wrap items-center gap-2 border-t border-black/5 pt-3 dark:border-white/10">
               <span className="flex-1" />
               <button

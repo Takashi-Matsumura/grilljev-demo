@@ -1,8 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { rebaseNoteOps } from "@/lib/model/notes";
+import { applyOps } from "@/lib/model/reducer";
 import type { Actor, FlowModel, ModelOp } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
+import { NotesSection } from "./notes-section";
 import { StakeholderEditor, type StakeholderRow } from "./stakeholder-editor";
 
 const toRows = (model: FlowModel): StakeholderRow[] =>
@@ -125,18 +128,22 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
   const [rows, setRows] = useState<StakeholderRow[]>([]);
   const [originalIds, setOriginalIds] = useState<Set<string>>(new Set());
   const [folds, setFolds] = useState<Fold[]>([]);
+  // 登場人物の付箋の書きため。ほかの変更と同じく、保存するまで図には当てない（やめれば捨てる）
+  const [noteOps, setNoteOps] = useState<ModelOp[]>([]);
+  const noted = noteOps.length > 0 ? applyOps(model, noteOps, model.updatedAt) : model;
 
   const open = () => {
     setRows(toRows(model));
     setOriginalIds(new Set(model.actors.map((a) => a.id)));
     setFolds([]);
+    setNoteOps([]);
     ref.current?.showModal();
   };
   const empty = model.actors.length === 0;
   const names = rows.map((r) => r.name.trim()).filter((n) => n !== "");
   const duplicate = names.find((n, i) => names.indexOf(n) !== i);
   const save = () => {
-    const ops = editOps(model, rows, folds);
+    const ops = [...editOps(model, rows, folds), ...rebaseNoteOps(model, noteOps)];
     if (ops.length > 0) onSave(ops);
     ref.current?.close();
   };
@@ -191,6 +198,17 @@ export function ActorEditDialog({ model, onSave }: { model: FlowModel; onSave: (
             onChange={setRows}
             removeBlocked={(r) => (originalIds.has(r.key) ? removeBlockedReason(model, r) : null)}
             removeNotice={(r) => (originalIds.has(r.key) ? removeNotice(model, r) : null)}
+            // 付箋は図にいる人だけ（ダイアログで足したばかりの人には、まだ id が無い）
+            extra={(r) =>
+              originalIds.has(r.key) ? (
+                <NotesSection
+                  model={noted}
+                  target={{ kind: "actor", id: r.key }}
+                  onCommit={(ops) => setNoteOps([...noteOps, ...ops])}
+                  inline
+                />
+              ) : null
+            }
             // 図にいる個人だけ（ダイアログで足したばかりの人は、たたむステップが無いので消せばよい）
             onFold={(fromKey, intoKey) => {
               const from = rows.find((r) => r.key === fromKey);
