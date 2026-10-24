@@ -29,7 +29,8 @@ const PREMISE_FIELDS: { key: keyof Pick<Scope, "purpose" | "trigger" | "frequenc
 /** AI に頼んだ直す案。for は頼んだときの図（reviewKey）。図が変わったら作り直してもらう */
 type AiFix =
   | { status: "loading"; for: string }
-  | { status: "done"; for: string; fix: Fix | null }
+  /** declined: AI が「手順を足しても応えられない」と答えた（その理由。無ければ ""）。頼み直しても同じなので頼み直させない */
+  | { status: "done"; for: string; fix: Fix | null; declined?: string }
   | { status: "error"; for: string; message: string };
 
 /**
@@ -97,10 +98,10 @@ export function ReviewPanel({
       signal: ctrl.signal,
     })
       .then(async (res) => {
-        const json = (await res.json().catch(() => ({}))) as { fix?: Fix | null; error?: string };
+        const json = (await res.json().catch(() => ({}))) as { fix?: Fix | null; declined?: string; error?: string };
         set(
           res.ok && json.fix !== undefined
-            ? { status: "done", for: forKey, fix: json.fix }
+            ? { status: "done", for: forKey, fix: json.fix, declined: json.declined }
             : { status: "error", for: forKey, message: json.error ?? `HTTP ${res.status}` },
         );
       })
@@ -384,6 +385,11 @@ function FixBox({
           <p role="status" className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
             <span className="h-3 w-3 animate-spin rounded-full border-2 border-sky-500 border-t-transparent motion-reduce:animate-none" />
             ローカル AI が直す案を考えています…
+          </p>
+        ) : ai?.status === "done" && ai.declined !== undefined ? (
+          <p className="text-zinc-600 dark:text-zinc-300">
+            この指摘は、手順を足すのではなく、チームで決めることのようです。
+            {ai.declined && <span className="mt-0.5 block text-zinc-500">AI の見立て: {ai.declined}</span>}
           </p>
         ) : (
           <>

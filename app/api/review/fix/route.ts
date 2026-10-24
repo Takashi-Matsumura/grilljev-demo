@@ -32,7 +32,8 @@ function parseFinding(v: unknown): FixableFinding | null {
 
 /**
  * 点検の指摘の「直す案」のうち、AI に書かせるもの（lib/review/fix.ts の fixKindOf が "ai"）。
- * 返すのは案（ops と「前 → 後」）だけで、図は変えない。案にできなければ fix は null
+ * 返すのは案（ops と「前 → 後」）だけで、図は変えない。案にできなければ fix は null。
+ * AI が「手順を足しても応えられない」と答えたら、declined にその理由
  */
 export async function POST(request: Request) {
   const text = await request.text();
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
   if (!finding) return Response.json({ error: "指摘の指定が正しくありません" }, { status: 400 });
   const title = typeof body?.title === "string" ? body.title.slice(0, MAX_TITLE) : "";
   try {
-    return Response.json({ fix: await generateAiFix(model, title, finding) });
+    return Response.json(await generateAiFix(model, title, finding));
   } catch (e) {
     if (e instanceof LlmError) {
       return Response.json({ error: e.message, kind: e.kind }, { status: 502 });

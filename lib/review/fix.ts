@@ -109,6 +109,7 @@ export const MAX_PREMISE_CHARS = 60;
 export const MAX_ARTIFACT_CHARS = 30;
 /** 1 つの指摘に足す手順の上限。多いと確かめきれない */
 export const MAX_ADDED_STEPS = 3;
+export const MAX_REASON_CHARS = 80;
 
 /** 言い換えの 1 つ。囲みの括弧・かぎ括弧と空白を除く。空・長すぎるものは null */
 const phrase = (v: unknown, max: number): string | null => {
@@ -163,6 +164,18 @@ export function buildAiFix(model: FlowModel, target: AiFixTarget, json: unknown)
     fix.changes.push({ before: stepText(no, s), after: stepText(no, s, next) });
   }
   return fix.ops.length > 0 ? fix : null;
+}
+
+/**
+ * 足す手順の案で、AI が「手順を足しても応えられない」と答えたか（`{"steps": [], "reason": "…"}`）。
+ * 答えたなら理由（書いていなければ ""）。足す手順を書いた・形が違う（＝案を捨てた）なら null。
+ * 応えられない指摘（どこから再開するかを決める、など）は、頼み直しても同じなので、画面で頼み直させない
+ */
+export function declinedOf(target: AiFixTarget, json: unknown): string | null {
+  if (target.kind !== "steps") return null;
+  const j = (typeof json === "object" && json !== null ? json : {}) as Record<string, unknown>;
+  if (!Array.isArray(j.steps) || j.steps.length > 0) return null;
+  return phrase(j.reason, MAX_REASON_CHARS) ?? "";
 }
 
 const norm = (v: string) => v.replace(/\s+/g, "").trim();
