@@ -9,6 +9,7 @@ import { RetractedSteps, RetractNotice } from "@/app/components/retracted-steps"
 import { StepPanel } from "@/app/components/step-panel";
 import { addStepOp, type StepInput } from "@/lib/model/add-step";
 import { moveStepOps } from "@/lib/model/move";
+import { noteMarks } from "@/lib/model/notes";
 import { applyOps } from "@/lib/model/reducer";
 import { addFrameOps, enterBranchOps } from "@/lib/model/branch";
 import type { Branch, FlowModel, ModelOp } from "@/lib/model/types";
@@ -150,6 +151,8 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   // 手直しのパネルで書きかけの名前・渡すもの・担当者。確定する前から画面の図に映す（モデルには入れない）
   const [preview, setPreview] = useState<ModelOp[] | null>(null);
   const shownModel = useMemo(() => (preview ? applyOps(model, preview, model.updatedAt) : model), [model, preview]);
+  // 付箋（ステップに結び付いた論点）の印。番号の黒丸の横に出す
+  const notes = useMemo(() => noteMarks(shownModel), [shownModel]);
   // 画面の図には、空の場合に「＋ ここにステップを追加」を描く（書き出す .svg からは外す）
   const displayCode = useMemo(
     () => toMermaid(shownModel, { assignees: showAssignees, placeholders: true, collapsed: foldedSet }),
@@ -384,6 +387,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
                 onCollapseFrame={collapseFrame}
                 onExpandFrame={expandFrame}
                 selectedStep={selectedIndex + 1}
+                notes={notes}
                 highlightStep={panel?.mode === "review" ? panel.focus : 0}
                 // 1 = 幅に合わせる（小さい図は拡大しない）。それ以外は幅に対する倍率
                 zoom={zoom === 1 ? undefined : zoom}

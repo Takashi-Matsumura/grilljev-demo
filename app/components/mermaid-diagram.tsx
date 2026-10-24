@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayMark } from "@/lib/preview/scenes";
+import type { NoteState } from "@/lib/model/notes";
 import { COLLAPSED_MARK, FOCUS_COMMENT, PLACEHOLDER_TEXT, type ArmTarget } from "@/lib/render/mermaid";
 
 type MermaidApi = typeof import("mermaid").default;
@@ -110,6 +111,42 @@ function detachStepDots(root: HTMLElement) {
     line.removeAttribute("marker-start");
     num.replaceWith(g);
     g.append(circle, num);
+  }
+}
+
+/**
+ * 付箋のあるステップの番号の黒丸の右上に、小さな付箋の印を付ける（まだ決まっていなければ「?」、すべて決まれば「✓」）。
+ * 黒丸（.step-dot）の中に入れるので、押すとそのステップを選べる。描いた SVG に足すだけで、書き出す図には入らない
+ */
+const NOTE_CLASS = "note-badge";
+function markNotes(root: HTMLElement, notes: ReadonlyMap<number, NoteState> | undefined) {
+  for (const el of root.querySelectorAll(`.${NOTE_CLASS}`)) el.remove();
+  if (!notes || notes.size === 0) return;
+  for (const dot of root.querySelectorAll(".step-dot")) {
+    const n = Number(dot.querySelector(".sequenceNumber")?.textContent?.trim());
+    const state = notes.get(n);
+    const circle = dot.querySelector("circle");
+    if (!state || !circle) continue;
+    const cx = Number(circle.getAttribute("cx"));
+    const cy = Number(circle.getAttribute("cy"));
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", NOTE_CLASS);
+    const rect = document.createElementNS(SVG_NS, "rect");
+    for (const [k, v] of Object.entries({ x: cx + 5, y: cy - 19, width: 13, height: 13, rx: 2 })) rect.setAttribute(k, String(v));
+    rect.setAttribute("fill", state === "open" ? "#fde047" : "#bbf7d0");
+    rect.setAttribute("stroke", state === "open" ? "#ca8a04" : "#16a34a");
+    const text = document.createElementNS(SVG_NS, "text");
+    text.setAttribute("x", String(cx + 11.5));
+    text.setAttribute("y", String(cy - 9));
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "10");
+    text.setAttribute("font-weight", "700");
+    text.setAttribute("fill", state === "open" ? "#854d0e" : "#166534");
+    text.textContent = state === "open" ? "?" : "✓";
+    const title = document.createElementNS(SVG_NS, "title");
+    title.textContent = state === "open" ? "付箋: まだ決まっていないことがあります" : "付箋: 決まりごとがあります";
+    g.append(rect, text, title);
+    dot.append(g);
   }
 }
 
@@ -464,6 +501,7 @@ export function MermaidDiagram({
   onExpandFrame,
   highlightStep = 0,
   selectedStep = 0,
+  notes,
   play,
 }: {
   code: string;
@@ -498,6 +536,8 @@ export function MermaidDiagram({
   highlightStep?: number;
   /** 編集パネルで選んでいるステップの番号（1 始まり。0 なら無し） */
   selectedStep?: number;
+  /** 付箋のあるステップ（番号 1 始まり → 決まっていないものがあるか）。番号の黒丸の横に印を付ける */
+  notes?: ReadonlyMap<number, NoteState>;
   /** フローのプレビューで、今の場面に関わる要素を強調する（ほかは薄くする） */
   play?: PlayMark;
 }) {
@@ -570,6 +610,8 @@ export function MermaidDiagram({
   // 強調するステップが変わったら、見えるところまでスクロールする（見えていれば動かない）
   const shownFocusRef = useRef(0);
 
+  // 付箋の印は、中身（番号と状態）が変わったときだけ付け直す（Map は毎回作り直される）
+  const notesKey = notes ? [...notes].map(([n, st]) => `${n}${st[0]}`).join(",") : "";
   // 描き直すたびに SVG が入れ替わるので、そのつど印を付け直す
   useEffect(() => {
     if (!svgHostRef.current) return;
@@ -584,10 +626,11 @@ export function MermaidDiagram({
         ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     }
     markStep(svgHostRef.current, SELECTED_ATTR, selectedStep);
+    markNotes(svgHostRef.current, notes);
     if (play) markPlay(svgHostRef.current, play);
     // onCollapseFrame は押せるかどうか（title を付けるか）だけを見る。毎回変わる関数でも描き直さない
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rendered, highlightStep, selectedStep, play]);
+  }, [rendered, highlightStep, selectedStep, play, notesKey]);
 
   const endDrag = () => {
     dragRef.current = null;

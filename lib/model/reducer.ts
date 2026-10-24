@@ -1,5 +1,5 @@
 import type { SessionSeed } from "../store/session-types";
-import type { Actor, FlowModel, ModelOp, Scope, Step } from "./types";
+import type { Actor, FlowModel, ModelOp, OpenIssue, Scope, Step } from "./types";
 
 /**
  * 質問（issue.ask）したあと、答えないまま業務の発話が続いたら、この回数で保留にする。
@@ -280,6 +280,27 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
         ...m,
         issues: m.issues.map((i) => (i.id === op.id ? { ...i, status: "parked" } : i)),
       };
+    }
+
+    case "issue.update": {
+      const target = m.issues.find((i) => i.id === op.id);
+      if (!target) return null;
+      const next: OpenIssue = { ...target };
+      const question = op.patch.question?.replace(/\s+/g, " ").trim();
+      if (question) next.question = question;
+      if (op.patch.answer === null) {
+        delete next.answer;
+        next.status = "open";
+      } else if (op.patch.answer !== undefined && op.patch.answer.trim() !== "") {
+        next.answer = op.patch.answer.trim();
+        next.status = "answered";
+      }
+      return { ...m, issues: m.issues.map((i) => (i.id === op.id ? next : i)) };
+    }
+
+    case "issue.remove": {
+      if (!m.issues.some((i) => i.id === op.id)) return null;
+      return { ...m, issues: m.issues.filter((i) => i.id !== op.id) };
     }
 
     default: {

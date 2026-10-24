@@ -1,3 +1,4 @@
+import { noteState, notesOf } from "../model/notes";
 import type { Actor, FlowModel, OpenIssue, Step } from "../model/types";
 import { flagSuffix, toMermaid, visibleSteps } from "../render/mermaid";
 import type { SummaryProse } from "./prose";
@@ -175,6 +176,29 @@ export function buildSummaryMarkdown(
       ),
     );
     lines.push("");
+
+    // 手順に貼った付箋（チームで決めること）。決まったものは、その手順の判断基準・決まりごととして読める
+    // 複数の手順に貼った付箋は 1 行にまとめ、手順の番号を並べる
+    const noted = [...new Set(steps.flatMap((s) => notesOf(model, s.id)))].map((note) => ({
+      note,
+      at: steps.flatMap((s, i) => (note.relatedStepIds.includes(s.id) ? [{ no: i + 1, label: s.label }] : [])),
+    }));
+    if (noted.length > 0) {
+      lines.push("### 手順ごとの決まりごと（付箋）", "");
+      lines.push(
+        ...table(
+          ["#", "内容", "種別", "決めること", "決まったこと"],
+          noted.map(({ note, at }) => [
+            at.map((x) => x.no).join("・"),
+            cell(at.map((x) => x.label).join("／")),
+            ISSUE_KIND[note.kind],
+            cell(note.prompt?.text ?? note.question),
+            noteState(note) === "answered" ? cell(note.answer ?? "") : "**未決**",
+          ]),
+        ),
+      );
+      lines.push("");
+    }
   }
 
   // 4. フロー図
