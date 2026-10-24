@@ -1,4 +1,4 @@
-import { notedTargets, notesOn, noteState } from "../model/notes";
+import { notedTargets, noteState } from "../model/notes";
 import type { Actor, FlowModel, OpenIssue, Step } from "../model/types";
 import { flagSuffix, toMermaid, visibleSteps } from "../render/mermaid";
 import type { SummaryProse } from "./prose";
@@ -104,7 +104,7 @@ const mark = (n: number) => n.toFixed(2);
 export function buildSummaryMarkdown(
   model: FlowModel,
   prose: SummaryProse,
-  opts: { generatedAt: string; warnings?: string[] },
+  opts: { generatedAt: string; warnings?: string[]; flow: string[]; flowByAi: boolean },
 ): string {
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   const steps = visibleSteps(model);
@@ -151,8 +151,17 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 3. 業務分掌（部署・人ごとの担当業務）
-  lines.push(...dutiesSection(model), "");
+  // 3. 業務の流れ（開始から終了までの文章。番号は図・ステップ一覧と同じ）
+  lines.push("## 3. 業務の流れ", "");
+  if (opts.flow.length === 0) {
+    lines.push("（ステップはまだありません）", "");
+  } else {
+    lines.push(
+      `（「手順 N」は図とステップ一覧の番号です。${opts.flowByAi ? "文は AI が図から書き起こしたものです" : "AI が使えなかったため、図の手順名をそのまま並べています"}）`,
+      "",
+    );
+    for (const p of opts.flow) lines.push(p, "");
+  }
 
   // 4. ステップ一覧
   lines.push("## 4. ステップ一覧", "");
@@ -258,72 +267,3 @@ export function buildSummaryMarkdown(
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }
 
-/**
- * 業務分掌の本体: 部署・人ごとに、その人が送り手になっている手順（＝その人がやる仕事）をまとめる。
- * システムは仕事を受け持つ側ではないので節を作らず、「使うシステム」として各部署の下に書く。
- * 手順の番号はステップ一覧・図と同じ。
- */
-function dutiesSection(model: FlowModel): string[] {
-  const steps = visibleSteps(model);
-  const byId = new Map(model.actors.map((a) => [a.id, a]));
-  const nameOf = (id: string) => byId.get(id)?.name ?? id;
-  const systemName = (a: Actor) => (a.product ? `${a.name}（${a.product}）` : a.name);
-  const branchOf = (id: string | null) => (id ? model.branches.find((b) => b.id === id) : undefined);
-  const numbered = steps.map((s, i) => ({ s, no: i + 1 }));
-  const holders = [...model.actors].filter((a) => a.kind !== "system").sort((x, y) => x.lane - y.lane);
-
-  const lines = ["## 3. 業務分掌（部署・人ごとの担当業務）", ""];
-  if (holders.length === 0) return [...lines, "（部署・人の登場人物がいません）"];
-  for (const a of holders) {
-    const tags = [KIND_LABEL[a.kind], a.role && ROLE_LABEL[a.role]].filter(Boolean).join("・");
-    lines.push(`### ${a.name}（${tags}）`, "");
-    const own = numbered.filter(({ s }) => s.from === a.id);
-    if (own.length === 0) {
-      lines.push("（この業務で受け持つ手順はありません）");
-    } else {
-      lines.push(
-        ...table(
-          ["#", "担当業務", "相手", "渡すもの", "担当者", "条件"],
-          own.map(({ s, no }) => {
-            const b = branchOf(s.branchId);
-            return [
-              String(no),
-              cell((s.status === "provisional" ? "**仮** " : "") + s.label + flagSuffix(s)),
-              s.to === a.id ? "（自身）" : cell(nameOf(s.to)),
-              cell(s.artifact ?? ""),
-              cell(s.assignee ?? ""),
-              cell(b ? `${b.kind} ${b.condition}` : ""),
-            ];
-          }),
-        ),
-      );
-    }
-    lines.push("");
-    const received = [
-      ...new Set(
-        numbered
-          .filter(({ s }) => s.to === a.id && s.from !== a.id && s.artifact)
-          .map(({ s, no }) => `${s.artifact}（${nameOf(s.from)}から・手順 ${no}）`),
-      ),
-    ];
-    const systems = [
-      ...new Set(
-        steps
-          .flatMap((s) => (s.from === a.id ? [s.to] : s.to === a.id ? [s.from] : []))
-          .map((id) => byId.get(id))
-          .filter((x): x is Actor => x?.kind === "system")
-          .map(systemName),
-      ),
-    ];
-    const rules = notesOn(model, { kind: "actor", id: a.id });
-    if (received.length > 0) lines.push(`- **受け取るもの**: ${received.join("、")}`);
-    if (systems.length > 0) lines.push(`- **使うシステム**: ${systems.join("、")}`);
-    if (a.members?.length) lines.push(`- **メンバー**: ${a.members.join("、")}`);
-    for (const n of rules) {
-      const q = n.prompt?.text ?? n.question;
-      lines.push(noteState(n) === "answered" ? `- **決まりごと**: ${q} → ${n.answer ?? ""}` : `- **未決**: ${q}`);
-    }
-    if (received.length + systems.length + (a.members?.length ?? 0) + rules.length > 0) lines.push("");
-  }
-  return lines;
-}
