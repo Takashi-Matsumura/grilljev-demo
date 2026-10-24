@@ -208,6 +208,26 @@ export function StepPanel({
               </datalist>
             </label>
           )}
+
+          {/* 承認者（責任分担表の A）。図には出さず、業務分掌に使う。システムは責任を持たないので選べない */}
+          <label className={row}>
+            <span className={rowLabel}>承認者</span>
+            <select
+              className={field}
+              value={step.approver ?? ""}
+              title="この手順の結果に責任を持ち、承認・判断する部署・人（業務分掌の責任分担表で A になります）"
+              onChange={(e) => update({ approver: e.target.value || undefined })}
+            >
+              <option value="">なし</option>
+              {actors
+                .filter((a) => a.kind !== "system")
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.id === step.from ? `${a.name}（行う人と同じ）` : a.name}
+                  </option>
+                ))}
+            </select>
+          </label>
         </PanelSection>
 
         {/* ここより上がステップの中身（内容・誰が・誰に・渡すもの）。下は状態・順番など */}

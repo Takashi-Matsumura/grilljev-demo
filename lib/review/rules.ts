@@ -152,6 +152,20 @@ export function reviewRules(model: FlowModel): Finding[] {
     }
   }
 
+  // 差し戻し・却下を判断する手順に、責任を持つ人（承認者）が決まっていない。業務分掌の責任分担表の A が空になる
+  const noApprover = steps.filter((s) => REJECT_LIKE.test(s.label) && !s.approver);
+  if (noApprover.length > 0) {
+    out.push({
+      id: "flow-no-approver",
+      severity: "low",
+      category: "flow",
+      title: "差し戻しを判断する手順に、承認者が決まっていません",
+      detail: `${noApprover.map((s) => `${no.get(s.id)}「${s.label}」`).join("・")}で差し戻すかどうかを、誰の責任で決めるのかが図にありません。ステップの編集の「承認者」で決めておくと、業務分掌の責任分担表に A として出ます。`,
+      steps: noApprover.map((s) => no.get(s.id)!),
+      source: "rule",
+    });
+  }
+
   // 1 人だけが担当している手順（属人化の候補）
   for (const actor of model.actors) {
     const single = singlePersonSteps(model, actor.id);
