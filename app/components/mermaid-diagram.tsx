@@ -173,12 +173,21 @@ function markNotes(root: HTMLElement, notes: NoteMarks | undefined) {
     badge.setAttribute(FOLD_NOTE_ATTR, folded.getAttribute(COLLAPSED_ATTR) ?? "");
     folded.append(badge);
   }
-  // 登場人物: 上の頭（Mermaid は要素に name 属性で id を付ける）
+  // 登場人物: 上の頭（Mermaid は要素に name 属性で id を付ける）。箱は右上の角、人型は頭の円の右上
+  // （人型の要素は名前の文字や見えない枠まで含んで横に広いので、要素の範囲ではなく円で決める。書き出しの svg-notes.ts と同じ）
   for (const [id, state] of notes.actors) {
-    const head = root.querySelector(`rect.actor-top[name="${id}"], g.actor-man.actor-top[name="${id}"]`);
-    if (!(head instanceof SVGGraphicsElement)) continue;
-    const b = head.getBBox();
-    head.parentElement?.append(noteBadge(b.x + b.width - 8, b.y - 5, state, "登場人物"));
+    const box = root.querySelector(`rect.actor-top[name="${id}"]`);
+    if (box instanceof SVGGraphicsElement) {
+      const b = box.getBBox();
+      box.parentElement?.append(noteBadge(b.x + b.width - 10, b.y - 7, state, "登場人物"));
+      continue;
+    }
+    const circle = root.querySelector(`g.actor-man.actor-top[name="${id}"] circle`);
+    if (!circle) continue;
+    const r = Number(circle.getAttribute("r"));
+    const cx = Number(circle.getAttribute("cx"));
+    const cy = Number(circle.getAttribute("cy"));
+    circle.parentElement?.append(noteBadge(cx + r, cy - r - 4, state, "登場人物"));
   }
 }
 
