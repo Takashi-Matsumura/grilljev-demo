@@ -13,6 +13,7 @@ import {
   EXPORT_MIME,
   exportFileName,
   finalizeSvg,
+  toFlowJson,
   type ExportFormat,
 } from "@/lib/render/export";
 
@@ -36,12 +37,17 @@ const BUTTONS: { format: ExportFormat; label: string; hint: string }[] = [
     label: ".svg（SVG 1.1）",
     hint: "Canva など、ふつうの .svg を取り込めないアプリ向け。見た目を CSS ではなく要素ごとの属性で書きます",
   },
+  {
+    format: "json",
+    label: ".json（データ）",
+    hint: "業務フローのデータそのもの（登場人物・手順・分岐・付箋など）。別のアプリへ取り込むときに使います",
+  },
 ];
 
 const TRIGGER_BTN =
   "flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-black/15 px-2.5 py-1 text-sm hover:bg-black/5 [&::-webkit-details-marker]:hidden dark:border-white/20 dark:hover:bg-white/10";
 
-/** 図の書き出し（.drawio / .mmd / .svg）。「書き出し ▾」の下に3形式を畳む。 */
+/** 図の書き出し（.drawio / .mmd / .svg / .json）。「書き出し ▾」の下に各形式を畳む。 */
 export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   // 付箋（手順・枠・登場人物に貼った、チームで決めること）を .svg に入れるか。付箋がある図では、既定で入れる
@@ -55,6 +61,7 @@ export function ExportButtons({ model, mermaidCode, svg, empty }: Props) {
       const image = svg && withNotes && noteCount > 0 ? addNotesToSvg(svg, model) : svg;
       if (format === "drawio") download(name, EXPORT_MIME.drawio, toDrawio(model));
       else if (format === "mmd") download(name, EXPORT_MIME.mmd, `${mermaidCode}\n`);
+      else if (format === "json") download(name, EXPORT_MIME.json, toFlowJson(model));
       else if (format === "svg11" && image) download(name, EXPORT_MIME.svg11, toSvg11(image));
       else if (image) download(name, EXPORT_MIME.svg, finalizeSvg(image));
       setMessage(`${name} を保存しました`);
