@@ -1,6 +1,7 @@
-import { notedTargets, noteState } from "../model/notes";
+import { notedTargets } from "../model/notes";
 import type { Actor, FlowModel, OpenIssue, Step } from "../model/types";
 import { flagSuffix, toMermaid, visibleSteps } from "../render/mermaid";
+import { controlPoints, dutiesOf } from "./duties";
 import type { FlowText } from "./flow-text";
 import type { SummaryProse } from "./prose";
 
@@ -110,17 +111,31 @@ export function buildSummaryMarkdown(
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   const steps = visibleSteps(model);
   const branchOf = (id: string | null) => (id ? model.branches.find((b) => b.id === id) : undefined);
+  const trigger = model.actors.find((a) => a.role === "trigger");
+  const end = model.actors.find((a) => a.role === "end");
+  const draft = (opts.warnings?.length ?? 0) > 0;
   const lines: string[] = [];
 
   lines.push(`# 業務分掌: ${model.scope.title || "（対象業務 未設定）"}`, "");
+  // 文書情報
   lines.push(
-    `> 業務フロー図から自動で作成した下書きです（${opts.generatedAt}）。` +
-      `**「仮」の印は確信が低い項目**、「未確認」は答えが出ていない論点です。必ず参加者で確認してください。`,
+    ...table(
+      ["項目", "内容"],
+      [
+        ["作成日時", opts.generatedAt],
+        ["状態", draft ? "**下書き**（下の未完成の点を参照）" : "確認待ち（参加者で確認して確定してください）"],
+        ["対象範囲", trigger || end ? `${trigger?.name ?? "（起点 未設定）"} から ${end?.name ?? "（終点 未設定）"} まで` : "（起点・終点 未設定）"],
+        ["手順の数", `${steps.length}`],
+      ],
+    ),
     "",
   );
-  if (opts.warnings?.length) {
-    lines.push("> **まだ下書きの段階です。**", ...opts.warnings.map((w) => `> - ${w}`), "");
-  }
+  lines.push(
+    "> 業務フロー図から自動で作成しました。**「仮」の印は確信が低い項目**です。必ず参加者で確認してください。" +
+      "（番号）は図の手順番号です。",
+    "",
+  );
+  if (draft) lines.push("> **まだ下書きの段階です。**", ...opts.warnings!.map((w) => `> - ${w}`), "");
 
   // 1. 業務概要
   lines.push("## 1. 業務概要", "");
@@ -130,8 +145,104 @@ export function buildSummaryMarkdown(
   lines.push("");
   lines.push(prose.overview ? `${prose.overview}（AI が図から要約した文です）` : "（概要は生成されていません）", "");
 
-  // 2. 関係者
-  lines.push("## 2. 関係者", "");
+  // 2. 部署別の分掌（業務分掌の本体: 責任と権限）
+  lines.push("## 2. 部署別の分掌", "");
+  const duties = dutiesOf(model);
+  if (duties.length === 0) {
+    lines.push("（手順を受け持つ部署・人がまだいません）", "");
+  } else {
+    for (const d of duties) {
+      const tags = [KIND_LABEL[d.actor.kind], d.actor.role && ROLE_LABEL[d.actor.role]].filter(Boolean).join("・");
+      lines.push(`### ${d.actor.name}（${tags}）`, "");
+      lines.push(`- **責任**: ${d.tasks.length > 0 ? d.tasks.join("、") : "（受け持つ手順はありません）"}`);
+      if (d.decisions.length > 0) lines.push(`- **判断・承認**: ${d.decisions.join("、")}`);
+      if (d.received.length > 0 || d.handed.length > 0) {
+        lines.push(`- **受け取る**: ${d.received.join("、") || "—"} ／ **引き渡す**: ${d.handed.join("、") || "—"}`);
+      }
+      if (d.systems.length > 0) lines.push(`- **使うシステム**: ${d.systems.join("、")}`);
+      if (d.assignees.length > 0 || d.actor.members?.length) {
+        const members = d.actor.members?.length ? `メンバー ${d.actor.members.join("、")}` : "";
+        lines.push(`- **担当者**: ${[members, d.assignees.join("、")].filter(Boolean).join(" ／ 実施: ")}`);
+      }
+      for (const r of d.rules) lines.push(`- **決まりごと**: ${r}`);
+      lines.push("");
+    }
+  }
+
+  // 3. 業務の流れ（まとまりごとの箇条書き）
+  lines.push("## 3. 業務の流れ", "");
+  if (opts.flow.blocks.length === 0) {
+    lines.push("（ステップはまだありません）", "");
+  } else {
+    lines.push(
+      `（${opts.flowByAi ? "文は AI が図から書き起こしたものです" : "AI が使えなかったため、図の手順名をそのまま並べています"}）`,
+      "",
+    );
+    if (opts.flow.intro) lines.push(opts.flow.intro, "");
+    for (const b of opts.flow.blocks) {
+      lines.push(`### ${b.title}`, "", ...b.items.map((x) => `- ${x}`), "");
+    }
+    if (opts.flow.outro) lines.push(`**終了**: ${opts.flow.outro}`, "");
+  }
+
+  // 4. フロー図
+  lines.push("## 4. フロー図", "");
+  if (model.actors.length === 0) {
+    lines.push("（図はまだありません）", "");
+  } else {
+    lines.push("```mermaid", toMermaid(model), "```", "");
+  }
+
+  // 5. 統制上の確認点（職務分離・承認・属人化・例外など）
+  lines.push("## 5. 統制上の確認点", "");
+  const points = controlPoints(model);
+  if (points.length === 0) {
+    lines.push("（図から分かる確認点は見つかっていません）", "");
+  } else {
+    lines.push("（手順名の言葉から当たりを付けたものです。実際の運用を確かめてください）", "", ...points.map((p) => `- ${p}`), "");
+  }
+
+  // 6. 未決事項と決まったこと（論点と付箋をまとめる。付箋も論点なので、対象が分かるものは対象を添える）
+  lines.push("## 6. 未決事項と決まったこと", "");
+  const whereOf = new Map(notedTargets(model).map(({ note, where }) => [note.id, where]));
+  const pending = model.issues.filter((i) => i.status !== "answered");
+  const decided = model.issues.filter((i) => i.status === "answered");
+  if (model.issues.length === 0) {
+    lines.push("（未決事項はありません）", "");
+  } else {
+    if (pending.length > 0) {
+      lines.push("### 未決事項", "");
+      lines.push(
+        ...table(
+          ["対象", "種別", "決めること", "状態"],
+          pending.map((i) => [cell(whereOf.get(i.id) ?? "全体"), ISSUE_KIND[i.kind], cell(i.prompt?.text ?? i.question), ISSUE_STATUS[i.status]]),
+        ),
+        "",
+      );
+    }
+    if (decided.length > 0) {
+      lines.push("### 決まったこと", "");
+      lines.push(
+        ...table(
+          ["対象", "種別", "決めたこと", "答え"],
+          decided.map((i) => [cell(whereOf.get(i.id) ?? "全体"), ISSUE_KIND[i.kind], cell(i.prompt?.text ?? i.question), cell(i.answer ?? "")]),
+        ),
+        "",
+      );
+    }
+  }
+
+  // 7. 改善候補
+  lines.push("## 7. 改善候補", "");
+  if (prose.improvements.length === 0) {
+    lines.push("（改善候補は生成されていません）", "");
+  } else {
+    lines.push("（AI の提案です。根拠は 5・6 と付録の内容です）", "", ...prose.improvements.map((x) => `- ${x}`), "");
+  }
+
+  // 付録: 関係者とステップ一覧（細かい表は後ろにまとめる）
+  lines.push("## 付録", "");
+  lines.push("### 関係者", "");
   if (model.actors.length === 0) {
     lines.push("（関係者はいません）", "");
   } else {
@@ -148,28 +259,10 @@ export function buildSummaryMarkdown(
             cell(a.aliases.join("、")),
           ]),
       ),
-    );
-    lines.push("");
-  }
-
-  // 3. 業務の流れ（まとまりごとの箇条書き。番号は図・ステップ一覧と同じ）
-  lines.push("## 3. 業務の流れ", "");
-  if (opts.flow.blocks.length === 0) {
-    lines.push("（ステップはまだありません）", "");
-  } else {
-    lines.push(
-      `（番号は図とステップ一覧の番号です。${opts.flowByAi ? "文は AI が図から書き起こしたものです" : "AI が使えなかったため、図の手順名をそのまま並べています"}）`,
       "",
     );
-    if (opts.flow.intro) lines.push(opts.flow.intro, "");
-    for (const b of opts.flow.blocks) {
-      lines.push(`### ${b.title}`, "", ...b.items.map((x) => `- ${x}`), "");
-    }
-    if (opts.flow.outro) lines.push(`**終了**: ${opts.flow.outro}`, "");
   }
-
-  // 4. ステップ一覧
-  lines.push("## 4. ステップ一覧", "");
+  lines.push("### ステップ一覧", "");
   if (steps.length === 0) {
     lines.push("（ステップはまだありません）", "");
   } else {
@@ -178,97 +271,23 @@ export function buildSummaryMarkdown(
         ["#", "送り手", "担当", "受け手", "内容", "種別", "条件", "渡すもの", "確度"],
         steps.map((s, i) => {
           const b = branchOf(s.branchId);
-          const cond = b ? `${b.kind} ${b.condition}` : "";
-          const label = s.label + flagSuffix(s);
-          const certainty =
-            s.status === "provisional" ? `**仮** ${mark(s.confidence)}` : mark(s.confidence);
+          const certainty = s.status === "provisional" ? `**仮** ${mark(s.confidence)}` : mark(s.confidence);
           return [
             String(i + 1),
             cell(nameOf(s.from)),
             cell(s.assignee ?? ""),
             cell(nameOf(s.to)),
-            cell(label),
+            cell(s.label + flagSuffix(s)),
             MESSAGE_LABEL[s.kind],
-            cell(cond),
+            cell(b ? `${b.kind} ${b.condition}` : ""),
             cell(s.artifact ?? ""),
             certainty,
           ];
         }),
       ),
+      "",
     );
-    lines.push("");
-  }
-
-  // 手順・枠・登場人物に貼った付箋（チームで決めること）。決まったものは、その決まりごととして読める
-  const noted = notedTargets(model);
-  if (noted.length > 0) {
-    lines.push("### 決まりごと（付箋）", "");
-    lines.push(
-      ...table(
-        ["対象", "種別", "決めること", "決まったこと"],
-        noted.map(({ note, where }) => [
-          cell(where),
-          ISSUE_KIND[note.kind],
-          cell(note.prompt?.text ?? note.question),
-          noteState(note) === "answered" ? cell(note.answer ?? "") : "**未決**",
-        ]),
-      ),
-    );
-    lines.push("");
-  }
-
-  // 5. フロー図
-  lines.push("## 5. フロー図", "");
-  if (model.actors.length === 0) {
-    lines.push("（図はまだありません）", "");
-  } else {
-    lines.push("```mermaid", toMermaid(model), "```", "");
-  }
-
-  // 6. 例外・属人化・暗黙知
-  const flagged = steps.filter((s) => s.flags.exception || s.flags.tacit || s.flags.personDependent);
-  lines.push("## 6. 例外・属人化・暗黙知", "");
-  if (flagged.length === 0) {
-    lines.push("（該当するステップは見つかっていません）", "");
-  } else {
-    for (const s of flagged) {
-      const kinds = [s.flags.exception && "例外", s.flags.tacit && "暗黙知", s.flags.personDependent && "属人化"]
-        .filter(Boolean)
-        .join("・");
-      lines.push(`- ${nameOf(s.from)} → ${nameOf(s.to)}「${s.label}」: ${kinds}`);
-    }
-    lines.push("");
-  }
-
-  // 7. 論点
-  lines.push("## 7. 論点", "");
-  if (model.issues.length === 0) {
-    lines.push("（論点はありません）", "");
-  } else {
-    const order: OpenIssue["status"][] = ["open", "asked", "parked", "answered"];
-    const sorted = [...model.issues].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
-    lines.push(
-      ...table(
-        ["状態", "種別", "論点", "回答"],
-        sorted.map((i) => [
-          ISSUE_STATUS[i.status],
-          ISSUE_KIND[i.kind],
-          cell(i.prompt?.text ?? i.question),
-          cell(i.answer ?? ""),
-        ]),
-      ),
-    );
-    lines.push("");
-  }
-
-  // 8. 改善候補
-  lines.push("## 8. 改善候補", "");
-  if (prose.improvements.length === 0) {
-    lines.push("（改善候補は生成されていません）", "");
-  } else {
-    lines.push("（AI の提案です。根拠は 4・6・7 の内容です）", "", ...prose.improvements.map((x) => `- ${x}`), "");
   }
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }
-
