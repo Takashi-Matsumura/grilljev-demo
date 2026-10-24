@@ -28,6 +28,7 @@ import {
 import { BranchAddPanel } from "./branch-add-panel";
 import { BranchSection } from "./branch-section";
 import { FlowPlayer } from "./flow-player";
+import { FramePanel } from "./frame-panel";
 import { ReviewPanel } from "./review-panel";
 import { StepAddPanel } from "./step-add-panel";
 import { useAiReview } from "./use-ai-review";
@@ -48,6 +49,8 @@ type Panel =
   | { mode: "branch"; afterStepId: string | null; seq: number }
   /** 図の点検。focus は、指摘から示している図の手順（1 始まり。0 なら無し） */
   | { mode: "review"; focus: number }
+  /** 枠（groupId）の付箋。図の枠の見出しの札を右クリックする・札の横の付箋の印を押すと開く */
+  | { mode: "frame"; groupId: string }
   | null;
 
 const SAVE_LABEL = { saved: "保存済み", saving: "保存中…", error: "保存できていません" } as const;
@@ -142,6 +145,11 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
     setCollapsed(
       foldedSet.has(groupId) ? new Set([...collapsed].filter((g) => g !== groupId)) : new Set([...collapsed, groupId]),
     );
+  };
+  const openFrameNotes = (at: { drawn: number } | { folded: number }) => {
+    const groupId =
+      "drawn" in at ? drawnFrames(model, foldedSet)[at.drawn]?.[0].groupId : collapsedFrames(model, foldedSet)[at.folded];
+    if (groupId) setPanel({ mode: "frame", groupId });
   };
   const expandFrame = (k: number) => {
     const groupId = collapsedFrames(model, foldedSet)[k];
@@ -386,6 +394,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
                 onDropToArm={dropToArm}
                 onCollapseFrame={collapseFrame}
                 onExpandFrame={expandFrame}
+                onFrameNotes={openFrameNotes}
                 selectedStep={selectedIndex + 1}
                 notes={notes}
                 highlightStep={panel?.mode === "review" ? panel.focus : 0}
@@ -445,6 +454,9 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
             onFocusStep={(n) => setPanel({ mode: "review", focus: n })}
             onClose={() => setPanel(null)}
           />
+        )}
+        {panel?.mode === "frame" && drawable && (
+          <FramePanel model={model} groupId={panel.groupId} onCommit={commit} onClose={() => setPanel(null)} />
         )}
         {panel?.mode === "branch" && drawable && (
           <BranchAddPanel

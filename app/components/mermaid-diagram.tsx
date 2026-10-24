@@ -120,6 +120,9 @@ function detachStepDots(root: HTMLElement) {
  * 描いた SVG に足すだけで、書き出す図には入らない
  */
 const NOTE_CLASS = "note-badge";
+/** 枠の付箋の印に付ける、図の上から何番目の枠か（drawnFrames の順）／何番目の「▸ …」の注記か（collapsedFrames の順） */
+const FRAME_NOTE_ATTR = "data-frame-note";
+const FOLD_NOTE_ATTR = "data-fold-note";
 function noteBadge(x: number, y: number, state: NoteState, what: string): SVGGElement {
   const g = document.createElementNS(SVG_NS, "g");
   g.setAttribute("class", NOTE_CLASS);
@@ -155,7 +158,10 @@ function markNotes(root: HTMLElement, notes: NoteMarks | undefined) {
     const state = notes.frames.get(i);
     if (!state || !(box instanceof SVGGraphicsElement)) return;
     const b = box.getBBox();
-    box.parentElement?.append(noteBadge(b.x + b.width + 3, b.y + 2, state, "枠"));
+    const badge = noteBadge(b.x + b.width + 3, b.y + 2, state, "枠");
+    // 押すと枠の付箋のパネルを開く（MermaidDiagram の onFrameNotes）
+    badge.setAttribute(FRAME_NOTE_ATTR, String(i));
+    box.parentElement?.append(badge);
   });
   // 畳んだ枠の注記（「▸ …」）。markFrames が上から何番目かの印を付けている（= collapsedFrames の順）
   for (const folded of root.querySelectorAll(`[${COLLAPSED_ATTR}]`)) {
@@ -163,7 +169,9 @@ function markNotes(root: HTMLElement, notes: NoteMarks | undefined) {
     const rect = folded.querySelector("rect");
     if (!state || !(rect instanceof SVGGraphicsElement)) continue;
     const b = rect.getBBox();
-    folded.append(noteBadge(b.x + b.width - 8, b.y - 5, state, "畳んだ枠"));
+    const badge = noteBadge(b.x + b.width - 8, b.y - 5, state, "畳んだ枠");
+    badge.setAttribute(FOLD_NOTE_ATTR, folded.getAttribute(COLLAPSED_ATTR) ?? "");
+    folded.append(badge);
   }
   // 登場人物: 上の頭（Mermaid は要素に name 属性で id を付ける）
   for (const [id, state] of notes.actors) {
@@ -193,16 +201,17 @@ function markPlaceholders(root: HTMLElement) {
  * 枠の見出し（alt / opt / loop の札）には、押すと畳めることを示す title を付ける。
  */
 const COLLAPSED_ATTR = "data-collapsed";
-function markFrames(root: HTMLElement, foldable: boolean) {
+function markFrames(root: HTMLElement, foldable: boolean, notable: boolean) {
+  const more = notable ? "（右クリックで付箋を貼る）" : "";
   let k = 0;
   for (const text of root.querySelectorAll(".noteText")) {
     if (!text.textContent?.trim().startsWith(COLLAPSED_MARK)) continue;
     text.parentElement?.setAttribute(COLLAPSED_ATTR, String(k));
-    addTitle(text.parentElement, "押すと枠を開きます");
+    addTitle(text.parentElement, `押すと枠を開きます${more}`);
     k += 1;
   }
   if (!foldable) return;
-  for (const el of root.querySelectorAll(".labelText, .labelBox")) addTitle(el, "押すと枠を畳みます");
+  for (const el of root.querySelectorAll(".labelText, .labelBox")) addTitle(el, `押すと枠を畳みます${more}`);
 }
 
 function addTitle(el: Element | null, text: string) {
@@ -523,6 +532,7 @@ export function MermaidDiagram({
   onDropToArm,
   onCollapseFrame,
   onExpandFrame,
+  onFrameNotes,
   highlightStep = 0,
   selectedStep = 0,
   notes,
@@ -556,6 +566,11 @@ export function MermaidDiagram({
   onCollapseFrame?: (frame: number) => void;
   /** 畳んだ枠の注記（「▸ …」）を押したら、上から何番目（0 始まり）の注記かを渡す（開く） */
   onExpandFrame?: (k: number) => void;
+  /**
+   * 枠の付箋を開く。枠の見出しの札・畳んだ枠の注記を右クリックしたとき、枠の付箋の印を押したとき。
+   * drawn = 図の上から何番目の枠か（drawnFrames の順）、folded = 何番目の「▸ …」の注記か（collapsedFrames の順）
+   */
+  onFrameNotes?: (at: { drawn: number } | { folded: number }) => void;
   /** 強調するステップの番号（1 始まり。0 なら強調しない）。音声で直しているステップを示す */
   highlightStep?: number;
   /** 編集パネルで選んでいるステップの番号（1 始まり。0 なら無し） */
@@ -645,7 +660,7 @@ export function MermaidDiagram({
     if (!svgHostRef.current) return;
     detachStepDots(svgHostRef.current);
     markPlaceholders(svgHostRef.current);
-    markFrames(svgHostRef.current, onCollapseFrame !== undefined);
+    markFrames(svgHostRef.current, onCollapseFrame !== undefined, onFrameNotes !== undefined);
     markStep(svgHostRef.current, FOCUS_ATTR, highlightStep);
     if (highlightStep !== shownFocusRef.current) {
       shownFocusRef.current = highlightStep;
@@ -692,6 +707,15 @@ export function MermaidDiagram({
                   suppressClickRef.current = false;
                   return;
                 }
+                // 枠の付箋の印は、枠を畳む・開くより先に（印は札・注記の中にある）
+                const frameNote =
+                  e.target instanceof Element ? e.target.closest(`[${FRAME_NOTE_ATTR}], [${FOLD_NOTE_ATTR}]`) : null;
+                if (frameNote && onFrameNotes) {
+                  const drawn = frameNote.getAttribute(FRAME_NOTE_ATTR);
+                  const folded = Number(frameNote.getAttribute(FOLD_NOTE_ATTR));
+                  onFrameNotes(drawn !== null ? { drawn: Number(drawn) } : { folded });
+                  return;
+                }
                 const ph = e.target instanceof Element ? e.target.closest(`[${PLACEHOLDER_ATTR}]`) : null;
                 if (ph && onPickPlaceholder) {
                   onPickPlaceholder(Number(ph.getAttribute(PLACEHOLDER_ATTR)));
@@ -711,6 +735,23 @@ export function MermaidDiagram({
                 }
                 const n = onPickStep ? stepAt(e.target) : null;
                 if (n !== null) onPickStep?.(n);
+              }}
+              // 枠の見出しの札・畳んだ枠の注記を右クリックしたら、枠の付箋を開く（押すと畳む・開くのとは別に）
+              onContextMenu={(e) => {
+                if (!onFrameNotes || !(e.target instanceof Element)) return;
+                const folded = e.target.closest(`[${COLLAPSED_ATTR}]`);
+                if (folded) {
+                  e.preventDefault();
+                  onFrameNotes({ folded: Number(folded.getAttribute(COLLAPSED_ATTR)) });
+                  return;
+                }
+                const label = e.target.closest(".labelText, .labelBox");
+                if (!label) return;
+                const cls = label.classList.contains("labelText") ? ".labelText" : ".labelBox";
+                const frame = [...e.currentTarget.querySelectorAll(cls)].indexOf(label);
+                if (frame < 0) return;
+                e.preventDefault();
+                onFrameNotes({ drawn: frame });
               }}
               onPointerDown={
                 onMoveStep
