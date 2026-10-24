@@ -1,6 +1,7 @@
 import { isFlowModel } from "@/lib/model/guard";
 import { buildSummaryMarkdown } from "@/lib/summary/markdown";
 import { generateProse } from "@/lib/summary/generate";
+import { dutiesReadiness } from "@/lib/summary/readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
   const { prose, error } = await generateProse(model);
   const markdown = buildSummaryMarkdown(model, prose, {
     generatedAt: new Date().toLocaleString("ja-JP", { hour12: false }),
+    warnings: dutiesReadiness(model).warnings,
   });
   return Response.json({ markdown, proseError: error });
 }

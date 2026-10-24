@@ -1,4 +1,4 @@
-import { notedTargets, noteState } from "../model/notes";
+import { notedTargets, notesOn, noteState } from "../model/notes";
 import type { Actor, FlowModel, OpenIssue, Step } from "../model/types";
 import { flagSuffix, toMermaid, visibleSteps } from "../render/mermaid";
 import type { SummaryProse } from "./prose";
@@ -90,12 +90,13 @@ export function displayWidth(text: string): number {
  * 書き出した .md を素のエディタで開いたときにも読みやすくなる。
  */
 export function table(header: string[], rows: string[][]): string[] {
+  // 区切り行の `---` は 3 桁以上要るので、狭い列（「#」など）も 3 桁に揃える
   const widths = header.map((h, i) =>
-    Math.max(displayWidth(h), ...rows.map((r) => displayWidth(r[i] ?? ""))),
+    Math.max(3, displayWidth(h), ...rows.map((r) => displayWidth(r[i] ?? ""))),
   );
   const pad = (text: string, i: number) => text + " ".repeat(Math.max(0, widths[i] - displayWidth(text)));
   const row = (cells: string[]) => `| ${cells.map(pad).join(" | ")} |`;
-  return [row(header), `| ${widths.map((w) => "-".repeat(Math.max(3, w))).join(" | ")} |`, ...rows.map(row)];
+  return [row(header), `| ${widths.map((w) => "-".repeat(w)).join(" | ")} |`, ...rows.map(row)];
 }
 
 const mark = (n: number) => n.toFixed(2);
@@ -103,7 +104,7 @@ const mark = (n: number) => n.toFixed(2);
 export function buildSummaryMarkdown(
   model: FlowModel,
   prose: SummaryProse,
-  opts: { generatedAt: string },
+  opts: { generatedAt: string; warnings?: string[] },
 ): string {
   const nameOf = (id: string) => model.actors.find((a) => a.id === id)?.name ?? id;
   const steps = visibleSteps(model);
@@ -112,10 +113,13 @@ export function buildSummaryMarkdown(
 
   lines.push(`# 業務分掌: ${model.scope.title || "（対象業務 未設定）"}`, "");
   lines.push(
-    `> 会議の音声から自動で作成した下書きです（${opts.generatedAt}）。` +
+    `> 業務フロー図から自動で作成した下書きです（${opts.generatedAt}）。` +
       `**「仮」の印は確信が低い項目**、「未確認」は答えが出ていない論点です。必ず参加者で確認してください。`,
     "",
   );
+  if (opts.warnings?.length) {
+    lines.push("> **まだ下書きの段階です。**", ...opts.warnings.map((w) => `> - ${w}`), "");
+  }
 
   // 1. 業務概要
   lines.push("## 1. 業務概要", "");
@@ -147,8 +151,11 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 3. ステップ一覧
-  lines.push("## 3. ステップ一覧", "");
+  // 3. 業務分掌（部署・人ごとの担当業務）
+  lines.push(...dutiesSection(model), "");
+
+  // 4. ステップ一覧
+  lines.push("## 4. ステップ一覧", "");
   if (steps.length === 0) {
     lines.push("（ステップはまだありません）", "");
   } else {
@@ -196,17 +203,17 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 4. フロー図
-  lines.push("## 4. フロー図", "");
+  // 5. フロー図
+  lines.push("## 5. フロー図", "");
   if (model.actors.length === 0) {
     lines.push("（図はまだありません）", "");
   } else {
     lines.push("```mermaid", toMermaid(model), "```", "");
   }
 
-  // 5. 例外・属人化・暗黙知
+  // 6. 例外・属人化・暗黙知
   const flagged = steps.filter((s) => s.flags.exception || s.flags.tacit || s.flags.personDependent);
-  lines.push("## 5. 例外・属人化・暗黙知", "");
+  lines.push("## 6. 例外・属人化・暗黙知", "");
   if (flagged.length === 0) {
     lines.push("（該当するステップは見つかっていません）", "");
   } else {
@@ -219,8 +226,8 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 6. 論点
-  lines.push("## 6. 論点", "");
+  // 7. 論点
+  lines.push("## 7. 論点", "");
   if (model.issues.length === 0) {
     lines.push("（論点はありません）", "");
   } else {
@@ -240,13 +247,83 @@ export function buildSummaryMarkdown(
     lines.push("");
   }
 
-  // 7. 改善候補
-  lines.push("## 7. 改善候補", "");
+  // 8. 改善候補
+  lines.push("## 8. 改善候補", "");
   if (prose.improvements.length === 0) {
     lines.push("（改善候補は生成されていません）", "");
   } else {
-    lines.push("（AI の提案です。根拠は 3・5・6 の内容です）", "", ...prose.improvements.map((x) => `- ${x}`), "");
+    lines.push("（AI の提案です。根拠は 4・6・7 の内容です）", "", ...prose.improvements.map((x) => `- ${x}`), "");
   }
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
+}
+
+/**
+ * 業務分掌の本体: 部署・人ごとに、その人が送り手になっている手順（＝その人がやる仕事）をまとめる。
+ * システムは仕事を受け持つ側ではないので節を作らず、「使うシステム」として各部署の下に書く。
+ * 手順の番号はステップ一覧・図と同じ。
+ */
+function dutiesSection(model: FlowModel): string[] {
+  const steps = visibleSteps(model);
+  const byId = new Map(model.actors.map((a) => [a.id, a]));
+  const nameOf = (id: string) => byId.get(id)?.name ?? id;
+  const systemName = (a: Actor) => (a.product ? `${a.name}（${a.product}）` : a.name);
+  const branchOf = (id: string | null) => (id ? model.branches.find((b) => b.id === id) : undefined);
+  const numbered = steps.map((s, i) => ({ s, no: i + 1 }));
+  const holders = [...model.actors].filter((a) => a.kind !== "system").sort((x, y) => x.lane - y.lane);
+
+  const lines = ["## 3. 業務分掌（部署・人ごとの担当業務）", ""];
+  if (holders.length === 0) return [...lines, "（部署・人の登場人物がいません）"];
+  for (const a of holders) {
+    const tags = [KIND_LABEL[a.kind], a.role && ROLE_LABEL[a.role]].filter(Boolean).join("・");
+    lines.push(`### ${a.name}（${tags}）`, "");
+    const own = numbered.filter(({ s }) => s.from === a.id);
+    if (own.length === 0) {
+      lines.push("（この業務で受け持つ手順はありません）");
+    } else {
+      lines.push(
+        ...table(
+          ["#", "担当業務", "相手", "渡すもの", "担当者", "条件"],
+          own.map(({ s, no }) => {
+            const b = branchOf(s.branchId);
+            return [
+              String(no),
+              cell((s.status === "provisional" ? "**仮** " : "") + s.label + flagSuffix(s)),
+              s.to === a.id ? "（自身）" : cell(nameOf(s.to)),
+              cell(s.artifact ?? ""),
+              cell(s.assignee ?? ""),
+              cell(b ? `${b.kind} ${b.condition}` : ""),
+            ];
+          }),
+        ),
+      );
+    }
+    lines.push("");
+    const received = [
+      ...new Set(
+        numbered
+          .filter(({ s }) => s.to === a.id && s.from !== a.id && s.artifact)
+          .map(({ s, no }) => `${s.artifact}（${nameOf(s.from)}から・手順 ${no}）`),
+      ),
+    ];
+    const systems = [
+      ...new Set(
+        steps
+          .flatMap((s) => (s.from === a.id ? [s.to] : s.to === a.id ? [s.from] : []))
+          .map((id) => byId.get(id))
+          .filter((x): x is Actor => x?.kind === "system")
+          .map(systemName),
+      ),
+    ];
+    const rules = notesOn(model, { kind: "actor", id: a.id });
+    if (received.length > 0) lines.push(`- **受け取るもの**: ${received.join("、")}`);
+    if (systems.length > 0) lines.push(`- **使うシステム**: ${systems.join("、")}`);
+    if (a.members?.length) lines.push(`- **メンバー**: ${a.members.join("、")}`);
+    for (const n of rules) {
+      const q = n.prompt?.text ?? n.question;
+      lines.push(noteState(n) === "answered" ? `- **決まりごと**: ${q} → ${n.answer ?? ""}` : `- **未決**: ${q}`);
+    }
+    if (received.length + systems.length + (a.members?.length ?? 0) + rules.length > 0) lines.push("");
+  }
+  return lines;
 }

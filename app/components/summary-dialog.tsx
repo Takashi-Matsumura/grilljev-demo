@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { FlowModel } from "@/lib/model/types";
 import { EXPORT_MIME, exportFileName } from "@/lib/render/export";
+import type { DutiesReadiness } from "@/lib/summary/readiness";
 import { download } from "./download";
 
 type State =
@@ -41,7 +42,17 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function SummaryButton({ model, empty }: { model: FlowModel; empty: boolean }) {
+export function SummaryButton({
+  model,
+  empty,
+  readiness,
+}: {
+  model: FlowModel;
+  empty: boolean;
+  /** 渡すと、図が描けるまで（readiness.ready になるまで）作らせない。図を直す画面で使う */
+  readiness?: DutiesReadiness;
+}) {
+  const notReady = readiness !== undefined && !readiness.ready;
   const ref = useRef<HTMLDialogElement>(null);
   const [state, setState] = useState<State>({ kind: "idle" });
   const [copied, setCopied] = useState(false);
@@ -69,9 +80,24 @@ export function SummaryButton({ model, empty }: { model: FlowModel; empty: boole
 
   return (
     <>
-      <button type="button" className={btn} disabled={empty} onClick={() => void open()} title="図から業務分掌ドキュメント（Markdown）を作ります">
+      <button
+        type="button"
+        className={btn}
+        disabled={empty || notReady}
+        onClick={() => void open()}
+        title={
+          notReady
+            ? `図がもう少し描けると作れます: ${readiness.missing.join("・")}`
+            : "図から業務分掌ドキュメント（Markdown）を作ります"
+        }
+      >
         業務分掌を作る
       </button>
+      {notReady && !empty && (
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          あと {readiness.missing.join("・")} で作れます
+        </span>
+      )}
       <dialog ref={ref} className="m-auto w-[min(48rem,92vw)] rounded-lg border border-black/15 bg-white p-4 text-inherit backdrop:bg-black/40 dark:border-white/20 dark:bg-zinc-900">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
@@ -92,6 +118,16 @@ export function SummaryButton({ model, empty }: { model: FlowModel; empty: boole
                 <p role="alert" className="text-xs text-amber-600 dark:text-amber-400">
                   概要・改善候補は生成できませんでした（{state.proseError}）。表と図はそのまま使えます。
                 </p>
+              )}
+              {readiness && readiness.warnings.length > 0 && (
+                <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                  <p className="font-medium">まだ下書きの段階です（文書の冒頭にも書いています）</p>
+                  <ul className="mt-1 list-disc pl-5">
+                    {readiness.warnings.map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
               <pre className="max-h-[55vh] overflow-auto rounded-md bg-zinc-100 p-3 font-mono-jp text-xs dark:bg-white/10">
                 {state.markdown}

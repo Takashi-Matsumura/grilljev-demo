@@ -7,6 +7,7 @@ import { ExportButtons } from "@/app/components/export-buttons";
 import { MermaidDiagram, renderMermaidSvg } from "@/app/components/mermaid-diagram";
 import { RetractedSteps, RetractNotice } from "@/app/components/retracted-steps";
 import { StepPanel } from "@/app/components/step-panel";
+import { SummaryButton } from "@/app/components/summary-dialog";
 import { addStepOp, type StepInput } from "@/lib/model/add-step";
 import { moveStepOps } from "@/lib/model/move";
 import { noteMarks } from "@/lib/model/notes";
@@ -14,6 +15,7 @@ import { applyOps } from "@/lib/model/reducer";
 import { addFrameOps, enterBranchOps } from "@/lib/model/branch";
 import type { Branch, FlowModel, ModelOp } from "@/lib/model/types";
 import { stripPlaceholders } from "@/lib/render/export";
+import { dutiesReadiness } from "@/lib/summary/readiness";
 import {
   armOfTarget,
   collapsedFrames,
@@ -114,6 +116,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   const hasAssignees = model.steps.some((s) => s.status !== "retracted" && s.assignee);
   const drawable = hasDiagram(model);
   const steps = visibleSteps(model);
+  const readiness = useMemo(() => dutiesReadiness(model), [model]);
 
   // 消えた（削除・元に戻した）ステップは選んでいないことにする
   const editingIndex = panel?.mode === "edit" ? steps.findIndex((s) => s.id === panel.stepId) : -1;
@@ -471,6 +474,7 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
 
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-black/10 px-4 py-2 dark:border-white/15">
         <RetractedSteps model={model} onCommit={commit} />
+        <SummaryButton model={model} empty={!drawable} readiness={readiness} />
         <ExportButtons model={model} mermaidCode={code} svg={svgForExport} empty={!drawable} />
       </div>
       {previewing && <FlowPlayer name={name} model={model} onClose={() => setPreviewing(false)} />}
