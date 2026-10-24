@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { moveStepOps } from "@/lib/model/move";
 import type { Actor, FlowModel, ModelOp } from "@/lib/model/types";
 import { visibleSteps } from "@/lib/render/mermaid";
@@ -17,6 +17,7 @@ export function StepPanel({
   stepId,
   onClose,
   onCommit,
+  onPreview,
   onFocus,
   children,
 }: {
@@ -25,6 +26,11 @@ export function StepPanel({
   stepId: string;
   onClose: () => void;
   onCommit: (ops: ModelOp[]) => void;
+  /**
+   * 書きかけ（名前・渡すもの・担当者）を、確定する前に図へ映すための ops（無ければ null）。
+   * 確定は今までどおり Enter か欄を離れたとき（1 文字ごとに元に戻すの履歴を積まないように）
+   */
+  onPreview?: (ops: ModelOp[] | null) => void;
   /** 渡すと「声で直す」を出す。このステップを、番号を言わずに音声で直す対象にする */
   onFocus?: (stepId: string) => void;
   /** 「状態」の下に足す欄（/editor の分岐の操作など）。PanelSection で包むと見た目が揃う */
@@ -38,6 +44,27 @@ export function StepPanel({
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [assigneeDraft, setAssigneeDraft] = useState<{ for: string; text: string } | null>(null);
   const [artifactDraft, setArtifactDraft] = useState<{ for: string; text: string } | null>(null);
+
+  // 書きかけを図へ映す。確定（draft が null に戻る）・別のステップへの切り替え・閉じるで外す
+  const clean = (v: string) => v.replace(/\s+/g, " ").trim();
+  const previewLabel = step && draft?.for === `${step.id}:${step.label}` ? clean(draft.label) : null;
+  const previewArtifact = step && artifactDraft?.for === `${step.id}:${step.artifact ?? ""}` ? clean(artifactDraft.text) : null;
+  const previewAssignee =
+    step && assigneeDraft?.for === `${step.id}:${step.assignee ?? ""}`
+      ? clean(assigneeDraft.text).replace(/(さん|様|氏)$/, "")
+      : null;
+  const previewId = step?.id;
+  useEffect(() => {
+    if (!onPreview || !previewId) return;
+    const patch: Extract<ModelOp, { op: "step.update" }>["patch"] = {};
+    // 空の名前は確定しない（commitLabel）ので、映さない
+    if (previewLabel) patch.label = previewLabel;
+    if (previewArtifact !== null) patch.artifact = previewArtifact || undefined;
+    if (previewAssignee !== null) patch.assignee = previewAssignee || undefined;
+    onPreview(Object.keys(patch).length > 0 ? [{ op: "step.update", id: previewId, patch }] : null);
+  }, [onPreview, previewId, previewLabel, previewArtifact, previewAssignee]);
+  useEffect(() => () => onPreview?.(null), [onPreview]);
+
   if (!step) return null;
 
   const label = draft?.for === `${step.id}:${step.label}` ? draft.label : step.label;
@@ -320,7 +347,8 @@ export function FromToPicker({
   artifact?: string;
   onFrom: (id: string) => void;
   onTo: (id: string) => void;
-  onSwap: () => void;
+  /** 渡すと、送り手と受け手の入れ替えボタンを出す（手直しのパネルだけ） */
+  onSwap?: () => void;
 }) {
   const self = from === to;
   const picker = (side: "from" | "to") => (
@@ -355,16 +383,18 @@ export function FromToPicker({
           {picker("from")}
           {picker("to")}
         </div>
-        <button
-          type="button"
-          className={iconBtn}
-          aria-label="送り手と受け手を入れ替える"
-          title="送り手と受け手を入れ替える（矢印の向きが逆になります）"
-          disabled={self}
-          onClick={onSwap}
-        >
-          ⇅
-        </button>
+        {onSwap && (
+          <button
+            type="button"
+            className={iconBtn}
+            aria-label="送り手と受け手を入れ替える"
+            title="送り手と受け手を入れ替える（矢印の向きが逆になります）"
+            disabled={self}
+            onClick={onSwap}
+          >
+            ⇅
+          </button>
+        )}
       </div>
       <LaneStrip actors={actors} from={from} to={to} number={number} artifact={artifact?.trim() || undefined} />
     </div>

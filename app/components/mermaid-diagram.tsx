@@ -259,6 +259,31 @@ function dropAt(host: HTMLElement, clientY: number): { insertAt: number; lineY: 
   return { insertAt, lineY: boundary - 6 - host.getBoundingClientRect().top };
 }
 
+/**
+ * 点 y（画面座標）のある枠と場合。枠は図の上から何番目か（.labelBox の順 = drawnFrames の順）、
+ * 場合は枠の中の点線の区切り（else）より下にいくつあるか。条件の文字（枠の見出しか else の条件）と、枠の囲みも返す。
+ * どの枠の外なら null
+ */
+function frameAt(host: HTMLElement, y: number): { frame: number; arm: number; condition: string; rect: DOMRect } | null {
+  const frames = [...host.querySelectorAll(".labelBox")].map((el) => el.closest('g[data-et="control-structure"]'));
+  for (const [frame, g] of frames.entries()) {
+    if (!g) continue;
+    const rect = g.getBoundingClientRect();
+    if (y < rect.top || y > rect.bottom) continue;
+    // はじめの 4 本は囲み、残りは場合の区切り（drawLoop）
+    const sections = [...g.querySelectorAll(":scope > line.loopLine")].slice(4);
+    const arm = sections.filter((line) => line.getBoundingClientRect().top < y).length;
+    const label = arm === 0 ? g.querySelector(".loopText") : g.querySelectorAll(".sectionTitle")[arm - 1];
+    return { frame, arm, condition: label?.textContent?.trim() ?? "", rect };
+  }
+  return null;
+}
+
+/** すべての枠の囲み（画面座標）。枠の外に落とす横線を、枠にかからない位置へずらすのに使う */
+function frameRects(host: HTMLElement): DOMRect[] {
+  return [...host.querySelectorAll('g[data-et="control-structure"]')].map((g) => g.getBoundingClientRect());
+}
+
 /** 枠の条件の文字は小さいので、これだけ広げて当たりにする */
 const COND_PAD_X = 40;
 const COND_PAD_Y = 10;
@@ -296,8 +321,18 @@ function armTargetAt(host: HTMLElement, x: number, y: number): { target: ArmTarg
 
 type Drag = { n: number; startY: number; pointerId: number; moving: boolean };
 
-/** 落とす先。ステップの間（横線）か、場合の中（囲み） */
-type DropAt = { insertAt: number; lineY: number } | { arm: ArmTarget; box: Box };
+/**
+ * 落とす先。ステップの間（横線）か、場合の中（囲み）。
+ * ステップの間なら、落とした点のある枠と場合（inside。null = 枠の外）と、横線を引く範囲（host 基準）
+ */
+type Between = {
+  insertAt: number;
+  lineY: number;
+  lineLeft?: number;
+  lineWidth?: number;
+  inside: { frame: number; arm: number; condition: string } | null;
+};
+type DropAt = Between | { arm: ArmTarget; box: Box };
 type Drop = { n: number } & DropAt;
 
 let renderSeq = 0;
@@ -446,7 +481,8 @@ export function MermaidDiagram({
    * 図の番号・ステップ名をドラッグして落としたら、動かしたステップ（0 始まり）と、
    * 落とした位置（移す前の並びで、何番目のステップの手前か）を渡す。渡すとドラッグできる
    */
-  onMoveStep?: (index: number, insertAt: number) => void;
+  /** inside = 落とした点のある枠と場合（図の上から何番目の枠か・枠の中で何番目の場合か）。null = どの枠の外 */
+  onMoveStep?: (index: number, insertAt: number, inside: { frame: number; arm: number } | null) => void;
   /** 空の場合の「＋ ここにステップを追加」を押したら、図の上から何番目（0 始まり）の注記かを渡す */
   onPickPlaceholder?: (k: number) => void;
   /**
@@ -479,7 +515,28 @@ export function MermaidDiagram({
   /** ポインタの位置の落とし先。場合の目印の上なら場合の中、そうでなければステップの間 */
   const dropTarget = (host: HTMLElement, x: number, y: number): DropAt | null => {
     const arm = onDropToArm ? armTargetAt(host, x, y) : null;
-    return arm ? { arm: arm.target, box: arm.box } : dropAt(host, y);
+    if (arm) return { arm: arm.target, box: arm.box };
+    const at = dropAt(host, y);
+    if (!at) return null;
+    const base = host.getBoundingClientRect();
+    const inside = frameAt(host, y);
+    let lineY = at.lineY + base.top;
+    if (inside) {
+      // 枠の中へ: 横線を枠の中に収め、枠の幅で引く
+      const { rect, ...where } = inside;
+      lineY = Math.min(Math.max(lineY, rect.top + 4), rect.bottom - 4);
+      return {
+        insertAt: at.insertAt,
+        lineY: lineY - base.top,
+        lineLeft: rect.left - base.left,
+        lineWidth: rect.width,
+        inside: where,
+      };
+    }
+    // 枠の外へ: 横線が枠にかかるなら、ポインタのある側の枠の外へずらす
+    const over = frameRects(host).find((r) => lineY >= r.top && lineY <= r.bottom);
+    if (over) lineY = y > over.bottom ? over.bottom + 4 : over.top - 4;
+    return { insertAt: at.insertAt, lineY: lineY - base.top, inside: null };
   };
 
   useEffect(() => {
@@ -616,7 +673,7 @@ export function MermaidDiagram({
                   const host = svgHostRef.current;
                   const at = host ? dropTarget(host, e.clientX, e.clientY) : null;
                   if (at && "arm" in at) onDropToArm?.(drag.n - 1, at.arm);
-                  else if (at) onMoveStep?.(drag.n - 1, at.insertAt);
+                  else if (at) onMoveStep?.(drag.n - 1, at.insertAt, at.inside && { frame: at.inside.frame, arm: at.inside.arm });
                 }
                 endDrag();
               }}
@@ -638,11 +695,11 @@ export function MermaidDiagram({
             {drop && "lineY" in drop && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 border-t-2 border-sky-500"
-                style={{ top: drop.lineY }}
+                className={`pointer-events-none absolute border-t-2 border-sky-500 ${drop.lineWidth === undefined ? "inset-x-0" : ""}`}
+                style={{ top: drop.lineY, left: drop.lineLeft, width: drop.lineWidth }}
               >
-                <span className="absolute -top-3 left-1 rounded bg-sky-500 px-1.5 text-xs text-white">
-                  {drop.n} をここへ
+                <span className="absolute -top-3 left-1 whitespace-nowrap rounded bg-sky-500 px-1.5 text-xs text-white">
+                  {drop.inside ? `${drop.n} を ${drop.inside.condition || "この枠"} の中へ` : `${drop.n} をここへ`}
                 </span>
               </div>
             )}
