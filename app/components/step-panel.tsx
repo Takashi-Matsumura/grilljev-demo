@@ -208,6 +208,9 @@ export function StepPanel({
 
         {/* ここより上がステップの中身（内容・誰が・誰に・渡すもの）。下は状態・順番など */}
         <hr className="border-black/10 dark:border-white/15" />
+        {/* 付箋は、ステップの中身のすぐ下に（下の方だと見つけにくかった） */}
+        <NotesSection model={model} target={{ kind: "step", id: step.id }} onCommit={onCommit} />
+
         <PanelSection title="状態">
           <div className="flex items-center gap-3">
             <div role="group" aria-label="確定か仮か" className="inline-flex rounded-md border border-black/15 p-0.5 dark:border-white/20">
@@ -235,8 +238,6 @@ export function StepPanel({
             <span className="text-xs text-zinc-500">{confirmed ? "実線で描きます" : "点線で描きます"}</span>
           </div>
         </PanelSection>
-
-        <NotesSection model={model} target={{ kind: "step", id: step.id }} onCommit={onCommit} />
 
         {children}
       </div>
