@@ -50,12 +50,19 @@ export function addNotesToSvg(svg: string, model: FlowModel): string {
   // 印を付ける先: 図の番号 → 黒丸の中心、枠の順 → 見出しの札、登場人物の id → 上の頭
   const steps = visibleSteps(model);
   const frames = drawnFrames(model);
-  const dotOf = new Map<number, { x: number; y: number }>();
+  // 黒丸は、描いたときに番号ごとの円（.step-dot。mermaid-diagram.tsx の enlargeStepDots）になっている。
+  // 円になっていなければ、Mermaid の素の形（番号の直前の線の端）から位置を取る
+  const dotOf = new Map<number, { x: number; y: number; r: number }>();
   for (const num of doc.querySelectorAll(".sequenceNumber")) {
-    const line = num.previousElementSibling;
     const n = Number(num.textContent?.trim());
-    if (!line || line.tagName !== "line" || !Number.isInteger(n)) continue;
-    dotOf.set(n, { x: Number(line.getAttribute("x1")), y: Number(line.getAttribute("y1")) });
+    if (!Number.isInteger(n)) continue;
+    const circle = num.parentElement?.classList.contains("step-dot") ? num.parentElement.querySelector("circle") : null;
+    if (circle) {
+      dotOf.set(n, { x: Number(circle.getAttribute("cx")), y: Number(circle.getAttribute("cy")), r: Number(circle.getAttribute("r")) });
+      continue;
+    }
+    const line = num.previousElementSibling;
+    if (line && line.tagName === "line") dotOf.set(n, { x: Number(line.getAttribute("x1")), y: Number(line.getAttribute("y1")), r: 9 });
   }
   const labelBoxes = [...doc.querySelectorAll(".labelBox")];
 
@@ -72,7 +79,7 @@ export function addNotesToSvg(svg: string, model: FlowModel): string {
     const state = noteState(note);
     steps.forEach((s, k) => {
       const dot = note.relatedStepIds.includes(s.id) ? dotOf.get(k + 1) : undefined;
-      if (dot) put(`s${k}`, root, dot.x + 7, dot.y - 21, no, state);
+      if (dot) put(`s${k}`, root, dot.x + dot.r - 2, dot.y - dot.r - 12, no, state);
     });
     frames.forEach((arms, k) => {
       const box = labelBoxes[k];

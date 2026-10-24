@@ -27,7 +27,7 @@ const DEBOUNCE_MS = 300;
 /** 番号（autonumber）とステップ名を、押せる見た目にする */
 const PICKABLE_CLASS = (on: boolean) =>
   on
-    ? "[&_.messageText]:cursor-pointer [&_.step-dot]:cursor-pointer [&_.messageText:hover]:fill-sky-600 [&_.messageText:hover]:underline [&_.step-dot:hover]:scale-160"
+    ? "[&_.messageText]:cursor-pointer [&_.step-dot]:cursor-pointer [&_.messageText:hover]:fill-sky-600 [&_.messageText:hover]:underline [&_.step-dot:hover]:scale-130"
     : "";
 
 /** 番号の黒丸の拡大アニメーション（押せるときだけ大きくなる。拡大の中心は丸の中心） */
@@ -91,7 +91,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 /**
  * 番号の黒丸を、1 つずつ動かせる円にする。Mermaid は黒丸を全番号共通のマーカー（線の端の飾り）で
  * 描くので、そのままでは 1 つだけ大きくできない。マーカーを外し、同じ位置・同じ色の円と番号を
- * `<g class="step-dot">` にまとめる（拡大は CSS）。描いた SVG に手を加えるだけなので、書き出す図には入らない。
+ * `<g class="step-dot">` にまとめる（拡大は CSS）。ふつうは描いたときに enlargeStepDots が済ませているので、
+ * ここは描き方が変わったときの備え（マーカーの残っている黒丸だけを扱う）。
  */
 function detachStepDots(root: HTMLElement) {
   const fill = root.querySelector("marker[id$='sequencenumber'] circle");
@@ -151,7 +152,10 @@ function markNotes(root: HTMLElement, notes: NoteMarks | undefined) {
     const state = notes.steps.get(Number(dot.querySelector(".sequenceNumber")?.textContent?.trim()));
     const circle = dot.querySelector("circle");
     if (!state || !circle) continue;
-    dot.append(noteBadge(Number(circle.getAttribute("cx")) + 5, Number(circle.getAttribute("cy")) - 19, state, "手順"));
+    // 黒丸（半径 STEP_DOT_R）の右上に、少し重ねて
+    const cx = Number(circle.getAttribute("cx"));
+    const cy = Number(circle.getAttribute("cy"));
+    dot.append(noteBadge(cx + STEP_DOT_R - 4, cy - STEP_DOT_R - 9, state, "手順"));
   }
   // 枠: 見出しの札（.labelBox）の順 = drawnFrames の順
   [...root.querySelectorAll(".labelBox")].forEach((box, i) => {
@@ -487,6 +491,42 @@ function markFocus(doc: Document, id: string): boolean {
   return changed;
 }
 
+/** 番号の黒丸の半径と、番号の文字の大きさ（Mermaid の既定より大きくして、手順の始まりを目立たせる） */
+const STEP_DOT_R = 12;
+const STEP_NUMBER_PX = 13;
+
+/**
+ * 番号の黒丸を、番号ごとの円にして大きくする。Mermaid は黒丸を全番号共通のマーカー（線の端の飾り）で
+ * 描くので、大きさを変えられず、1 つだけ拡大することもできない。マーカーを外し、同じ位置に円と番号を
+ * `<g class="step-dot">` にまとめる（拡大は CSS）。色は Mermaid がマーカーに付けた CSS の色を使う。変えたら true
+ */
+function enlargeStepDots(doc: Document): boolean {
+  const css = [...doc.querySelectorAll("style")].map((s) => s.textContent ?? "").join("");
+  const fill = /\[id\$="-sequencenumber"\]\s*\{[^}]*?fill:\s*([^;}]+)/.exec(css)?.[1]?.trim() ?? "#333";
+  let changed = false;
+  for (const num of doc.querySelectorAll(".sequenceNumber")) {
+    const line = num.previousElementSibling;
+    if (!line || line.tagName !== "line" || !line.getAttribute("marker-start")) continue;
+    const cx = line.getAttribute("x1") ?? "0";
+    const cy = Number(line.getAttribute("y1") ?? 0);
+    const g = doc.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "step-dot");
+    const circle = doc.createElementNS(SVG_NS, "circle");
+    circle.setAttribute("cx", cx);
+    circle.setAttribute("cy", String(cy));
+    circle.setAttribute("r", String(STEP_DOT_R));
+    circle.setAttribute("fill", fill);
+    line.removeAttribute("marker-start");
+    num.setAttribute("y", String(cy + STEP_NUMBER_PX * 0.36));
+    num.setAttribute("font-size", String(STEP_NUMBER_PX));
+    num.setAttribute("font-weight", "700");
+    num.replaceWith(g);
+    g.append(circle, num);
+    changed = true;
+  }
+  return changed;
+}
+
 /**
  * Mermaid の SVG を、Mermaid の書き方では出せない見た目に整える（登場人物の 2 段目・中心の強調）。
  * 描くときに 1 回だけ直すので、画面にも、書き出す .svg にも同じように効く。読めなければ元のまま
@@ -500,9 +540,10 @@ function polishSvg(svg: string, code: string): string {
     .trim();
   const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
   if (doc.querySelector("parsererror")) return svg;
+  const dotted = enlargeStepDots(doc);
   const spaced = spaceActorLines(doc);
   const focused = focus !== undefined && /^\w+$/.test(focus) && markFocus(doc, focus);
-  return spaced || focused ? new XMLSerializer().serializeToString(doc.documentElement) : svg;
+  return dotted || spaced || focused ? new XMLSerializer().serializeToString(doc.documentElement) : svg;
 }
 
 /** Mermaid で描き、見た目を整える */
