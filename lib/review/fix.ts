@@ -122,10 +122,25 @@ const phrase = (v: unknown, max: number): string | null => {
   return s === "" || [...s].length > max ? null : s;
 };
 
+/** 中身をぼかす修飾語。「最終的な処理を承認する」「必要な対応をする」は、何をするのかが読み取れない */
+const VAGUE_WORDS = /(最終的な|最終的に|必要な|必要に応じて|適切な|適切に|適宜|所定の|各種|諸々|もろもろ|色々|いろいろ|何らか|処理内容|作業内容)/;
+/** 汎用の言葉だけで、何をするのかが無い名前（「処理する」「対応する」「作業を行う」）。「支払処理を行う」は残す */
+const GENERIC_ONLY = /^(処理|対応|作業|手続き|業務|確認作業)(を)?(する|行う|実施する)?$/;
+
+/**
+ * 手順名として、何をするのかがぼやけているか。AI に書かせた手順名（足す手順・言い換え）に使う。
+ * プロンプトで「ぼかした言葉は使わない」と頼んでも書いてきた（「最終的な処理を承認する」。実測）ので、コードで捨てる
+ */
+export function isVagueLabel(label: string): boolean {
+  const s = label.replace(/\s+/g, "");
+  return VAGUE_WORDS.test(s) || GENERIC_ONLY.test(s);
+}
+
 /**
  * AI の言い換え（`{"conditions": {"B1": "…"}}` / `{"labels": {"S3": "…"}}`）を確かめて案にする。
  * 信用しない: 知らない id・空・長すぎる・元と同じものは捨てる。条件は、言い換えてもまだ動作の名前に
- * 読めるなら捨てる。ステップ名は、元より短いものは捨てる（短くて意味が取りにくい、という指摘なので）。
+ * 読めるなら捨てる。ステップ名は、元より短いもの（短くて意味が取りにくい、という指摘なので）と、
+ * 何をするのかがぼやけたもの（isVagueLabel）を捨てる。
  * 前提の下書きは、頼んだ欄（空の欄）だけ。足す手順は addedSteps を見る。
  * 1 つも残らなければ null
  */
@@ -159,7 +174,7 @@ export function buildAiFix(model: FlowModel, target: AiFixTarget, json: unknown)
   const fix: Fix = { ops: [], changes: [] };
   for (const s of target.steps) {
     const next = phrase(out[s.id], MAX_LABEL_CHARS);
-    if (!next || next === s.label.trim() || [...next].length <= [...s.label.trim()].length) continue;
+    if (!next || next === s.label.trim() || [...next].length <= [...s.label.trim()].length || isVagueLabel(next)) continue;
     fix.ops.push({ op: "step.update", id: s.id, patch: { label: next } });
     fix.changes.push({ before: stepText(no, s), after: stepText(no, s, next) });
   }
@@ -190,7 +205,8 @@ function actorByName(model: FlowModel, name: unknown): Actor | undefined {
 /**
  * AI の「足す手順」（`[{"after": 4, "from": "経理部", "to": "会計システム", "label": "…", "artifact": "…"}]`）を
  * 確かめて案にする。登場人物は図にいる人だけ、after は図の番号（0 = 最初の手順の前）。図にもうある手順
- * （同じ送り手・受け手・名前）は足さない。すべて「仮」で足す。同じ場所に 2 つ以上なら、書かれた順に続ける
+ * （同じ送り手・受け手・名前）と、何をするのかがぼやけた名前（isVagueLabel）は足さない。
+ * すべて「仮」で足す。同じ場所に 2 つ以上なら、書かれた順に続ける
  */
 function addedSteps(model: FlowModel, list: unknown): Fix | null {
   if (!Array.isArray(list)) return null;
@@ -200,7 +216,8 @@ function addedSteps(model: FlowModel, list: unknown): Fix | null {
     const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
     const from = actorByName(model, o.from);
     const to = actorByName(model, o.to);
-    const label = phrase(o.label, MAX_LABEL_CHARS);
+    const written = phrase(o.label, MAX_LABEL_CHARS);
+    const label = written && !isVagueLabel(written) ? written : null;
     const after = o.after;
     if (!from || !to || !label || !Number.isInteger(after) || (after as number) < 0 || (after as number) > base.length) {
       return [];
