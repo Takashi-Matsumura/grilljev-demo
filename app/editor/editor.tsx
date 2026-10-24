@@ -151,8 +151,8 @@ export function Editor({ slug, name, initial }: { slug: string; name: string; in
   // 手直しのパネルで書きかけの名前・渡すもの・担当者。確定する前から画面の図に映す（モデルには入れない）
   const [preview, setPreview] = useState<ModelOp[] | null>(null);
   const shownModel = useMemo(() => (preview ? applyOps(model, preview, model.updatedAt) : model), [model, preview]);
-  // 付箋（ステップに結び付いた論点）の印。番号の黒丸の横に出す
-  const notes = useMemo(() => noteMarks(shownModel), [shownModel]);
+  // 付箋（手順・枠・登場人物に結び付いた論点）の印。図のそれぞれの横に出す
+  const notes = useMemo(() => noteMarks(shownModel, foldedSet), [shownModel, foldedSet]);
   // 画面の図には、空の場合に「＋ ここにステップを追加」を描く（書き出す .svg からは外す）
   const displayCode = useMemo(
     () => toMermaid(shownModel, { assignees: showAssignees, placeholders: true, collapsed: foldedSet }),

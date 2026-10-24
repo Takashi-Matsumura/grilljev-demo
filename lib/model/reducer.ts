@@ -69,6 +69,7 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
           from: s.from === from.id ? into.id : s.from,
           to: s.to === from.id ? into.id : s.to,
         })),
+        issues: moveActorNotes(m.issues, from.id, into.id),
       };
     }
 
@@ -95,6 +96,7 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
           if (next.from === next.to) next.kind = "self";
           return next;
         }),
+        issues: moveActorNotes(m.issues, from.id, into.id),
       };
     }
 
@@ -308,6 +310,15 @@ function applyOne(m: FlowModel, op: ModelOp, rev: number): FlowModel | null {
       return unreachable;
     }
   }
+}
+
+/** 登場人物を統合・たたんだら、その人に貼った付箋を、統合先・たたみ先へ貼り替える */
+function moveActorNotes(issues: OpenIssue[], from: string, into: string): OpenIssue[] {
+  return issues.map((i) =>
+    i.relatedActorIds?.includes(from)
+      ? { ...i, relatedActorIds: [...new Set(i.relatedActorIds.map((id) => (id === from ? into : id)))] }
+      : i,
+  );
 }
 
 export function emptyModel(scope: Partial<Scope>, at: string): FlowModel {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlayMark } from "@/lib/preview/scenes";
-import type { NoteState } from "@/lib/model/notes";
+import type { NoteMarks, NoteState } from "@/lib/model/notes";
 import { COLLAPSED_MARK, FOCUS_COMMENT, PLACEHOLDER_TEXT, type ArmTarget } from "@/lib/render/mermaid";
 
 type MermaidApi = typeof import("mermaid").default;
@@ -115,38 +115,54 @@ function detachStepDots(root: HTMLElement) {
 }
 
 /**
- * 付箋のあるステップの番号の黒丸の右上に、小さな付箋の印を付ける（まだ決まっていなければ「?」、すべて決まれば「✓」）。
- * 黒丸（.step-dot）の中に入れるので、押すとそのステップを選べる。描いた SVG に足すだけで、書き出す図には入らない
+ * 付箋の印（まだ決まっていなければ黄色の「?」、すべて決まれば緑の「✓」）を付ける。
+ * 手順は番号の黒丸（.step-dot）の右上（押すとそのステップを選べる）、枠は見出しの札の右、登場人物は上の頭の右上。
+ * 描いた SVG に足すだけで、書き出す図には入らない
  */
 const NOTE_CLASS = "note-badge";
-function markNotes(root: HTMLElement, notes: ReadonlyMap<number, NoteState> | undefined) {
+function noteBadge(x: number, y: number, state: NoteState, what: string): SVGGElement {
+  const g = document.createElementNS(SVG_NS, "g");
+  g.setAttribute("class", NOTE_CLASS);
+  const rect = document.createElementNS(SVG_NS, "rect");
+  for (const [k, v] of Object.entries({ x, y, width: 13, height: 13, rx: 2 })) rect.setAttribute(k, String(v));
+  rect.setAttribute("fill", state === "open" ? "#fde047" : "#bbf7d0");
+  rect.setAttribute("stroke", state === "open" ? "#ca8a04" : "#16a34a");
+  const text = document.createElementNS(SVG_NS, "text");
+  text.setAttribute("x", String(x + 6.5));
+  text.setAttribute("y", String(y + 10));
+  text.setAttribute("text-anchor", "middle");
+  text.setAttribute("font-size", "10");
+  text.setAttribute("font-weight", "700");
+  text.setAttribute("fill", state === "open" ? "#854d0e" : "#166534");
+  text.textContent = state === "open" ? "?" : "✓";
+  const title = document.createElementNS(SVG_NS, "title");
+  title.textContent = `${what}の付箋: ${state === "open" ? "まだ決まっていないことがあります" : "決まりごとがあります"}`;
+  g.append(rect, text, title);
+  return g;
+}
+
+function markNotes(root: HTMLElement, notes: NoteMarks | undefined) {
   for (const el of root.querySelectorAll(`.${NOTE_CLASS}`)) el.remove();
-  if (!notes || notes.size === 0) return;
+  if (!notes) return;
   for (const dot of root.querySelectorAll(".step-dot")) {
-    const n = Number(dot.querySelector(".sequenceNumber")?.textContent?.trim());
-    const state = notes.get(n);
+    const state = notes.steps.get(Number(dot.querySelector(".sequenceNumber")?.textContent?.trim()));
     const circle = dot.querySelector("circle");
     if (!state || !circle) continue;
-    const cx = Number(circle.getAttribute("cx"));
-    const cy = Number(circle.getAttribute("cy"));
-    const g = document.createElementNS(SVG_NS, "g");
-    g.setAttribute("class", NOTE_CLASS);
-    const rect = document.createElementNS(SVG_NS, "rect");
-    for (const [k, v] of Object.entries({ x: cx + 5, y: cy - 19, width: 13, height: 13, rx: 2 })) rect.setAttribute(k, String(v));
-    rect.setAttribute("fill", state === "open" ? "#fde047" : "#bbf7d0");
-    rect.setAttribute("stroke", state === "open" ? "#ca8a04" : "#16a34a");
-    const text = document.createElementNS(SVG_NS, "text");
-    text.setAttribute("x", String(cx + 11.5));
-    text.setAttribute("y", String(cy - 9));
-    text.setAttribute("text-anchor", "middle");
-    text.setAttribute("font-size", "10");
-    text.setAttribute("font-weight", "700");
-    text.setAttribute("fill", state === "open" ? "#854d0e" : "#166534");
-    text.textContent = state === "open" ? "?" : "✓";
-    const title = document.createElementNS(SVG_NS, "title");
-    title.textContent = state === "open" ? "付箋: まだ決まっていないことがあります" : "付箋: 決まりごとがあります";
-    g.append(rect, text, title);
-    dot.append(g);
+    dot.append(noteBadge(Number(circle.getAttribute("cx")) + 5, Number(circle.getAttribute("cy")) - 19, state, "手順"));
+  }
+  // 枠: 見出しの札（.labelBox）の順 = drawnFrames の順
+  [...root.querySelectorAll(".labelBox")].forEach((box, i) => {
+    const state = notes.frames.get(i);
+    if (!state || !(box instanceof SVGGraphicsElement)) return;
+    const b = box.getBBox();
+    box.parentElement?.append(noteBadge(b.x + b.width + 3, b.y + 2, state, "枠"));
+  });
+  // 登場人物: 上の頭（Mermaid は要素に name 属性で id を付ける）
+  for (const [id, state] of notes.actors) {
+    const head = root.querySelector(`rect.actor-top[name="${id}"], g.actor-man.actor-top[name="${id}"]`);
+    if (!(head instanceof SVGGraphicsElement)) continue;
+    const b = head.getBBox();
+    head.parentElement?.append(noteBadge(b.x + b.width - 8, b.y - 5, state, "登場人物"));
   }
 }
 
@@ -536,8 +552,8 @@ export function MermaidDiagram({
   highlightStep?: number;
   /** 編集パネルで選んでいるステップの番号（1 始まり。0 なら無し） */
   selectedStep?: number;
-  /** 付箋のあるステップ（番号 1 始まり → 決まっていないものがあるか）。番号の黒丸の横に印を付ける */
-  notes?: ReadonlyMap<number, NoteState>;
+  /** 付箋のある手順・枠・登場人物（lib/model/notes.ts の noteMarks）。それぞれの横に印を付ける */
+  notes?: NoteMarks;
   /** フローのプレビューで、今の場面に関わる要素を強調する（ほかは薄くする） */
   play?: PlayMark;
 }) {
@@ -611,7 +627,9 @@ export function MermaidDiagram({
   const shownFocusRef = useRef(0);
 
   // 付箋の印は、中身（番号と状態）が変わったときだけ付け直す（Map は毎回作り直される）
-  const notesKey = notes ? [...notes].map(([n, st]) => `${n}${st[0]}`).join(",") : "";
+  const notesKey = notes
+    ? [notes.steps, notes.frames, notes.actors].map((m) => [...m].map(([k, st]) => `${k}${st[0]}`).join(",")).join("|")
+    : "";
   // 描き直すたびに SVG が入れ替わるので、そのつど印を付け直す
   useEffect(() => {
     if (!svgHostRef.current) return;

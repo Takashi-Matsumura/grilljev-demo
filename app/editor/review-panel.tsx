@@ -145,7 +145,7 @@ export function ReviewPanel({
       done,
       steps: f.steps,
       onAdd: () => {
-        const op = addNoteOp(model, question, stepIds);
+        const op = addNoteOp(model, question, { kind: "step", ids: stepIds });
         if (!op) return;
         onCommit([op]);
         setApplied(`手順 ${f.steps.join("・")} に付箋を貼りました。手順の番号を押すと、付箋に決まったことを書けます。`);
